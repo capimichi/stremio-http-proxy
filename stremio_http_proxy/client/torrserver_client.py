@@ -10,10 +10,13 @@ class TorrServerClient:
         self,
         base_url: str,
         timeout_seconds: int,
+        basic_auth_user: str | None = None,
+        basic_auth_password: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.auth = httpx.BasicAuth(basic_auth_user, basic_auth_password or "") if basic_auth_user else None
         self.transport = transport
 
     async def add_torrent(
@@ -32,6 +35,7 @@ class TorrServerClient:
         async with httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout_seconds,
+            auth=self.auth,
             transport=self.transport,
         ) as client:
             response = await client.post("/torrents", json=payload)
@@ -53,6 +57,7 @@ class TorrServerClient:
         async with httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout_seconds,
+            auth=self.auth,
             transport=self.transport,
         ) as client:
             response = await client.get("/stream", params=params)

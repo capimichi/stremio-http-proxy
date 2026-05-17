@@ -1,4 +1,5 @@
 import asyncio
+import base64
 
 import httpx
 
@@ -62,3 +63,25 @@ def test_build_play_url_uses_torrserver_stream_endpoint():
     assert "play=true" in url
     assert "title=Demo" in url
     assert "category=movie" in url
+
+
+def test_add_torrent_uses_basic_auth_when_configured():
+    captured = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured["authorization"] = request.headers.get("authorization")
+        return httpx.Response(200, json={}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient(
+        "http://localhost:8090",
+        20,
+        basic_auth_user="demo",
+        basic_auth_password="secret",
+        transport=transport,
+    )
+
+    asyncio.run(client.add_torrent("magnet:?xt=urn:btih:abc"))
+
+    expected = "Basic " + base64.b64encode(b"demo:secret").decode()
+    assert captured["authorization"] == expected
