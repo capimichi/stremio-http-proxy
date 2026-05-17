@@ -13,7 +13,7 @@ class AddonProxyService:
     async def proxy_json(self, path: str, query_params: dict[str, str] | None = None) -> dict:
         payload = await self.upstream_client.get_json(path, query_params=query_params)
         if path.startswith("/stream/"):
-            return await self.stream_rewrite_service.rewrite(payload, self._resolve_category(path))
+            return self.stream_rewrite_service.rewrite(payload, self._resolve_category(path))
         return payload
 
     def _resolve_category(self, path: str) -> str:

@@ -1,19 +1,16 @@
-import logging
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from injector import inject
 
-from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.helper.hash_helper import extract_infohash
 
 
 class StreamRewriteService:
     @inject
-    def __init__(self, torrserver_client: TorrServerClient):
-        self.logger = logging.getLogger(__name__)
-        self.torrserver_client = torrserver_client
+    def __init__(self, public_base_url: str):
+        self.public_base_url = public_base_url.rstrip("/")
 
-    async def rewrite(self, payload: dict, category: str | None = None) -> dict:
+    def rewrite(self, payload: dict, category: str | None = None) -> dict:
         streams = payload.get("streams")
         if not isinstance(streams, list):
             return payload
@@ -30,17 +27,7 @@ class StreamRewriteService:
             updated = dict(stream)
             title = self._extract_title(updated)
             poster = self._extract_poster(updated)
-            try:
-                await self.torrserver_client.add_torrent(torrent_link, title, poster, category)
-                await self.torrserver_client.preload(torrent_link, title, poster, category)
-                updated["url"] = self.torrserver_client.build_play_url(
-                    torrent_link,
-                    title,
-                    poster,
-                    category,
-                )
-            except Exception:
-                self.logger.exception("Unable to register stream in TorrServer")
+            updated["url"] = self._build_playback_url(torrent_link, title, poster, category)
             rewritten_streams.append(updated)
 
         updated_payload = dict(payload)
@@ -99,3 +86,19 @@ class StreamRewriteService:
             if isinstance(value, str) and value.strip().startswith(("http://", "https://")):
                 return value.strip()
         return None
+
+    def _build_playback_url(
+        self,
+        link: str,
+        title: str | None,
+        poster: str | None,
+        category: str | None,
+    ) -> str:
+        params = {"link": link}
+        if title:
+            params["title"] = title
+        if poster:
+            params["poster"] = poster
+        if category:
+            params["category"] = category
+        return f"{self.public_base_url}/play?{urlencode(params)}"

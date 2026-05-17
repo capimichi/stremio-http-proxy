@@ -9,6 +9,7 @@ from stremio_http_proxy.client.upstream_client import UpstreamClient
 from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.controller.addon_controller import AddonController
 from stremio_http_proxy.controller.health_controller import HealthController
+from stremio_http_proxy.controller.playback_controller import PlaybackController
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 
 
@@ -41,6 +42,7 @@ class DefaultContainer:
         self.api_port = int(os.environ.get("API_PORT", "8459"))
         self.upstream_base_url = os.environ.get("UPSTREAM_BASE_URL", "https://example.com")
         self.torrserver_base_url = os.environ.get("TORRSERVER_BASE_URL", "http://localhost:8090")
+        self.public_base_url = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{self.api_port}")
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
 
@@ -50,10 +52,12 @@ class DefaultContainer:
     def _init_bindings(self) -> None:
         upstream_client = UpstreamClient(self.upstream_base_url, self.request_timeout_seconds)
         torrserver_client = TorrServerClient(self.torrserver_base_url, self.request_timeout_seconds)
-        stream_rewrite_service = StreamRewriteService(torrserver_client)
+        stream_rewrite_service = StreamRewriteService(self.public_base_url)
+        playback_controller = PlaybackController(torrserver_client)
         serve_command = ServeCommand(self.api_host, self.api_port)
 
         self.injector.binder.bind(TorrServerClient, to=torrserver_client)
         self.injector.binder.bind(UpstreamClient, to=upstream_client)
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
+        self.injector.binder.bind(PlaybackController, to=playback_controller)
         self.injector.binder.bind(ServeCommand, to=serve_command)

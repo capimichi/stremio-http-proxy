@@ -26,5 +26,6 @@ Environment:
 
 ```bash
 UPSTREAM_BASE_URL=https://example.com
+PUBLIC_BASE_URL=http://localhost:8459
 TORRSERVER_BASE_URL=http://localhost:8090
 ```

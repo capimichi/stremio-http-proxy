@@ -12,7 +12,7 @@ class FakeStreamRewriteService:
     def __init__(self):
         self.calls: list[tuple[dict, str | None]] = []
 
-    async def rewrite(self, payload: dict, category: str | None = None) -> dict:
+    def rewrite(self, payload: dict, category: str | None = None) -> dict:
         self.calls.append((payload, category))
         return {"rewritten": True, "category": category}
 
