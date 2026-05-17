@@ -39,7 +39,7 @@ class DefaultContainer:
         self.app_name = os.environ.get("APP_NAME", "Stremio HTTP Proxy")
         self.debug = os.environ.get("DEBUG", "false").lower() == "true"
         self.api_host = os.environ.get("API_HOST", "0.0.0.0")
-        self.api_port = int(os.environ.get("API_PORT", "8459"))
+        self.api_port = int(os.environ.get("API_PORT", "8691"))
         self.upstream_base_url = os.environ.get("UPSTREAM_BASE_URL", "https://example.com")
         self.torrserver_base_url = os.environ.get("TORRSERVER_BASE_URL", "http://localhost:8090")
         self.torrserver_basic_auth_user = os.environ.get("TORRSERVER_BASIC_AUTH_USER")

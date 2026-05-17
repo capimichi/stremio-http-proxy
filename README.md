@@ -22,12 +22,20 @@ Run the API:
 python -m stremio_http_proxy.cli serve
 ```
 
+Run with Docker:
+
+```bash
+docker compose up --build
+```
+
 Environment:
 
 ```bash
 UPSTREAM_BASE_URL=https://example.com
-PUBLIC_BASE_URL=http://localhost:8459
+PUBLIC_BASE_URL=http://localhost:8691
 TORRSERVER_BASE_URL=http://localhost:8090
 TORRSERVER_BASIC_AUTH_USER=
 TORRSERVER_BASIC_AUTH_PASSWORD=
 ```
+
+If TorrServer runs outside Docker, set `TORRSERVER_BASE_URL` to a hostname or IP reachable from the container.

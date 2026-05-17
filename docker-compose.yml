@@ -1,0 +1,11 @@
+services:
+  stremio-http-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stremio-http-proxy
+    env_file:
+      - .env
+    ports:
+      - "8691:8691"
+    restart: unless-stopped
