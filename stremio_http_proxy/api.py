@@ -5,21 +5,17 @@ import uvicorn
 
 from stremio_http_proxy.container.default_container import DefaultContainer
 from stremio_http_proxy.controller.addon_controller import AddonController
-from stremio_http_proxy.controller.chunk_controller import ChunkController
 from stremio_http_proxy.controller.health_controller import HealthController
-from stremio_http_proxy.controller.playlist_controller import PlaylistController
 
 
 default_container = DefaultContainer.getInstance()
 app = FastAPI(
     title=default_container.app_name,
-    description="Stremio addon proxy with local HLS playlists",
+    description="Stremio addon proxy backed by TorrServer",
     version="0.1.0",
 )
 
 app.include_router(default_container.get(AddonController).router)
-app.include_router(default_container.get(PlaylistController).router)
-app.include_router(default_container.get(ChunkController).router)
 app.include_router(default_container.get(HealthController).router)
 
 app.add_middleware(

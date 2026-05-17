@@ -1,14 +1,19 @@
+import logging
+from urllib.parse import urlparse
+
 from injector import inject
 
+from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.helper.hash_helper import extract_infohash
 
 
 class StreamRewriteService:
     @inject
-    def __init__(self, public_base_url: str):
-        self.public_base_url = public_base_url.rstrip("/")
+    def __init__(self, torrserver_client: TorrServerClient):
+        self.logger = logging.getLogger(__name__)
+        self.torrserver_client = torrserver_client
 
-    def rewrite(self, payload: dict) -> dict:
+    async def rewrite(self, payload: dict, category: str | None = None) -> dict:
         streams = payload.get("streams")
         if not isinstance(streams, list):
             return payload
@@ -18,25 +23,37 @@ class StreamRewriteService:
             if not isinstance(stream, dict):
                 rewritten_streams.append(stream)
                 continue
-            infohash = self._extract_infohash(stream)
-            if infohash is None:
+            torrent_link = self._extract_torrent_link(stream)
+            if torrent_link is None:
                 rewritten_streams.append(stream)
                 continue
             updated = dict(stream)
-            updated["url"] = f"{self.public_base_url}/streams/{infohash}/playlist.m3u8"
+            title = self._extract_title(updated)
+            poster = self._extract_poster(updated)
+            try:
+                await self.torrserver_client.add_torrent(torrent_link, title, poster, category)
+                await self.torrserver_client.preload(torrent_link, title, poster, category)
+                updated["url"] = self.torrserver_client.build_play_url(
+                    torrent_link,
+                    title,
+                    poster,
+                    category,
+                )
+            except Exception:
+                self.logger.exception("Unable to register stream in TorrServer")
             rewritten_streams.append(updated)
 
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams
         return updated_payload
 
-    def _extract_infohash(self, stream: dict) -> str | None:
+    def _extract_torrent_link(self, stream: dict) -> str | None:
         candidates = [
-            stream.get("infoHash"),
-            stream.get("url"),
-            stream.get("externalUrl"),
             stream.get("magnetUrl"),
             stream.get("magnet"),
+            stream.get("infoHash"),
+            stream.get("externalUrl"),
+            stream.get("url"),
         ]
         behavior_hints = stream.get("behaviorHints")
         if isinstance(behavior_hints, dict):
@@ -48,7 +65,37 @@ class StreamRewriteService:
                     candidates.append(request_headers.get("x-infohash"))
 
         for candidate in candidates:
+            if isinstance(candidate, str):
+                candidate = candidate.strip()
+                if candidate.startswith("magnet:"):
+                    return candidate
+                if self._is_torrent_url(candidate):
+                    return candidate
             infohash = extract_infohash(candidate)
             if infohash:
                 return infohash
+        return None
+
+    def _is_torrent_url(self, value: str) -> bool:
+        if not value.startswith(("http://", "https://")):
+            return False
+        return urlparse(value).path.endswith(".torrent")
+
+    def _extract_title(self, stream: dict) -> str | None:
+        for key in ("title", "name", "description"):
+            value = stream.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    def _extract_poster(self, stream: dict) -> str | None:
+        for key in ("poster", "thumbnail"):
+            value = stream.get(key)
+            if isinstance(value, str) and value.strip().startswith(("http://", "https://")):
+                return value.strip()
+        behavior_hints = stream.get("behaviorHints")
+        if isinstance(behavior_hints, dict):
+            value = behavior_hints.get("poster")
+            if isinstance(value, str) and value.strip().startswith(("http://", "https://")):
+                return value.strip()
         return None

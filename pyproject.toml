@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stremio-http-proxy"
 version = "0.1.0"
-description = "HTTP proxy for Stremio streams with local HLS rewriting"
+description = "HTTP proxy for Stremio streams backed by TorrServer"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -19,9 +19,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-torrent = [
-    "python-libtorrent>=2.0.10; platform_system != 'Windows'",
-]
 dev = [
     "pytest>=8.3.3",
 ]
@@ -31,3 +28,4 @@ include = ["stremio_http_proxy*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
