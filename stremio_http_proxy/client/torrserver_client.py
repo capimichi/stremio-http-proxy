@@ -48,12 +48,15 @@ class TorrServerClient:
         title: str | None = None,
         poster: str | None = None,
         category: str | None = None,
+        index: int | None = None,
     ) -> None:
         params = {
             "link": link,
             "preload": "true",
         }
         params.update(self._metadata(title, poster, category))
+        if index is not None:
+            params["index"] = str(index)
         async with httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout_seconds,
@@ -69,12 +72,15 @@ class TorrServerClient:
         title: str | None = None,
         poster: str | None = None,
         category: str | None = None,
+        index: int | None = None,
     ) -> str:
         params = {
             "link": link,
             "play": "true",
         }
         params.update(self._metadata(title, poster, category))
+        if index is not None:
+            params["index"] = str(index)
         return f"{self.base_url}/stream?{urlencode(params)}"
 
     def _metadata(

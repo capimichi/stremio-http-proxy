@@ -18,14 +18,15 @@ class PlaybackController:
         title: str | None = None,
         poster: str | None = None,
         category: str | None = None,
+        index: int | None = None,
     ) -> RedirectResponse:
         try:
             await self.torrserver_client.add_torrent(link, title, poster, category)
-            await self.torrserver_client.preload(link, title, poster, category)
+            await self.torrserver_client.preload(link, title, poster, category, index)
         except Exception as exc:
             raise HTTPException(status_code=502, detail="Unable to initialize TorrServer playback") from exc
 
         return RedirectResponse(
-            url=self.torrserver_client.build_play_url(link, title, poster, category),
+            url=self.torrserver_client.build_play_url(link, title, poster, category, index),
             status_code=307,
         )

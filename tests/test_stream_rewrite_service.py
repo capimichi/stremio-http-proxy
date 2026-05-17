@@ -8,6 +8,7 @@ def test_stream_rewrite_uses_local_playback_url_for_torrent_streams():
             {
                 "title": "demo",
                 "magnet": "magnet:?xt=urn:btih:ABCDEF1234567890ABCDEF1234567890ABCDEF12",
+                "fileIdx": 17,
                 "url": "https://upstream.invalid/old",
             }
         ]
@@ -18,7 +19,7 @@ def test_stream_rewrite_uses_local_playback_url_for_torrent_streams():
     assert rewritten["streams"][0]["url"] == (
         "http://localhost:8691/play?"
         "link=magnet%3A%3Fxt%3Durn%3Abtih%3AABCDEF1234567890ABCDEF1234567890ABCDEF12"
-        "&title=demo&category=movie"
+        "&title=demo&category=movie&index=18"
     )
 
 

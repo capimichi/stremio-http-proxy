@@ -27,7 +27,8 @@ class StreamRewriteService:
             updated = dict(stream)
             title = self._extract_title(updated)
             poster = self._extract_poster(updated)
-            updated["url"] = self._build_playback_url(torrent_link, title, poster, category)
+            index = self._extract_index(updated)
+            updated["url"] = self._build_playback_url(torrent_link, title, poster, category, index)
             rewritten_streams.append(updated)
 
         updated_payload = dict(payload)
@@ -87,12 +88,21 @@ class StreamRewriteService:
                 return value.strip()
         return None
 
+    def _extract_index(self, stream: dict) -> int | None:
+        value = stream.get("fileIdx")
+        if value is None:
+            value = stream.get("fileIndex")
+        if not isinstance(value, int):
+            return None
+        return value + 1
+
     def _build_playback_url(
         self,
         link: str,
         title: str | None,
         poster: str | None,
         category: str | None,
+        index: int | None,
     ) -> str:
         params = {"link": link}
         if title:
@@ -101,4 +111,6 @@ class StreamRewriteService:
             params["poster"] = poster
         if category:
             params["category"] = category
+        if index is not None:
+            params["index"] = str(index)
         return f"{self.public_base_url}/play?{urlencode(params)}"

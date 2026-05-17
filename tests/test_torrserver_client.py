@@ -46,23 +46,25 @@ def test_preload_hits_stream_endpoint_with_preload_flag():
     transport = httpx.MockTransport(handler)
     client = TorrServerClient("http://localhost:8090", 20, transport=transport)
 
-    asyncio.run(client.preload("abc123", title="Demo", category="tv"))
+    asyncio.run(client.preload("abc123", title="Demo", category="tv", index=18))
 
     assert captured["link"] == "abc123"
     assert captured["preload"] == "true"
     assert captured["title"] == "Demo"
     assert captured["category"] == "tv"
+    assert captured["index"] == "18"
 
 
 def test_build_play_url_uses_torrserver_stream_endpoint():
     client = TorrServerClient("http://localhost:8090", 20)
 
-    url = client.build_play_url("magnet:?xt=urn:btih:abc", title="Demo", category="movie")
+    url = client.build_play_url("magnet:?xt=urn:btih:abc", title="Demo", category="movie", index=18)
 
     assert url.startswith("http://localhost:8090/stream?")
     assert "play=true" in url
     assert "title=Demo" in url
     assert "category=movie" in url
+    assert "index=18" in url
 
 
 def test_add_torrent_uses_basic_auth_when_configured():

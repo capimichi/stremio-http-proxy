@@ -12,11 +12,11 @@ class FakeTorrServerClient:
         self.added.append((link, title, poster, category))
         return {}
 
-    async def preload(self, link: str, title=None, poster=None, category=None) -> None:
-        self.preloaded.append((link, title, poster, category))
+    async def preload(self, link: str, title=None, poster=None, category=None, index=None) -> None:
+        self.preloaded.append((link, title, poster, category, index))
 
-    def build_play_url(self, link: str, title=None, poster=None, category=None) -> str:
-        return f"http://localhost:8090/stream?link={link}&play=true"
+    def build_play_url(self, link: str, title=None, poster=None, category=None, index=None) -> str:
+        return f"http://localhost:8090/stream?link={link}&play=true&index={index}"
 
 
 def test_playback_controller_adds_preloads_and_redirects():
@@ -28,10 +28,11 @@ def test_playback_controller_adds_preloads_and_redirects():
             link="magnet:?xt=urn:btih:abc",
             title="demo",
             category="movie",
+            index=18,
         )
     )
 
     assert response.status_code == 307
-    assert response.headers["location"] == "http://localhost:8090/stream?link=magnet:?xt=urn:btih:abc&play=true"
+    assert response.headers["location"] == "http://localhost:8090/stream?link=magnet:?xt=urn:btih:abc&play=true&index=18"
     assert client.added == [("magnet:?xt=urn:btih:abc", "demo", None, "movie")]
-    assert client.preloaded == [("magnet:?xt=urn:btih:abc", "demo", None, "movie")]
+    assert client.preloaded == [("magnet:?xt=urn:btih:abc", "demo", None, "movie", 18)]
