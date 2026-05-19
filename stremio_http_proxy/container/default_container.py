@@ -9,6 +9,7 @@ from stremio_http_proxy.client.upstream_client import UpstreamClient
 from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.manager.redis_manager import RedisManager
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
@@ -50,6 +51,7 @@ class DefaultContainer:
         self.public_base_url = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{self.api_port}")
         self.log_dir = os.environ.get("LOG_DIR", "var/log/stremio-http-proxy")
         self.local_cache_dir = os.environ.get("LOCAL_CACHE_DIR", "var/cache/stremio-http-proxy")
+        self.sqlite_path = os.environ.get("SQLITE_PATH", "var/db/stremio-http-proxy.sqlite")
         self.local_cache_max_age_days = int(os.environ.get("LOCAL_CACHE_MAX_AGE_DAYS", "7"))
         self.local_cache_max_size_gb = int(os.environ.get("LOCAL_CACHE_MAX_SIZE_GB", "20"))
         self.redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
@@ -77,8 +79,10 @@ class DefaultContainer:
             self.torrserver_basic_auth_user,
             self.torrserver_basic_auth_password,
         )
+        db_manager = DbManager(self.sqlite_path)
         cache_manager = CacheManager(
             self.local_cache_dir,
+            db_manager,
             self.local_cache_max_age_days,
             self.local_cache_max_size_gb,
             logger_factory,
@@ -111,6 +115,7 @@ class DefaultContainer:
         self.injector.binder.bind(TorrServerClient, to=torrserver_client)
         self.injector.binder.bind(UpstreamClient, to=upstream_client)
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
+        self.injector.binder.bind(DbManager, to=db_manager)
         self.injector.binder.bind(CacheManager, to=cache_manager)
         self.injector.binder.bind(RedisManager, to=redis_manager)
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)

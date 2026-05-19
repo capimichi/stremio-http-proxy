@@ -2,10 +2,13 @@ import time
 from pathlib import Path
 
 from injector import inject
+from sqlalchemy import select
 
+from stremio_http_proxy.entity.cache_entry import CacheEntry as CacheEntryRecord
 from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
-from stremio_http_proxy.model.cache_entry import CacheEntry
+from stremio_http_proxy.manager.db_manager import DbManager
+from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
 
 
 class CacheManager:
@@ -13,12 +16,14 @@ class CacheManager:
     def __init__(
         self,
         base_dir: str,
+        db_manager: DbManager,
         max_age_days: int,
         max_size_gb: int,
         logger_factory: LoggerFactory,
     ):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.db_manager = db_manager
         self.max_age_days = max_age_days
         self.max_size_bytes = max_size_gb * 1024 * 1024 * 1024
         self.logger = logger_factory.get_logger("stremio_http_proxy.cache", "cache.log")
@@ -37,27 +42,27 @@ class CacheManager:
         infohash, raw_index = cache_key.split(":", 1)
         return infohash, int(raw_index)
 
-    def get_entry_by_link(self, link: str, index: int | None = None) -> CacheEntry | None:
+    def get_entry_by_link(self, link: str, index: int | None = None) -> CacheEntryModel | None:
         cache_key = self.build_cache_key(link, index)
         if cache_key is None:
             return None
         return self.get_entry(cache_key)
 
-    def get_entry(self, cache_key: str) -> CacheEntry:
+    def get_entry(self, cache_key: str) -> CacheEntryModel:
         infohash, index = self.parse_cache_key(cache_key)
-        metadata_path = self._metadata_path(infohash, index)
         media_path = self._media_path(infohash, index)
         tmp_path = self._tmp_path(infohash, index)
-        if not metadata_path.exists():
-            return CacheEntry(file_path=str(media_path), tmp_path=str(tmp_path))
-
-        return CacheEntry.model_validate_json(metadata_path.read_text())
+        with self.db_manager.session() as session:
+            record = session.get(CacheEntryRecord, cache_key)
+        if record is None:
+            return CacheEntryModel(file_path=str(media_path), tmp_path=str(tmp_path))
+        return self._to_model(record)
 
     def is_ready(self, cache_key: str) -> bool:
         entry = self.get_entry(cache_key)
         return entry.status == "ready" and Path(entry.file_path).exists()
 
-    def mark_downloading(self, cache_key: str, attempt: int = 0) -> CacheEntry:
+    def mark_downloading(self, cache_key: str, attempt: int = 0) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
         now = time.time()
         updated = entry.model_copy(
@@ -77,7 +82,7 @@ class CacheManager:
         self._write_entry(cache_key, updated)
         return updated
 
-    def mark_ready(self, cache_key: str, size_bytes: int) -> CacheEntry:
+    def mark_ready(self, cache_key: str, size_bytes: int) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
         now = time.time()
         updated = entry.model_copy(
@@ -96,7 +101,7 @@ class CacheManager:
         self._write_entry(cache_key, updated)
         return updated
 
-    def mark_failed(self, cache_key: str, error: str, attempt: int) -> CacheEntry:
+    def mark_failed(self, cache_key: str, error: str, attempt: int) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
         updated = entry.model_copy(update={"status": "failed", "attempt": attempt, "last_error": error})
         self._write_entry(cache_key, updated)
@@ -115,7 +120,7 @@ class CacheManager:
         expected_bytes: int | None,
         progress_percent: float | None,
         download_speed_bytes_per_second: float,
-    ) -> CacheEntry:
+    ) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
         now = time.time()
         updated = entry.model_copy(
@@ -155,14 +160,14 @@ class CacheManager:
         tmp_path.replace(media_path)
         return media_path.stat().st_size
 
-    def _write_entry(self, cache_key: str, entry: CacheEntry) -> None:
+    def _write_entry(self, cache_key: str, entry: CacheEntryModel) -> None:
         infohash, index = self.parse_cache_key(cache_key)
-        metadata_path = self._metadata_path(infohash, index)
-        metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        metadata_path.write_text(entry.model_dump_json(indent=2))
-
-    def _metadata_path(self, infohash: str, index: int) -> Path:
-        return self.base_dir / infohash / f"{index}.json"
+        with self.db_manager.session() as session:
+            record = session.get(CacheEntryRecord, cache_key)
+            if record is None:
+                record = CacheEntryRecord(cache_key=cache_key, infohash=infohash, cache_index=index)
+                session.add(record)
+            self._update_record(record, entry)
 
     def _media_path(self, infohash: str, index: int) -> Path:
         return self.base_dir / infohash / f"{index}.media"
@@ -174,23 +179,27 @@ class CacheManager:
         if self.max_age_days <= 0:
             return
         cutoff = time.time() - (self.max_age_days * 86400)
-        for metadata_path in self.base_dir.glob("*/*.json"):
-            entry = CacheEntry.model_validate_json(metadata_path.read_text())
+        with self.db_manager.session() as session:
+            records = session.scalars(select(CacheEntryRecord)).all()
+        for record in records:
+            entry = self._to_model(record)
             timestamp = entry.last_accessed_at or entry.completed_at or entry.created_at
             if timestamp and timestamp < cutoff:
-                cache_key = self.build_cache_key_from_parts(metadata_path.parent.name, int(metadata_path.stem))
+                cache_key = self.build_cache_key_from_parts(record.infohash, record.cache_index)
                 self._delete_entry(cache_key, "expired")
 
     def _prune_by_size(self) -> None:
         if self.max_size_bytes <= 0:
             return
-        entries: list[tuple[str, CacheEntry]] = []
+        entries: list[tuple[str, CacheEntryModel]] = []
         total_size = 0
-        for metadata_path in self.base_dir.glob("*/*.json"):
-            entry = CacheEntry.model_validate_json(metadata_path.read_text())
+        with self.db_manager.session() as session:
+            records = session.scalars(select(CacheEntryRecord)).all()
+        for record in records:
+            entry = self._to_model(record)
             if entry.status != "ready":
                 continue
-            cache_key = self.build_cache_key_from_parts(metadata_path.parent.name, int(metadata_path.stem))
+            cache_key = self.build_cache_key_from_parts(record.infohash, record.cache_index)
             total_size += entry.size_bytes
             entries.append((cache_key, entry))
 
@@ -205,10 +214,48 @@ class CacheManager:
 
     def _delete_entry(self, cache_key: str, reason: str) -> None:
         infohash, index = self.parse_cache_key(cache_key)
-        for path in (self._metadata_path(infohash, index), self._media_path(infohash, index), self._tmp_path(infohash, index)):
+        with self.db_manager.session() as session:
+            record = session.get(CacheEntryRecord, cache_key)
+            if record is not None:
+                session.delete(record)
+        for path in (self._media_path(infohash, index), self._tmp_path(infohash, index)):
             if path.exists():
                 path.unlink()
         parent = self.base_dir / infohash
         if parent.exists() and not any(parent.iterdir()):
             parent.rmdir()
         self.logger.info("Deleted cache entry %s (%s)", cache_key, reason)
+
+    def _to_model(self, record: CacheEntryRecord) -> CacheEntryModel:
+        return CacheEntryModel(
+            status=record.status,
+            file_path=record.file_path,
+            tmp_path=record.tmp_path,
+            created_at=record.created_at,
+            last_accessed_at=record.last_accessed_at,
+            completed_at=record.completed_at,
+            size_bytes=record.size_bytes,
+            downloaded_bytes=record.downloaded_bytes,
+            expected_bytes=record.expected_bytes,
+            progress_percent=record.progress_percent,
+            download_speed_bytes_per_second=record.download_speed_bytes_per_second,
+            last_progress_at=record.last_progress_at,
+            attempt=record.attempt,
+            last_error=record.last_error,
+        )
+
+    def _update_record(self, record: CacheEntryRecord, entry: CacheEntryModel) -> None:
+        record.status = entry.status
+        record.file_path = entry.file_path
+        record.tmp_path = entry.tmp_path
+        record.created_at = entry.created_at
+        record.last_accessed_at = entry.last_accessed_at
+        record.completed_at = entry.completed_at
+        record.size_bytes = entry.size_bytes
+        record.downloaded_bytes = entry.downloaded_bytes
+        record.expected_bytes = entry.expected_bytes
+        record.progress_percent = entry.progress_percent
+        record.download_speed_bytes_per_second = entry.download_speed_bytes_per_second
+        record.last_progress_at = entry.last_progress_at
+        record.attempt = entry.attempt
+        record.last_error = entry.last_error

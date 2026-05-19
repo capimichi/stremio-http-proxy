@@ -1,10 +1,21 @@
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
+from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.service.cache_service import CacheService
 from stremio_http_proxy.manager.cache_manager import CacheManager
 
 
+def build_manager(tmp_path):
+    return CacheManager(
+        str(tmp_path),
+        DbManager(str(tmp_path / "cache.sqlite")),
+        7,
+        20,
+        LoggerFactory(str(tmp_path / "logs")),
+    )
+
+
 def test_cache_service_returns_cached_route_for_ready_entry(tmp_path):
-    manager = CacheManager(str(tmp_path), 7, 20, LoggerFactory(str(tmp_path / "logs")))
+    manager = build_manager(tmp_path)
     cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 2)
     media_path = manager.prepare_download_path(cache_key)
     media_path.write_bytes(b"demo")
@@ -18,7 +29,7 @@ def test_cache_service_returns_cached_route_for_ready_entry(tmp_path):
 
 
 def test_cache_service_returns_cached_file_path_and_touches_entry(tmp_path):
-    manager = CacheManager(str(tmp_path), 7, 20, LoggerFactory(str(tmp_path / "logs")))
+    manager = build_manager(tmp_path)
     cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 3)
     media_path = manager.prepare_download_path(cache_key)
     media_path.write_bytes(b"demo")
