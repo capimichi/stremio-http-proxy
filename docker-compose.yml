@@ -9,8 +9,7 @@ services:
     ports:
       - "8691:8691"
     volumes:
-      - cache-data:/app/var/cache/stremio-http-proxy
-      - log-data:/app/var/log/stremio-http-proxy
+      - app-var:/app/var
     depends_on:
       - redis
     restart: unless-stopped
@@ -23,8 +22,7 @@ services:
     env_file:
       - .env
     volumes:
-      - cache-data:/app/var/cache/stremio-http-proxy
-      - log-data:/app/var/log/stremio-http-proxy
+      - app-var:/app/var
     depends_on:
       - redis
     restart: unless-stopped
@@ -35,5 +33,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  cache-data:
-  log-data:
+  app-var:
