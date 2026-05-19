@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from stremio_http_proxy.container.default_container import DefaultContainer
 from stremio_http_proxy.controller.addon_controller import AddonController
 from stremio_http_proxy.controller.cache_controller import CacheController
+from stremio_http_proxy.controller.dashboard_controller import DashboardController
 from stremio_http_proxy.controller.health_controller import HealthController
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 
@@ -20,7 +21,9 @@ app = FastAPI(
 app.include_router(default_container.get(AddonController).router)
 app.include_router(default_container.get(CacheController).router)
 app.include_router(default_container.get(PlaybackController).router)
+app.include_router(default_container.get(DashboardController).router)
 app.include_router(default_container.get(HealthController).router)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,13 +32,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.get("/", include_in_schema=False)
-async def root():
-    return RedirectResponse(url="/docs")
-
-
 if __name__ == "__main__":
     uvicorn.run(
         "stremio_http_proxy.api:app",

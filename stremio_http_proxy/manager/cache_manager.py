@@ -137,6 +137,15 @@ class CacheManager:
         self._write_entry(cache_key, updated)
         return updated
 
+    def list_entries_by_status(self, status: str) -> list[tuple[str, CacheEntryModel]]:
+        with self.db_manager.session() as session:
+            records = session.scalars(
+                select(CacheEntryRecord)
+                .where(CacheEntryRecord.status == status)
+                .order_by(CacheEntryRecord.last_progress_at.desc(), CacheEntryRecord.created_at.desc())
+            ).all()
+        return [(record.cache_key, self._to_model(record)) for record in records]
+
     def prune(self) -> None:
         self._prune_by_age()
         self._prune_by_size()

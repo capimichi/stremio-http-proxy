@@ -13,6 +13,7 @@ from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.manager.redis_manager import RedisManager
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
+from stremio_http_proxy.service.dashboard_service import DashboardService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 
@@ -96,6 +97,7 @@ class DefaultContainer:
             download_queue_service,
             self.next_episode_prefetch_stream_limit,
         )
+        dashboard_service = DashboardService(cache_manager, self.public_base_url)
         download_worker_service = DownloadWorkerService(
             torrserver_client,
             cache_manager,
@@ -119,6 +121,7 @@ class DefaultContainer:
         self.injector.binder.bind(CacheManager, to=cache_manager)
         self.injector.binder.bind(RedisManager, to=redis_manager)
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
+        self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
         self.injector.binder.bind(ServeCommand, to=serve_command)

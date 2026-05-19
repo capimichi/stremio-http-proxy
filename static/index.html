@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stremio HTTP Proxy</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+
+    h1, h2 {
+      margin: 0 0 12px;
+    }
+
+    p {
+      margin: 0;
+      color: #cbd5e1;
+    }
+
+    .panel {
+      background: #111827;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+
+    .manifest {
+      display: block;
+      margin-top: 10px;
+      color: #7dd3fc;
+      word-break: break-all;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 10px;
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .downloads {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .download {
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 14px;
+      background: #020617;
+    }
+
+    .download strong {
+      display: block;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+
+    .empty {
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Stremio HTTP Proxy</h1>
+    <p>Manifest da aggiungere e download attualmente in corso.</p>
+
+    <section class="panel">
+      <h2>Manifest</h2>
+      <a id="manifest-url" class="manifest" href="#">Caricamento...</a>
+    </section>
+
+    <section class="panel">
+      <h2>Download Correnti</h2>
+      <div id="summary" class="meta"></div>
+      <div id="downloads" class="downloads">
+        <p class="empty">Caricamento...</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    function formatBytes(value) {
+      if (value === null || value === undefined) {
+        return "unknown";
+      }
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let size = value;
+      let unitIndex = 0;
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+      }
+      return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+    }
+
+    function formatSpeed(value) {
+      if (value === null || value === undefined) {
+        return "unknown";
+      }
+      return `${formatBytes(value)}/s`;
+    }
+
+    function formatTime(value) {
+      if (!value) {
+        return "unknown";
+      }
+      return new Date(value * 1000).toLocaleString();
+    }
+
+    function renderDownloads(downloads) {
+      const container = document.getElementById("downloads");
+      const summary = document.getElementById("summary");
+      summary.textContent = `${downloads.length} download attivi`;
+
+      if (!downloads.length) {
+        container.innerHTML = '<p class="empty">Nessun download in corso.</p>';
+        return;
+      }
+
+      container.innerHTML = downloads.map((download) => {
+        const progress = download.progress_percent === null || download.progress_percent === undefined
+          ? "unknown"
+          : `${download.progress_percent.toFixed(2)}%`;
+        const total = download.expected_bytes ? formatBytes(download.expected_bytes) : "unknown";
+        const error = download.last_error || "none";
+        return `
+          <article class="download">
+            <strong>${download.cache_key}</strong>
+            <div class="meta">
+              <span>status: ${download.status}</span>
+              <span>progress: ${progress}</span>
+              <span>downloaded: ${formatBytes(download.downloaded_bytes)} / ${total}</span>
+              <span>speed: ${formatSpeed(download.download_speed_bytes_per_second)}</span>
+              <span>attempt: ${download.attempt}</span>
+            </div>
+            <div class="meta">
+              <span>last progress: ${formatTime(download.last_progress_at)}</span>
+              <span>last error: ${error}</span>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    async function refresh() {
+      const response = await fetch("/downloads", { headers: { "Accept": "application/json" } });
+      const payload = await response.json();
+      const manifestLink = document.getElementById("manifest-url");
+      manifestLink.href = payload.manifest_url;
+      manifestLink.textContent = payload.manifest_url;
+      renderDownloads(payload.downloads || []);
+    }
+
+    refresh();
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>
