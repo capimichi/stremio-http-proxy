@@ -5,6 +5,7 @@ import uvicorn
 
 from stremio_http_proxy.container.default_container import DefaultContainer
 from stremio_http_proxy.controller.addon_controller import AddonController
+from stremio_http_proxy.controller.cache_controller import CacheController
 from stremio_http_proxy.controller.health_controller import HealthController
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 
@@ -17,6 +18,7 @@ app = FastAPI(
 )
 
 app.include_router(default_container.get(AddonController).router)
+app.include_router(default_container.get(CacheController).router)
 app.include_router(default_container.get(PlaybackController).router)
 app.include_router(default_container.get(HealthController).router)
 

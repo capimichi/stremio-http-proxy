@@ -7,9 +7,12 @@ from injector import Injector
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.client.upstream_client import UpstreamClient
 from stremio_http_proxy.command.serve_command import ServeCommand
-from stremio_http_proxy.controller.addon_controller import AddonController
-from stremio_http_proxy.controller.health_controller import HealthController
-from stremio_http_proxy.controller.playback_controller import PlaybackController
+from stremio_http_proxy.logger.logger_factory import LoggerFactory
+from stremio_http_proxy.service.cache_manager import CacheManager
+from stremio_http_proxy.service.download_queue_service import DownloadQueueService
+from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
+from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
+from stremio_http_proxy.service.redis_manager import RedisManager
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 
 
@@ -45,6 +48,20 @@ class DefaultContainer:
         self.torrserver_basic_auth_user = os.environ.get("TORRSERVER_BASIC_AUTH_USER")
         self.torrserver_basic_auth_password = os.environ.get("TORRSERVER_BASIC_AUTH_PASSWORD")
         self.public_base_url = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{self.api_port}")
+        self.log_dir = os.environ.get("LOG_DIR", "var/log/stremio-http-proxy")
+        self.local_cache_dir = os.environ.get("LOCAL_CACHE_DIR", "var/cache/stremio-http-proxy")
+        self.local_cache_max_age_days = int(os.environ.get("LOCAL_CACHE_MAX_AGE_DAYS", "7"))
+        self.local_cache_max_size_gb = int(os.environ.get("LOCAL_CACHE_MAX_SIZE_GB", "20"))
+        self.redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+        self.download_queue_poll_seconds = int(os.environ.get("DOWNLOAD_QUEUE_POLL_SECONDS", "1"))
+        self.download_max_attempts = int(os.environ.get("DOWNLOAD_MAX_ATTEMPTS", "3"))
+        self.download_connect_timeout_seconds = int(os.environ.get("DOWNLOAD_CONNECT_TIMEOUT_SECONDS", "10"))
+        self.download_no_progress_timeout_seconds = int(os.environ.get("DOWNLOAD_NO_PROGRESS_TIMEOUT_SECONDS", "30"))
+        self.download_min_progress_bytes = int(os.environ.get("DOWNLOAD_MIN_PROGRESS_BYTES", str(32 * 1024 * 1024)))
+        self.download_min_progress_window_seconds = int(os.environ.get("DOWNLOAD_MIN_PROGRESS_WINDOW_SECONDS", "120"))
+        self.download_max_total_seconds = int(os.environ.get("DOWNLOAD_MAX_TOTAL_SECONDS", str(45 * 60)))
+        self.download_progress_log_interval_seconds = int(os.environ.get("DOWNLOAD_PROGRESS_LOG_INTERVAL_SECONDS", "10"))
+        self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
 
@@ -52,6 +69,7 @@ class DefaultContainer:
         logging.basicConfig(level=getattr(logging, self.log_level.upper(), logging.INFO))
 
     def _init_bindings(self) -> None:
+        logger_factory = LoggerFactory(self.log_dir, self.log_level)
         upstream_client = UpstreamClient(self.upstream_base_url, self.request_timeout_seconds)
         torrserver_client = TorrServerClient(
             self.torrserver_base_url,
@@ -59,12 +77,43 @@ class DefaultContainer:
             self.torrserver_basic_auth_user,
             self.torrserver_basic_auth_password,
         )
-        stream_rewrite_service = StreamRewriteService(self.public_base_url)
-        playback_controller = PlaybackController(torrserver_client)
+        cache_manager = CacheManager(
+            self.local_cache_dir,
+            self.local_cache_max_age_days,
+            self.local_cache_max_size_gb,
+            logger_factory,
+        )
+        stream_rewrite_service = StreamRewriteService(self.public_base_url, cache_manager)
+        redis_manager = RedisManager(self.redis_url, logger_factory)
+        download_queue_service = DownloadQueueService(cache_manager, redis_manager, self.download_max_attempts)
+        next_episode_prefetch_service = NextEpisodePrefetchService(
+            upstream_client,
+            stream_rewrite_service,
+            download_queue_service,
+            self.next_episode_prefetch_stream_limit,
+        )
+        download_worker_service = DownloadWorkerService(
+            torrserver_client,
+            cache_manager,
+            redis_manager,
+            logger_factory,
+            self.download_queue_poll_seconds,
+            self.download_connect_timeout_seconds,
+            self.download_no_progress_timeout_seconds,
+            self.download_min_progress_bytes,
+            self.download_min_progress_window_seconds,
+            self.download_max_total_seconds,
+            self.download_progress_log_interval_seconds,
+        )
         serve_command = ServeCommand(self.api_host, self.api_port)
 
+        self.injector.binder.bind(LoggerFactory, to=logger_factory)
         self.injector.binder.bind(TorrServerClient, to=torrserver_client)
         self.injector.binder.bind(UpstreamClient, to=upstream_client)
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
-        self.injector.binder.bind(PlaybackController, to=playback_controller)
+        self.injector.binder.bind(CacheManager, to=cache_manager)
+        self.injector.binder.bind(RedisManager, to=redis_manager)
+        self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
+        self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
+        self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
         self.injector.binder.bind(ServeCommand, to=serve_command)

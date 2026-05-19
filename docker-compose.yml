@@ -8,4 +8,32 @@ services:
       - .env
     ports:
       - "8691:8691"
+    volumes:
+      - cache-data:/app/var/cache/stremio-http-proxy
+      - log-data:/app/var/log/stremio-http-proxy
+    depends_on:
+      - redis
     restart: unless-stopped
+
+  stremio-http-proxy-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "stremio_http_proxy.cli", "worker"]
+    env_file:
+      - .env
+    volumes:
+      - cache-data:/app/var/cache/stremio-http-proxy
+      - log-data:/app/var/log/stremio-http-proxy
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: stremio-http-proxy-redis
+    restart: unless-stopped
+
+volumes:
+  cache-data:
+  log-data:

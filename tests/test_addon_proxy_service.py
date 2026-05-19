@@ -10,10 +10,18 @@ class FakeUpstreamClient:
 
 class FakeStreamRewriteService:
     def __init__(self):
-        self.calls: list[tuple[dict, str | None]] = []
+        self.calls: list[tuple] = []
 
-    def rewrite(self, payload: dict, category: str | None = None) -> dict:
-        self.calls.append((payload, category))
+    def rewrite(
+        self,
+        payload: dict,
+        category: str | None = None,
+        meta_type: str | None = None,
+        meta_id: str | None = None,
+        season: int | None = None,
+        episode: int | None = None,
+    ) -> dict:
+        self.calls.append((payload, category, meta_type, meta_id, season, episode))
         return {"rewritten": True, "category": category}
 
 

@@ -28,7 +28,13 @@ class AddonController:
         return await self.addon_proxy_service.proxy_json(f"/meta/{type}/{id}.json")
 
     async def stream(self, type: str, id: str) -> dict:
-        return await self.addon_proxy_service.proxy_json(f"/stream/{type}/{id}.json")
+        return await self.addon_proxy_service.proxy_json(
+            f"/stream/{type}/{id}.json",
+            rewrite_context={
+                "content_type": type,
+                "content_id": id,
+            },
+        )
 
     async def subtitles(self, type: str, id: str) -> dict:
         return await self.addon_proxy_service.proxy_json(f"/subtitles/{type}/{id}.json")

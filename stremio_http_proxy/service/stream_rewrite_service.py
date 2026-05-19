@@ -3,14 +3,22 @@ from urllib.parse import urlencode, urlparse
 from injector import inject
 
 from stremio_http_proxy.helper.hash_helper import extract_infohash
+from stremio_http_proxy.service.cache_manager import CacheManager
 
 
 class StreamRewriteService:
     @inject
-    def __init__(self, public_base_url: str):
+    def __init__(self, public_base_url: str, cache_manager: CacheManager):
         self.public_base_url = public_base_url.rstrip("/")
+        self.cache_manager = cache_manager
 
-    def rewrite(self, payload: dict, category: str | None = None) -> dict:
+    def rewrite(
+        self,
+        payload: dict,
+        category: str | None = None,
+        content_type: str | None = None,
+        content_id: str | None = None,
+    ) -> dict:
         streams = payload.get("streams")
         if not isinstance(streams, list):
             return payload
@@ -28,12 +36,55 @@ class StreamRewriteService:
             title = self._extract_title(updated)
             poster = self._extract_poster(updated)
             index = self._extract_index(updated)
-            updated["url"] = self._build_playback_url(torrent_link, title, poster, category, index)
+            self._mark_cached_if_ready(updated, torrent_link, index)
+            updated["url"] = self._build_playback_url(
+                torrent_link,
+                title,
+                poster,
+                category,
+                index,
+                content_type,
+                content_id,
+            )
             rewritten_streams.append(updated)
 
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams
         return updated_payload
+
+    def _mark_cached_if_ready(self, stream: dict, torrent_link: str, index: int | None) -> None:
+        cache_key = self.cache_manager.build_cache_key(torrent_link, index)
+        if cache_key is None or not self.cache_manager.is_ready(cache_key):
+            return
+
+        meta = stream.get("_meta")
+        if not isinstance(meta, dict):
+            meta = {}
+        updated_meta = dict(meta)
+        updated_meta["cached"] = True
+        stream["_meta"] = updated_meta
+
+    def extract_download_candidates(self, payload: dict) -> list[dict[str, str | int | None]]:
+        streams = payload.get("streams")
+        if not isinstance(streams, list):
+            return []
+
+        candidates = []
+        for stream in streams:
+            if not isinstance(stream, dict):
+                continue
+            torrent_link = self._extract_torrent_link(stream)
+            if torrent_link is None:
+                continue
+            candidates.append(
+                {
+                    "link": torrent_link,
+                    "title": self._extract_title(stream),
+                    "poster": self._extract_poster(stream),
+                    "index": self._extract_index(stream),
+                }
+            )
+        return candidates
 
     def _extract_torrent_link(self, stream: dict) -> str | None:
         candidates = [
@@ -103,6 +154,8 @@ class StreamRewriteService:
         poster: str | None,
         category: str | None,
         index: int | None,
+        content_type: str | None,
+        content_id: str | None,
     ) -> str:
         params = {"link": link}
         if title:
@@ -113,4 +166,8 @@ class StreamRewriteService:
             params["category"] = category
         if index is not None:
             params["index"] = str(index)
+        if content_type:
+            params["content_type"] = content_type
+        if content_id:
+            params["content_id"] = content_id
         return f"{self.public_base_url}/play?{urlencode(params)}"

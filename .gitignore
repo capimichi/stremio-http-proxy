@@ -150,6 +150,10 @@ activemq-data/
 # Environments
 .env
 .envrc
+.docker-compose.override.yml
+.docker-compose.override.yaml
+docker-compose.override.yml
+docker-compose.override.yaml
 .venv
 env/
 venv/
