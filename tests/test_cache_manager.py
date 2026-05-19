@@ -1,5 +1,5 @@
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
-from stremio_http_proxy.service.cache_manager import CacheManager
+from stremio_http_proxy.manager.cache_manager import CacheManager
 
 
 def test_cache_manager_persists_progress_fields(tmp_path):

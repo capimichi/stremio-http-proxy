@@ -20,18 +20,14 @@ class FakeTorrServerClient:
         return f"http://localhost:8090/stream?link={link}&play=true&index={index}"
 
 
-class FakeCacheManager:
+class FakeCacheService:
     def __init__(self, ready=False):
         self.ready = ready
 
-    def build_cache_key(self, link: str, index: int | None = None) -> str:
-        return f"abc:{index or 0}"
-
-    def is_ready(self, cache_key: str) -> bool:
-        return self.ready
-
-    def parse_cache_key(self, cache_key: str) -> tuple[str, int]:
-        return ("abc", 18)
+    def get_cached_route(self, link: str, index: int | None = None) -> str | None:
+        if not self.ready:
+            return None
+        return "/cache/abc/18"
 
 
 class FakeDownloadQueueService:
@@ -62,7 +58,7 @@ class DummyTask:
 def build_controller(tmp_path, ready=False):
     return PlaybackController(
         FakeTorrServerClient(),
-        FakeCacheManager(ready=ready),
+        FakeCacheService(ready=ready),
         FakeDownloadQueueService(),
         FakeNextEpisodePrefetchService(),
         LoggerFactory(str(tmp_path)),

@@ -8,11 +8,11 @@ from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.client.upstream_client import UpstreamClient
 from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
-from stremio_http_proxy.service.cache_manager import CacheManager
+from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.manager.redis_manager import RedisManager
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
-from stremio_http_proxy.service.redis_manager import RedisManager
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 
 

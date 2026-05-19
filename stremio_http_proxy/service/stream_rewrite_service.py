@@ -3,7 +3,7 @@ from urllib.parse import urlencode, urlparse
 from injector import inject
 
 from stremio_http_proxy.helper.hash_helper import extract_infohash
-from stremio_http_proxy.service.cache_manager import CacheManager
+from stremio_http_proxy.manager.cache_manager import CacheManager
 
 
 class StreamRewriteService:

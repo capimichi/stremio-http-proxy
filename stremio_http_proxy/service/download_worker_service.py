@@ -7,9 +7,9 @@ from injector import inject
 
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
+from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.manager.redis_manager import RedisManager
 from stremio_http_proxy.model.download_job import DownloadJob
-from stremio_http_proxy.service.cache_manager import CacheManager
-from stremio_http_proxy.service.redis_manager import RedisManager
 
 
 class DownloadWorkerService:
