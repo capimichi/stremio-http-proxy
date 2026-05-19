@@ -66,6 +66,7 @@ def test_stream_rewrite_marks_cached_streams_when_local_cache_is_ready():
     payload = {
         "streams": [
             {
+                "name": "Torrentio 1080p",
                 "title": "demo",
                 "magnet": magnet,
                 "fileIdx": 17,
@@ -77,3 +78,23 @@ def test_stream_rewrite_marks_cached_streams_when_local_cache_is_ready():
     rewritten = service.rewrite(payload, category="tv")
 
     assert rewritten["streams"][0]["_meta"]["cached"] is True
+    assert rewritten["streams"][0]["name"] == "🔥 Torrentio 1080p"
+
+
+def test_stream_rewrite_does_not_duplicate_cached_name_prefix():
+    magnet = "magnet:?xt=urn:btih:ABCDEF1234567890ABCDEF1234567890ABCDEF12"
+    service = StreamRewriteService("http://localhost:8691", FakeCacheManager({f"{magnet}:18"}))
+    payload = {
+        "streams": [
+            {
+                "name": "🔥 Torrentio 1080p",
+                "title": "demo",
+                "magnet": magnet,
+                "fileIdx": 17,
+            }
+        ]
+    }
+
+    rewritten = service.rewrite(payload, category="tv")
+
+    assert rewritten["streams"][0]["name"] == "🔥 Torrentio 1080p"

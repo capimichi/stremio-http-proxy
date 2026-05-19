@@ -7,6 +7,8 @@ from stremio_http_proxy.service.cache_manager import CacheManager
 
 
 class StreamRewriteService:
+    CACHED_NAME_PREFIX = "🔥 "
+
     @inject
     def __init__(self, public_base_url: str, cache_manager: CacheManager):
         self.public_base_url = public_base_url.rstrip("/")
@@ -63,6 +65,10 @@ class StreamRewriteService:
         updated_meta = dict(meta)
         updated_meta["cached"] = True
         stream["_meta"] = updated_meta
+
+        name = stream.get("name")
+        if isinstance(name, str) and name.strip() and not name.startswith(self.CACHED_NAME_PREFIX):
+            stream["name"] = f"{self.CACHED_NAME_PREFIX}{name}"
 
     def extract_download_candidates(self, payload: dict) -> list[dict[str, str | int | None]]:
         streams = payload.get("streams")
