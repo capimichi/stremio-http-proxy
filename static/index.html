@@ -1,245 +1,60 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Stremio HTTP Proxy</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: Inter, Arial, sans-serif;
-    }
-
-    body {
-      margin: 0;
-      background: #0f172a;
-      color: #e2e8f0;
-    }
-
-    main {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 24px 16px 48px;
-    }
-
-    h1, h2 {
-      margin: 0 0 12px;
-    }
-
-    p {
-      margin: 0;
-      color: #cbd5e1;
-    }
-
-    .panel {
-      background: #111827;
-      border: 1px solid #334155;
-      border-radius: 14px;
-      padding: 16px;
-      margin-top: 16px;
-    }
-
-    .manifest {
-      display: block;
-      margin-top: 10px;
-      color: #7dd3fc;
-      word-break: break-all;
-    }
-
-    .meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-top: 10px;
-      font-size: 14px;
-      color: #94a3b8;
-    }
-
-    .downloads {
-      display: grid;
-      gap: 12px;
-      margin-top: 16px;
-    }
-
-    .pagination {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-top: 16px;
-      color: #cbd5e1;
-    }
-
-    button {
-      border: 1px solid #334155;
-      background: #1e293b;
-      color: #e2e8f0;
-      border-radius: 10px;
-      padding: 8px 12px;
-      cursor: pointer;
-    }
-
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    .download {
-      border: 1px solid #334155;
-      border-radius: 12px;
-      padding: 14px;
-      background: #020617;
-    }
-
-    .download strong {
-      display: block;
-      margin-bottom: 8px;
-      word-break: break-all;
-    }
-
-    .empty {
-      color: #94a3b8;
-    }
-  </style>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <main>
-    <h1>Stremio HTTP Proxy</h1>
-    <p>Manifest da aggiungere e stato completo della cache, dalle entry piu recenti alle piu vecchie.</p>
+  <main class="layout">
+    <section class="hero panel">
+      <div>
+        <p class="eyebrow">Dashboard</p>
+        <h1>Stremio HTTP Proxy</h1>
+        <p class="subtitle">Manifest e stato della cache con focus sui download in corso.</p>
+      </div>
+      <a id="manifest-url" class="manifest-link" href="#">Caricamento manifest...</a>
+    </section>
 
-    <section class="panel">
-      <h2>Manifest</h2>
-      <a id="manifest-url" class="manifest" href="#">Caricamento...</a>
+    <section class="summary-grid" id="summary-cards">
+      <article class="summary-card accent-blue">
+        <span class="summary-label">Entry totali</span>
+        <strong id="summary-total-items">-</strong>
+      </article>
+      <article class="summary-card accent-green">
+        <span class="summary-label">Download attivi</span>
+        <strong id="summary-active-downloads">-</strong>
+      </article>
+      <article class="summary-card accent-violet">
+        <span class="summary-label">Cache occupata</span>
+        <strong id="summary-cache-size">-</strong>
+      </article>
+      <article class="summary-card accent-amber">
+        <span class="summary-label">Stati</span>
+        <strong id="summary-status-counts">-</strong>
+      </article>
     </section>
 
     <section class="panel">
-      <h2>Cache</h2>
-      <div id="summary" class="meta"></div>
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Download</p>
+          <h2>Situazione corrente</h2>
+        </div>
+        <div class="pagination">
+          <button id="prev-page" type="button">Precedente</button>
+          <span id="page-info">Pagina 1</span>
+          <button id="next-page" type="button">Successiva</button>
+        </div>
+      </div>
+
       <div id="downloads" class="downloads">
         <p class="empty">Caricamento...</p>
-      </div>
-      <div class="pagination">
-        <button id="prev-page" type="button">Precedente</button>
-        <span id="page-info">Pagina 1</span>
-        <button id="next-page" type="button">Successiva</button>
       </div>
     </section>
   </main>
 
-  <script>
-    const defaultLimit = 10;
-    let currentPage = 1;
-
-    function formatBytes(value) {
-      if (value === null || value === undefined) {
-        return "unknown";
-      }
-      const units = ["B", "KB", "MB", "GB", "TB"];
-      let size = value;
-      let unitIndex = 0;
-      while (size >= 1024 && unitIndex < units.length - 1) {
-        size /= 1024;
-        unitIndex += 1;
-      }
-      return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-    }
-
-    function formatSpeed(value) {
-      if (value === null || value === undefined) {
-        return "unknown";
-      }
-      return `${formatBytes(value)}/s`;
-    }
-
-    function formatTime(value) {
-      if (!value) {
-        return "unknown";
-      }
-      return new Date(value * 1000).toLocaleString();
-    }
-
-    function updatePagination(payload) {
-      const pageInfo = document.getElementById("page-info");
-      const previousButton = document.getElementById("prev-page");
-      const nextButton = document.getElementById("next-page");
-      pageInfo.textContent = `Pagina ${payload.page} di ${payload.total_pages}`;
-      previousButton.disabled = payload.page <= 1;
-      nextButton.disabled = payload.page >= payload.total_pages;
-    }
-
-    function renderDownloads(payload) {
-      const downloads = payload.downloads || [];
-      const container = document.getElementById("downloads");
-      const summary = document.getElementById("summary");
-      const counts = downloads.reduce((accumulator, download) => {
-        accumulator[download.status] = (accumulator[download.status] || 0) + 1;
-        return accumulator;
-      }, {});
-      const statusSummary = Object.entries(counts)
-        .map(([status, count]) => `${status}: ${count}`)
-        .join(" | ");
-      summary.textContent = `${payload.total_items} entry totali | cache: ${formatBytes(payload.total_cache_bytes)} | ${downloads.length} in questa pagina${statusSummary ? ` | ${statusSummary}` : ""}`;
-
-      if (!downloads.length) {
-        container.innerHTML = '<p class="empty">Nessuna entry presente in cache.</p>';
-        updatePagination(payload);
-        return;
-      }
-
-      container.innerHTML = downloads.map((download) => {
-        const progress = download.progress_percent === null || download.progress_percent === undefined
-          ? "unknown"
-          : `${download.progress_percent.toFixed(2)}%`;
-        const total = download.expected_bytes ? formatBytes(download.expected_bytes) : "unknown";
-        const error = download.last_error || "none";
-        const headline = download.title || download.cache_key;
-        return `
-          <article class="download">
-            <strong>${headline}</strong>
-            <div class="meta">
-              <span>cache key: ${download.cache_key}</span>
-              <span>status: ${download.status}</span>
-              <span>progress: ${progress}</span>
-              <span>downloaded: ${formatBytes(download.downloaded_bytes)} / ${total}</span>
-              <span>speed: ${formatSpeed(download.download_speed_bytes_per_second)}</span>
-              <span>attempt: ${download.attempt}</span>
-            </div>
-            <div class="meta">
-              <span>created: ${formatTime(download.created_at)}</span>
-              <span>completed: ${formatTime(download.completed_at)}</span>
-              <span>last progress: ${formatTime(download.last_progress_at)}</span>
-              <span>last error: ${error}</span>
-            </div>
-          </article>
-        `;
-      }).join("");
-      updatePagination(payload);
-    }
-
-    async function refresh() {
-      const response = await fetch(`/downloads?page=${currentPage}&limit=${defaultLimit}`, { headers: { "Accept": "application/json" } });
-      const payload = await response.json();
-      const manifestLink = document.getElementById("manifest-url");
-      manifestLink.href = payload.manifest_url;
-      manifestLink.textContent = payload.manifest_url;
-      currentPage = payload.page;
-      renderDownloads(payload);
-    }
-
-    document.getElementById("prev-page").addEventListener("click", async () => {
-      if (currentPage <= 1) {
-        return;
-      }
-      currentPage -= 1;
-      await refresh();
-    });
-
-    document.getElementById("next-page").addEventListener("click", async () => {
-      currentPage += 1;
-      await refresh();
-    });
-
-    refresh();
-    setInterval(refresh, 10000);
-  </script>
+  <script src="/static/app.js"></script>
 </body>
 </html>

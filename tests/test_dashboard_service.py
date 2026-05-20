@@ -36,6 +36,8 @@ def test_dashboard_service_returns_manifest_and_all_cache_entries(tmp_path):
     assert payload.total_items == 2
     assert payload.total_pages == 1
     assert payload.total_cache_bytes == 1536
+    assert payload.status_counts == {"downloading": 2}
+    assert payload.active_downloads == 2
     assert len(payload.downloads) == 2
     assert payload.downloads[0].cache_key == newer_key
     assert payload.downloads[0].title == "Newer Episode"
@@ -58,6 +60,8 @@ def test_dashboard_service_includes_completed_entries(tmp_path):
     payload = service.get_download_status()
 
     assert payload.total_cache_bytes == 2048
+    assert payload.status_counts == {"ready": 1}
+    assert payload.active_downloads == 0
     assert len(payload.downloads) == 1
     assert payload.downloads[0].cache_key == ready_key
     assert payload.downloads[0].title == "Completed Episode"
@@ -83,4 +87,6 @@ def test_dashboard_service_paginates_results(tmp_path):
     assert payload.total_items == 12
     assert payload.total_pages == 2
     assert payload.total_cache_bytes == 0
+    assert payload.status_counts == {"queued": 12}
+    assert payload.active_downloads == 0
     assert len(payload.downloads) == 2

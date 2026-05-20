@@ -12,6 +12,7 @@ from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
+from stremio_http_proxy.service.basic_auth_service import BasicAuthService
 from stremio_http_proxy.service.dashboard_service import DashboardService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
@@ -49,6 +50,8 @@ class DefaultContainer:
         self.torrserver_basic_auth_user = os.environ.get("TORRSERVER_BASIC_AUTH_USER")
         self.torrserver_basic_auth_password = os.environ.get("TORRSERVER_BASIC_AUTH_PASSWORD")
         self.public_base_url = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{self.api_port}")
+        self.dashboard_basic_auth_user = os.environ.get("DASHBOARD_BASIC_AUTH_USER")
+        self.dashboard_basic_auth_password = os.environ.get("DASHBOARD_BASIC_AUTH_PASSWORD")
         self.log_dir = os.environ.get("LOG_DIR", "var/log")
         self.local_cache_dir = os.environ.get("LOCAL_CACHE_DIR", "var/cache")
         self.sqlite_path = os.environ.get("SQLITE_PATH", "var/db/cache.sqlite")
@@ -86,6 +89,10 @@ class DefaultContainer:
             self.local_cache_max_size_gb,
             logger_factory,
         )
+        basic_auth_service = BasicAuthService(
+            self.dashboard_basic_auth_user,
+            self.dashboard_basic_auth_password,
+        )
         stream_rewrite_service = StreamRewriteService(self.public_base_url, cache_manager)
         download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts)
         next_episode_prefetch_service = NextEpisodePrefetchService(
@@ -115,6 +122,7 @@ class DefaultContainer:
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
         self.injector.binder.bind(DbManager, to=db_manager)
         self.injector.binder.bind(CacheManager, to=cache_manager)
+        self.injector.binder.bind(BasicAuthService, to=basic_auth_service)
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
         self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)

@@ -22,6 +22,12 @@ class DashboardService:
             entry.size_bytes if entry.status == CacheEntryStatusEnum.READY else entry.downloaded_bytes
             for _, entry in entries
         )
+        status_counts: dict[str, int] = {}
+        active_downloads = 0
+        for _, entry in entries:
+            status_counts[entry.status] = status_counts.get(entry.status, 0) + 1
+            if entry.status in {CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING}:
+                active_downloads += 1
 
         downloads = []
         for cache_key, entry in entries[start:end]:
@@ -52,5 +58,7 @@ class DashboardService:
             total_items=total_items,
             total_pages=total_pages,
             total_cache_bytes=total_cache_bytes,
+            status_counts=status_counts,
+            active_downloads=active_downloads,
             downloads=downloads,
         )

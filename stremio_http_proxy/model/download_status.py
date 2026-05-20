@@ -25,4 +25,6 @@ class DownloadStatusResponse(BaseModel):
     total_items: int
     total_pages: int
     total_cache_bytes: int
+    status_counts: dict[str, int]
+    active_downloads: int
     downloads: list[DownloadStatus]
