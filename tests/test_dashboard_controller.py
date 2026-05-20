@@ -6,16 +6,26 @@ from stremio_http_proxy.controller.dashboard_controller import DashboardControll
 
 
 class FakeDashboardService:
-    def get_download_status(self):
+    def __init__(self):
+        self.calls = []
+
+    def get_download_status(self, page=1, limit=10):
+        self.calls.append((page, limit))
         return type(
             "Payload",
             (),
             {
                 "model_dump": lambda self: {
                     "manifest_url": "https://proxy.example.com/manifest.json",
+                    "page": page,
+                    "limit": limit,
+                    "total_items": 1,
+                    "total_pages": 1,
+                    "total_cache_bytes": 10,
                     "downloads": [
                         {
                             "cache_key": "abc:1",
+                            "title": "Demo Episode",
                             "infohash": "abc",
                             "index": 1,
                             "status": "downloading",
@@ -45,9 +55,15 @@ def test_dashboard_controller_serves_static_index():
 
 
 def test_dashboard_controller_returns_download_payload():
-    controller = DashboardController(FakeDashboardService())
+    service = FakeDashboardService()
+    controller = DashboardController(service)
 
-    payload = asyncio.run(controller.downloads())
+    payload = asyncio.run(controller.downloads(page=2, limit=10))
 
+    assert service.calls == [(2, 10)]
     assert payload["manifest_url"] == "https://proxy.example.com/manifest.json"
+    assert payload["page"] == 2
+    assert payload["limit"] == 10
+    assert payload["total_cache_bytes"] == 10
+    assert payload["downloads"][0]["title"] == "Demo Episode"
     assert payload["downloads"][0]["cache_key"] == "abc:1"

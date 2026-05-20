@@ -1,3 +1,4 @@
+from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
@@ -22,7 +23,7 @@ def test_cache_manager_persists_progress_fields(tmp_path):
 
     entry = manager.get_entry(cache_key)
 
-    assert entry.status == "downloading"
+    assert entry.status == CacheEntryStatusEnum.DOWNLOADING
     assert entry.downloaded_bytes == 52428800
     assert entry.expected_bytes == 104857600
     assert entry.progress_percent == 50.0

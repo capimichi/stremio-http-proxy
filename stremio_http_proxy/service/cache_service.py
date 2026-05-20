@@ -1,5 +1,6 @@
 from injector import inject
 
+from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.manager.cache_manager import CacheManager
 
 
@@ -19,7 +20,7 @@ class CacheService:
     def get_cached_file_path(self, infohash: str, index: int) -> str | None:
         cache_key = self.cache_manager.build_cache_key_from_parts(infohash, index)
         entry = self.cache_manager.get_entry(cache_key)
-        if entry.status != "ready":
+        if entry.status != CacheEntryStatusEnum.READY:
             return None
 
         self.cache_manager.touch(cache_key)

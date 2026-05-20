@@ -10,8 +10,6 @@ services:
       - "8691:8691"
     volumes:
       - app-var:/app/var
-    depends_on:
-      - redis
     restart: unless-stopped
 
   stremio-http-proxy-worker:
@@ -23,13 +21,6 @@ services:
       - .env
     volumes:
       - app-var:/app/var
-    depends_on:
-      - redis
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    container_name: stremio-http-proxy-redis
     restart: unless-stopped
 
 volumes:

@@ -7,7 +7,7 @@ HTTP proxy for Stremio addons that rewrites upstream torrent streams to TorrServ
 - FastAPI addon proxy for `manifest`, `catalog`, `meta`, `stream`, and `subtitles`
 - TorrServer-backed stream registration and preload
 - Stream URL rewrite to TorrServer HTTP playback
-- Deferred local cache downloads backed by Redis and a worker process
+- Deferred local cache downloads backed by SQLite state and a worker process
 - Local `/cache` endpoint for already downloaded media files
 
 ## Development
@@ -43,7 +43,6 @@ LOCAL_CACHE_DIR=var/cache
 SQLITE_PATH=var/db/cache.sqlite
 LOCAL_CACHE_MAX_AGE_DAYS=7
 LOCAL_CACHE_MAX_SIZE_GB=20
-REDIS_URL=redis://redis:6379/0
 DOWNLOAD_QUEUE_POLL_SECONDS=1
 DOWNLOAD_MAX_ATTEMPTS=3
 DOWNLOAD_CONNECT_TIMEOUT_SECONDS=10

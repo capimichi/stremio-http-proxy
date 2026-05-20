@@ -61,6 +61,28 @@
       margin-top: 16px;
     }
 
+    .pagination {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 16px;
+      color: #cbd5e1;
+    }
+
+    button {
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
     .download {
       border: 1px solid #334155;
       border-radius: 12px;
@@ -95,10 +117,18 @@
       <div id="downloads" class="downloads">
         <p class="empty">Caricamento...</p>
       </div>
+      <div class="pagination">
+        <button id="prev-page" type="button">Precedente</button>
+        <span id="page-info">Pagina 1</span>
+        <button id="next-page" type="button">Successiva</button>
+      </div>
     </section>
   </main>
 
   <script>
+    const defaultLimit = 10;
+    let currentPage = 1;
+
     function formatBytes(value) {
       if (value === null || value === undefined) {
         return "unknown";
@@ -127,7 +157,17 @@
       return new Date(value * 1000).toLocaleString();
     }
 
-    function renderDownloads(downloads) {
+    function updatePagination(payload) {
+      const pageInfo = document.getElementById("page-info");
+      const previousButton = document.getElementById("prev-page");
+      const nextButton = document.getElementById("next-page");
+      pageInfo.textContent = `Pagina ${payload.page} di ${payload.total_pages}`;
+      previousButton.disabled = payload.page <= 1;
+      nextButton.disabled = payload.page >= payload.total_pages;
+    }
+
+    function renderDownloads(payload) {
+      const downloads = payload.downloads || [];
       const container = document.getElementById("downloads");
       const summary = document.getElementById("summary");
       const counts = downloads.reduce((accumulator, download) => {
@@ -137,10 +177,11 @@
       const statusSummary = Object.entries(counts)
         .map(([status, count]) => `${status}: ${count}`)
         .join(" | ");
-      summary.textContent = `${downloads.length} entry totali${statusSummary ? ` | ${statusSummary}` : ""}`;
+      summary.textContent = `${payload.total_items} entry totali | cache: ${formatBytes(payload.total_cache_bytes)} | ${downloads.length} in questa pagina${statusSummary ? ` | ${statusSummary}` : ""}`;
 
       if (!downloads.length) {
         container.innerHTML = '<p class="empty">Nessuna entry presente in cache.</p>';
+        updatePagination(payload);
         return;
       }
 
@@ -150,10 +191,12 @@
           : `${download.progress_percent.toFixed(2)}%`;
         const total = download.expected_bytes ? formatBytes(download.expected_bytes) : "unknown";
         const error = download.last_error || "none";
+        const headline = download.title || download.cache_key;
         return `
           <article class="download">
-            <strong>${download.cache_key}</strong>
+            <strong>${headline}</strong>
             <div class="meta">
+              <span>cache key: ${download.cache_key}</span>
               <span>status: ${download.status}</span>
               <span>progress: ${progress}</span>
               <span>downloaded: ${formatBytes(download.downloaded_bytes)} / ${total}</span>
@@ -169,16 +212,31 @@
           </article>
         `;
       }).join("");
+      updatePagination(payload);
     }
 
     async function refresh() {
-      const response = await fetch("/downloads", { headers: { "Accept": "application/json" } });
+      const response = await fetch(`/downloads?page=${currentPage}&limit=${defaultLimit}`, { headers: { "Accept": "application/json" } });
       const payload = await response.json();
       const manifestLink = document.getElementById("manifest-url");
       manifestLink.href = payload.manifest_url;
       manifestLink.textContent = payload.manifest_url;
-      renderDownloads(payload.downloads || []);
+      currentPage = payload.page;
+      renderDownloads(payload);
     }
+
+    document.getElementById("prev-page").addEventListener("click", async () => {
+      if (currentPage <= 1) {
+        return;
+      }
+      currentPage -= 1;
+      await refresh();
+    });
+
+    document.getElementById("next-page").addEventListener("click", async () => {
+      currentPage += 1;
+      await refresh();
+    });
 
     refresh();
     setInterval(refresh, 10000);

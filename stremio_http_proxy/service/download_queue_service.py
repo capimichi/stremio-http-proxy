@@ -4,15 +4,13 @@ import time
 from injector import inject
 
 from stremio_http_proxy.manager.cache_manager import CacheManager
-from stremio_http_proxy.manager.redis_manager import RedisManager
 from stremio_http_proxy.model.download_job import DownloadJob
 
 
 class DownloadQueueService:
     @inject
-    def __init__(self, cache_manager: CacheManager, redis_manager: RedisManager, max_attempts: int):
+    def __init__(self, cache_manager: CacheManager, max_attempts: int):
         self.cache_manager = cache_manager
-        self.redis_manager = redis_manager
         self.max_attempts = max_attempts
 
     async def enqueue_download(
@@ -49,4 +47,4 @@ class DownloadQueueService:
             enqueued_at=now,
             available_at=now,
         )
-        return await self.redis_manager.enqueue(job)
+        return await self.cache_manager.enqueue_download(job)

@@ -17,6 +17,9 @@ class FakeCacheManager:
     def __init__(self):
         self.ready = False
         self.failed = []
+        self.retried = []
+        self.dead = []
+        self.claimed_job = None
 
     def is_ready(self, cache_key: str) -> bool:
         return self.ready
@@ -30,26 +33,21 @@ class FakeCacheManager:
     def mark_failed(self, cache_key: str, error: str, attempt: int):
         self.failed.append((cache_key, error, attempt))
 
-
-class FakeRedisManager:
-    def __init__(self, job):
-        self.job = job
-        self.acknowledged = []
-        self.retried = []
-        self.dead = []
-
-    async def claim_next_job(self):
-        job, self.job = self.job, None
+    async def claim_next_download(self, worker_id: str):
+        job, self.claimed_job = self.claimed_job, None
         return job
 
-    async def acknowledge(self, job):
-        self.acknowledged.append(job.job_id)
+    async def acknowledge_download(self, job):
+        return None
 
-    async def retry(self, job, delay_seconds: int, error: str):
+    async def retry_download(self, job, delay_seconds: int, error: str):
         self.retried.append((job.job_id, delay_seconds, error))
 
     async def move_to_dead_letter(self, job, error: str):
         self.dead.append((job.job_id, error))
+
+    def touch_processing_lease(self, cache_key: str, worker_id: str, lease_seconds: int = 180):
+        return None
 
 
 def test_download_worker_retries_failed_job(tmp_path, monkeypatch):
@@ -61,11 +59,10 @@ def test_download_worker_retries_failed_job(tmp_path, monkeypatch):
         available_at=0,
     )
     cache_manager = FakeCacheManager()
-    redis_manager = FakeRedisManager(job)
+    cache_manager.claimed_job = job
     service = DownloadWorkerService(
         FakeTorrServerClient(),
         cache_manager,
-        redis_manager,
         LoggerFactory(str(tmp_path)),
         1,
         10,
@@ -83,5 +80,5 @@ def test_download_worker_retries_failed_job(tmp_path, monkeypatch):
 
     asyncio.run(service.process_next_job())
 
-    assert redis_manager.retried == [("job-1", 30, "download progress stayed below threshold")]
+    assert cache_manager.retried == [("job-1", 30, "download progress stayed below threshold")]
     assert cache_manager.failed == [("abc:1", "download progress stayed below threshold", 1)]

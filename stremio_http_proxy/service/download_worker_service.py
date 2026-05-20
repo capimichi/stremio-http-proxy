@@ -1,6 +1,7 @@
 import asyncio
 import socket
 import time
+from pathlib import Path
 
 import httpx
 from injector import inject
@@ -8,7 +9,6 @@ from injector import inject
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
-from stremio_http_proxy.manager.redis_manager import RedisManager
 from stremio_http_proxy.model.download_job import DownloadJob
 
 
@@ -18,7 +18,6 @@ class DownloadWorkerService:
         self,
         torrserver_client: TorrServerClient,
         cache_manager: CacheManager,
-        redis_manager: RedisManager,
         logger_factory: LoggerFactory,
         poll_seconds: int,
         connect_timeout_seconds: int,
@@ -30,7 +29,6 @@ class DownloadWorkerService:
     ):
         self.torrserver_client = torrserver_client
         self.cache_manager = cache_manager
-        self.redis_manager = redis_manager
         self.logger = logger_factory.get_logger("stremio_http_proxy.download_worker", "download_worker.log")
         self.progress_logger = logger_factory.get_logger("stremio_http_proxy.download_progress", "download_progress.log")
         self.worker_id = socket.gethostname()
@@ -49,20 +47,22 @@ class DownloadWorkerService:
                 await asyncio.sleep(self.poll_seconds)
 
     async def process_next_job(self) -> bool:
-        job = await self.redis_manager.claim_next_job()
+        job = await self.cache_manager.claim_next_download(self.worker_id)
         if job is None:
             return False
 
         self.logger.info("Worker %s picked job %s for %s", self.worker_id, job.job_id, job.cache_key)
         if self.cache_manager.is_ready(job.cache_key):
             self.logger.info("Worker %s skipping job %s because cache is already ready", self.worker_id, job.job_id)
-            await self.redis_manager.acknowledge(job)
+            entry = self.cache_manager.get_entry(job.cache_key)
+            self.cache_manager.mark_ready(job.cache_key, Path(entry.file_path).stat().st_size)
+            await self.cache_manager.acknowledge_download(job)
             return True
 
         try:
             self.cache_manager.prune()
             await self._download(job)
-            await self.redis_manager.acknowledge(job)
+            await self.cache_manager.acknowledge_download(job)
             return True
         except Exception as exc:
             error = str(exc)
@@ -70,17 +70,18 @@ class DownloadWorkerService:
             if job.attempt + 1 >= job.max_attempts:
                 self.cache_manager.mark_failed(job.cache_key, error, job.attempt + 1)
                 self.logger.error("Worker %s discarding job %s: %s", self.worker_id, job.job_id, error)
-                await self.redis_manager.move_to_dead_letter(job, error)
+                await self.cache_manager.move_to_dead_letter(job, error)
                 return True
 
             delay_seconds = self._retry_delay(job.attempt + 1)
             self.cache_manager.mark_failed(job.cache_key, error, job.attempt + 1)
             self.logger.warning("Worker %s retrying job %s in %ss: %s", self.worker_id, job.job_id, delay_seconds, error)
-            await self.redis_manager.retry(job, delay_seconds, error)
+            await self.cache_manager.retry_download(job, delay_seconds, error)
             return True
 
     async def _download(self, job: DownloadJob) -> None:
         self.cache_manager.mark_downloading(job.cache_key, job.attempt)
+        self.cache_manager.touch_processing_lease(job.cache_key, self.worker_id)
         await self.torrserver_client.add_torrent(job.link, job.title, job.poster, job.category)
 
         download_url = self.torrserver_client.build_play_url(job.link, job.title, job.poster, job.category, job.index)
@@ -122,6 +123,7 @@ class DownloadWorkerService:
                                 progress_percent,
                                 speed_bytes_per_second,
                             )
+                            self.cache_manager.touch_processing_lease(job.cache_key, self.worker_id)
                             self.progress_logger.info(
                                 "worker=%s job=%s cache_key=%s downloaded_mb=%.2f total_mb=%s progress_pct=%s speed_mbps=%.2f elapsed_s=%.0f",
                                 self.worker_id,

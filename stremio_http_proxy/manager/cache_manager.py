@@ -2,13 +2,15 @@ import time
 from pathlib import Path
 
 from injector import inject
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 
+from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.entity.cache_entry import CacheEntry as CacheEntryRecord
 from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
+from stremio_http_proxy.model.download_job import DownloadJob
 
 
 class CacheManager:
@@ -60,14 +62,14 @@ class CacheManager:
 
     def is_ready(self, cache_key: str) -> bool:
         entry = self.get_entry(cache_key)
-        return entry.status == "ready" and Path(entry.file_path).exists()
+        return entry.status == CacheEntryStatusEnum.READY and Path(entry.file_path).exists()
 
     def mark_downloading(self, cache_key: str, attempt: int = 0) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
         now = time.time()
         updated = entry.model_copy(
             update={
-                "status": "downloading",
+                "status": CacheEntryStatusEnum.DOWNLOADING,
                 "created_at": entry.created_at or now,
                 "last_accessed_at": now,
                 "downloaded_bytes": 0,
@@ -75,6 +77,8 @@ class CacheManager:
                 "progress_percent": None,
                 "download_speed_bytes_per_second": None,
                 "last_progress_at": now,
+                "claimed_at": now,
+                "processing_expires_at": now + 180,
                 "attempt": attempt,
                 "last_error": None,
             }
@@ -87,7 +91,7 @@ class CacheManager:
         now = time.time()
         updated = entry.model_copy(
             update={
-                "status": "ready",
+                "status": CacheEntryStatusEnum.READY,
                 "completed_at": now,
                 "last_accessed_at": now,
                 "size_bytes": size_bytes,
@@ -95,6 +99,10 @@ class CacheManager:
                 "progress_percent": 100.0,
                 "download_speed_bytes_per_second": None,
                 "last_progress_at": now,
+                "claimed_at": None,
+                "claimed_by": None,
+                "processing_expires_at": None,
+                "available_at": None,
                 "last_error": None,
             }
         )
@@ -103,7 +111,16 @@ class CacheManager:
 
     def mark_failed(self, cache_key: str, error: str, attempt: int) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
-        updated = entry.model_copy(update={"status": "failed", "attempt": attempt, "last_error": error})
+        updated = entry.model_copy(
+            update={
+                "status": CacheEntryStatusEnum.FAILED,
+                "attempt": attempt,
+                "claimed_at": None,
+                "claimed_by": None,
+                "processing_expires_at": None,
+                "last_error": error,
+            }
+        )
         self._write_entry(cache_key, updated)
         self.logger.warning("Cache entry %s failed: %s", cache_key, error)
         return updated
@@ -125,7 +142,7 @@ class CacheManager:
         now = time.time()
         updated = entry.model_copy(
             update={
-                "status": "downloading",
+                "status": CacheEntryStatusEnum.DOWNLOADING,
                 "downloaded_bytes": downloaded_bytes,
                 "expected_bytes": expected_bytes,
                 "progress_percent": progress_percent,
@@ -153,6 +170,139 @@ class CacheManager:
                 .order_by(CacheEntryRecord.created_at.desc(), CacheEntryRecord.last_accessed_at.desc())
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
+
+    async def enqueue_download(self, job: DownloadJob) -> bool:
+        entry = self.get_entry(job.cache_key)
+        if entry.status in {
+            CacheEntryStatusEnum.QUEUED,
+            CacheEntryStatusEnum.PROCESSING,
+            CacheEntryStatusEnum.DOWNLOADING,
+        }:
+            return False
+
+        now = time.time()
+        updated = entry.model_copy(
+            update={
+                "status": CacheEntryStatusEnum.QUEUED,
+                "title": job.title,
+                "source_link": job.link,
+                "poster": job.poster,
+                "category": job.category,
+                "created_at": now,
+                "completed_at": None,
+                "downloaded_bytes": 0,
+                "expected_bytes": None,
+                "progress_percent": None,
+                "download_speed_bytes_per_second": None,
+                "last_progress_at": None,
+                "priority": job.priority,
+                "attempt": 0,
+                "max_attempts": job.max_attempts,
+                "trigger": job.trigger,
+                "content_type": job.content_type,
+                "content_id": job.content_id,
+                "available_at": job.available_at,
+                "claimed_at": None,
+                "claimed_by": None,
+                "processing_expires_at": None,
+                "last_error": None,
+            }
+        )
+        self._write_entry(job.cache_key, updated)
+        self.logger.info("Enqueued job %s for %s", job.job_id, job.cache_key)
+        return True
+
+    async def claim_next_download(self, worker_id: str, lease_seconds: int = 180) -> DownloadJob | None:
+        now = time.time()
+        with self.db_manager.session() as session:
+            expired_records = session.scalars(
+                select(CacheEntryRecord).where(
+                    CacheEntryRecord.status.in_([CacheEntryStatusEnum.PROCESSING, CacheEntryStatusEnum.DOWNLOADING]),
+                    CacheEntryRecord.processing_expires_at.is_not(None),
+                    CacheEntryRecord.processing_expires_at <= now,
+                )
+            ).all()
+            for record in expired_records:
+                record.status = CacheEntryStatusEnum.QUEUED
+                record.claimed_at = None
+                record.claimed_by = None
+                record.processing_expires_at = None
+                record.available_at = now
+                self.logger.warning("Requeued expired processing job %s", record.cache_key)
+
+            candidates = session.scalars(
+                select(CacheEntryRecord)
+                .where(
+                    CacheEntryRecord.status == CacheEntryStatusEnum.QUEUED,
+                    or_(CacheEntryRecord.available_at.is_(None), CacheEntryRecord.available_at <= now),
+                )
+                .order_by(CacheEntryRecord.available_at.asc(), CacheEntryRecord.priority.desc(), CacheEntryRecord.created_at.desc())
+            ).all()
+            for record in candidates:
+                claimed = session.execute(
+                    update(CacheEntryRecord)
+                    .where(
+                        CacheEntryRecord.cache_key == record.cache_key,
+                        CacheEntryRecord.status == CacheEntryStatusEnum.QUEUED,
+                    )
+                    .values(
+                        status=CacheEntryStatusEnum.PROCESSING,
+                        claimed_at=now,
+                        claimed_by=worker_id,
+                        processing_expires_at=now + lease_seconds,
+                        last_accessed_at=now,
+                    )
+                )
+                if claimed.rowcount != 1:
+                    continue
+                claimed_record = session.get(CacheEntryRecord, record.cache_key)
+                return self._to_job(claimed_record)
+        return None
+
+    async def acknowledge_download(self, job: DownloadJob) -> None:
+        entry = self.get_entry(job.cache_key)
+        updated = entry.model_copy(
+            update={
+                "claimed_at": None,
+                "claimed_by": None,
+                "processing_expires_at": None,
+                "available_at": None if entry.status == CacheEntryStatusEnum.READY else entry.available_at,
+            }
+        )
+        self._write_entry(job.cache_key, updated)
+
+    async def retry_download(self, job: DownloadJob, delay_seconds: int, error: str) -> None:
+        entry = self.get_entry(job.cache_key)
+        updated = entry.model_copy(
+            update={
+                "status": CacheEntryStatusEnum.QUEUED,
+                "attempt": job.attempt + 1,
+                "available_at": time.time() + delay_seconds,
+                "claimed_at": None,
+                "claimed_by": None,
+                "processing_expires_at": None,
+                "last_error": error,
+            }
+        )
+        self._write_entry(job.cache_key, updated)
+        self.logger.warning("Retrying job %s in %ss: %s", job.job_id, delay_seconds, error)
+
+    async def move_to_dead_letter(self, job: DownloadJob, error: str) -> None:
+        self.mark_failed(job.cache_key, error, job.attempt + 1)
+
+    def touch_processing_lease(self, cache_key: str, worker_id: str, lease_seconds: int = 180) -> None:
+        entry = self.get_entry(cache_key)
+        if entry.claimed_by != worker_id:
+            return
+        now = time.time()
+        updated = entry.model_copy(
+            update={
+                "claimed_at": now,
+                "processing_expires_at": now + lease_seconds,
+                "last_accessed_at": now,
+            }
+        )
+        self._write_entry(cache_key, updated)
 
     def prune(self) -> None:
         self._prune_by_age()
@@ -214,7 +364,7 @@ class CacheManager:
             records = session.scalars(select(CacheEntryRecord)).all()
         for record in records:
             entry = self._to_model(record)
-            if entry.status != "ready":
+            if entry.status != CacheEntryStatusEnum.READY:
                 continue
             cache_key = self.build_cache_key_from_parts(record.infohash, record.cache_index)
             total_size += entry.size_bytes
@@ -246,6 +396,10 @@ class CacheManager:
     def _to_model(self, record: CacheEntryRecord) -> CacheEntryModel:
         return CacheEntryModel(
             status=record.status,
+            title=record.title,
+            source_link=record.source_link,
+            poster=record.poster,
+            category=record.category,
             file_path=record.file_path,
             tmp_path=record.tmp_path,
             created_at=record.created_at,
@@ -257,12 +411,45 @@ class CacheManager:
             progress_percent=record.progress_percent,
             download_speed_bytes_per_second=record.download_speed_bytes_per_second,
             last_progress_at=record.last_progress_at,
+            priority=record.priority or 100,
             attempt=record.attempt,
+            max_attempts=record.max_attempts or 3,
+            trigger=record.trigger,
+            content_type=record.content_type,
+            content_id=record.content_id,
+            available_at=record.available_at,
+            claimed_at=record.claimed_at,
+            claimed_by=record.claimed_by,
+            processing_expires_at=record.processing_expires_at,
+            last_error=record.last_error,
+        )
+
+    def _to_job(self, record: CacheEntryRecord) -> DownloadJob:
+        return DownloadJob(
+            job_id=record.cache_key,
+            cache_key=record.cache_key,
+            link=record.source_link or "",
+            title=record.title,
+            poster=record.poster,
+            category=record.category,
+            index=record.cache_index,
+            priority=record.priority or 100,
+            attempt=record.attempt,
+            max_attempts=record.max_attempts or 3,
+            trigger=record.trigger or "playback",
+            content_type=record.content_type,
+            content_id=record.content_id,
+            enqueued_at=record.created_at or time.time(),
+            available_at=record.available_at or time.time(),
             last_error=record.last_error,
         )
 
     def _update_record(self, record: CacheEntryRecord, entry: CacheEntryModel) -> None:
         record.status = entry.status
+        record.title = entry.title
+        record.source_link = entry.source_link
+        record.poster = entry.poster
+        record.category = entry.category
         record.file_path = entry.file_path
         record.tmp_path = entry.tmp_path
         record.created_at = entry.created_at
@@ -274,5 +461,14 @@ class CacheManager:
         record.progress_percent = entry.progress_percent
         record.download_speed_bytes_per_second = entry.download_speed_bytes_per_second
         record.last_progress_at = entry.last_progress_at
+        record.priority = entry.priority
         record.attempt = entry.attempt
+        record.max_attempts = entry.max_attempts
+        record.trigger = entry.trigger
+        record.content_type = entry.content_type
+        record.content_id = entry.content_id
+        record.available_at = entry.available_at
+        record.claimed_at = entry.claimed_at
+        record.claimed_by = entry.claimed_by
+        record.processing_expires_at = entry.processing_expires_at
         record.last_error = entry.last_error

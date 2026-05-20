@@ -37,3 +37,30 @@ class DbManager:
             connection.execute(text("PRAGMA synchronous=NORMAL"))
             connection.execute(text("PRAGMA busy_timeout=5000"))
         Base.metadata.create_all(self.engine)
+        self._ensure_cache_entry_columns()
+
+    def _ensure_cache_entry_columns(self) -> None:
+        columns = {
+            "title": "TEXT",
+            "source_link": "TEXT",
+            "poster": "TEXT",
+            "category": "VARCHAR(64)",
+            "priority": "INTEGER DEFAULT 100",
+            "max_attempts": "INTEGER DEFAULT 3",
+            "trigger": "VARCHAR(32)",
+            "content_type": "VARCHAR(32)",
+            "content_id": "TEXT",
+            "available_at": "FLOAT",
+            "claimed_at": "FLOAT",
+            "claimed_by": "VARCHAR(128)",
+            "processing_expires_at": "FLOAT",
+        }
+        with self.engine.begin() as connection:
+            existing = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(cache_entries)"))
+            }
+            for column_name, column_sql in columns.items():
+                if column_name in existing:
+                    continue
+                connection.execute(text(f"ALTER TABLE cache_entries ADD COLUMN {column_name} {column_sql}"))

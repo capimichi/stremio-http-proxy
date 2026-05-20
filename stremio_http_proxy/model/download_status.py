@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 class DownloadStatus(BaseModel):
     cache_key: str
+    title: str | None = None
     infohash: str
     index: int
     status: str
@@ -19,4 +20,9 @@ class DownloadStatus(BaseModel):
 
 class DownloadStatusResponse(BaseModel):
     manifest_url: str
+    page: int
+    limit: int
+    total_items: int
+    total_pages: int
+    total_cache_bytes: int
     downloads: list[DownloadStatus]

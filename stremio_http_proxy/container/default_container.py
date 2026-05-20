@@ -10,7 +10,6 @@ from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
-from stremio_http_proxy.manager.redis_manager import RedisManager
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.dashboard_service import DashboardService
@@ -55,7 +54,6 @@ class DefaultContainer:
         self.sqlite_path = os.environ.get("SQLITE_PATH", "var/db/cache.sqlite")
         self.local_cache_max_age_days = int(os.environ.get("LOCAL_CACHE_MAX_AGE_DAYS", "7"))
         self.local_cache_max_size_gb = int(os.environ.get("LOCAL_CACHE_MAX_SIZE_GB", "20"))
-        self.redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
         self.download_queue_poll_seconds = int(os.environ.get("DOWNLOAD_QUEUE_POLL_SECONDS", "1"))
         self.download_max_attempts = int(os.environ.get("DOWNLOAD_MAX_ATTEMPTS", "3"))
         self.download_connect_timeout_seconds = int(os.environ.get("DOWNLOAD_CONNECT_TIMEOUT_SECONDS", "10"))
@@ -89,8 +87,7 @@ class DefaultContainer:
             logger_factory,
         )
         stream_rewrite_service = StreamRewriteService(self.public_base_url, cache_manager)
-        redis_manager = RedisManager(self.redis_url, logger_factory)
-        download_queue_service = DownloadQueueService(cache_manager, redis_manager, self.download_max_attempts)
+        download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts)
         next_episode_prefetch_service = NextEpisodePrefetchService(
             upstream_client,
             stream_rewrite_service,
@@ -101,7 +98,6 @@ class DefaultContainer:
         download_worker_service = DownloadWorkerService(
             torrserver_client,
             cache_manager,
-            redis_manager,
             logger_factory,
             self.download_queue_poll_seconds,
             self.download_connect_timeout_seconds,
@@ -119,7 +115,6 @@ class DefaultContainer:
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
         self.injector.binder.bind(DbManager, to=db_manager)
         self.injector.binder.bind(CacheManager, to=cache_manager)
-        self.injector.binder.bind(RedisManager, to=redis_manager)
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
         self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse
 from injector import inject
 
@@ -19,5 +19,9 @@ class DashboardController:
     async def index(self) -> FileResponse:
         return FileResponse("static/index.html")
 
-    async def downloads(self) -> dict:
-        return self.dashboard_service.get_download_status().model_dump()
+    async def downloads(
+        self,
+        page: int = Query(default=1, ge=1),
+        limit: int = Query(default=10, ge=1, le=100),
+    ) -> dict:
+        return self.dashboard_service.get_download_status(page=page, limit=limit).model_dump()
