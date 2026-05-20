@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md ./
 COPY stremio_http_proxy ./stremio_http_proxy
+COPY static ./static
 
 RUN pip install --no-cache-dir .
 
