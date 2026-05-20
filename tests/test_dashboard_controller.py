@@ -19,6 +19,8 @@ class FakeDashboardService:
                             "infohash": "abc",
                             "index": 1,
                             "status": "downloading",
+                            "created_at": 100.0,
+                            "completed_at": None,
                             "downloaded_bytes": 10,
                             "expected_bytes": 20,
                             "progress_percent": 50.0,

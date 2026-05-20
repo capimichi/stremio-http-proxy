@@ -6,6 +6,8 @@ class DownloadStatus(BaseModel):
     infohash: str
     index: int
     status: str
+    created_at: float | None = None
+    completed_at: float | None = None
     downloaded_bytes: int
     expected_bytes: int | None = None
     progress_percent: float | None = None

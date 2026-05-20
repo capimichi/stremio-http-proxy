@@ -12,7 +12,7 @@ class DashboardService:
 
     def get_download_status(self) -> DownloadStatusResponse:
         downloads = []
-        for cache_key, entry in self.cache_manager.list_entries_by_status("downloading"):
+        for cache_key, entry in self.cache_manager.list_entries():
             infohash, index = self.cache_manager.parse_cache_key(cache_key)
             downloads.append(
                 DownloadStatus(
@@ -20,6 +20,8 @@ class DashboardService:
                     infohash=infohash,
                     index=index,
                     status=entry.status,
+                    created_at=entry.created_at,
+                    completed_at=entry.completed_at,
                     downloaded_bytes=entry.downloaded_bytes,
                     expected_bytes=entry.expected_bytes,
                     progress_percent=entry.progress_percent,

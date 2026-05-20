@@ -82,7 +82,7 @@
 <body>
   <main>
     <h1>Stremio HTTP Proxy</h1>
-    <p>Manifest da aggiungere e download attualmente in corso.</p>
+    <p>Manifest da aggiungere e stato completo della cache, dalle entry piu recenti alle piu vecchie.</p>
 
     <section class="panel">
       <h2>Manifest</h2>
@@ -90,7 +90,7 @@
     </section>
 
     <section class="panel">
-      <h2>Download Correnti</h2>
+      <h2>Cache</h2>
       <div id="summary" class="meta"></div>
       <div id="downloads" class="downloads">
         <p class="empty">Caricamento...</p>
@@ -130,10 +130,17 @@
     function renderDownloads(downloads) {
       const container = document.getElementById("downloads");
       const summary = document.getElementById("summary");
-      summary.textContent = `${downloads.length} download attivi`;
+      const counts = downloads.reduce((accumulator, download) => {
+        accumulator[download.status] = (accumulator[download.status] || 0) + 1;
+        return accumulator;
+      }, {});
+      const statusSummary = Object.entries(counts)
+        .map(([status, count]) => `${status}: ${count}`)
+        .join(" | ");
+      summary.textContent = `${downloads.length} entry totali${statusSummary ? ` | ${statusSummary}` : ""}`;
 
       if (!downloads.length) {
-        container.innerHTML = '<p class="empty">Nessun download in corso.</p>';
+        container.innerHTML = '<p class="empty">Nessuna entry presente in cache.</p>';
         return;
       }
 
@@ -154,6 +161,8 @@
               <span>attempt: ${download.attempt}</span>
             </div>
             <div class="meta">
+              <span>created: ${formatTime(download.created_at)}</span>
+              <span>completed: ${formatTime(download.completed_at)}</span>
               <span>last progress: ${formatTime(download.last_progress_at)}</span>
               <span>last error: ${error}</span>
             </div>

@@ -146,6 +146,14 @@ class CacheManager:
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
 
+    def list_entries(self) -> list[tuple[str, CacheEntryModel]]:
+        with self.db_manager.session() as session:
+            records = session.scalars(
+                select(CacheEntryRecord)
+                .order_by(CacheEntryRecord.created_at.desc(), CacheEntryRecord.last_accessed_at.desc())
+            ).all()
+        return [(record.cache_key, self._to_model(record)) for record in records]
+
     def prune(self) -> None:
         self._prune_by_age()
         self._prune_by_size()
