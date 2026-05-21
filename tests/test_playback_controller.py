@@ -1,4 +1,5 @@
 import asyncio
+from urllib.parse import parse_qs, urlparse
 
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
@@ -27,7 +28,7 @@ class FakeCacheService:
     def get_cached_route(self, link: str, index: int | None = None) -> str | None:
         if not self.ready:
             return None
-        return "/cache/abc/18"
+        return "https://proxy.example.com/cache/abc/18?expires=1700000000&token=signed"
 
 
 class FakeDownloadQueueService:
@@ -140,4 +141,16 @@ def test_playback_controller_redirects_to_cache_when_ready(tmp_path):
     response = asyncio.run(controller.play(link="magnet:?xt=urn:btih:abc", index=18))
 
     assert response.status_code == 307
-    assert response.headers["location"] == "/cache/abc/18"
+    assert response.headers["location"] == "https://proxy.example.com/cache/abc/18?expires=1700000000&token=signed"
+
+
+def test_playback_controller_redirects_to_signed_torrserver_url_when_cache_not_ready(tmp_path):
+    controller = build_controller(tmp_path)
+
+    response = asyncio.run(controller.play(link="magnet:?xt=urn:btih:abc", index=18))
+    parsed = urlparse(response.headers["location"])
+    params = parse_qs(parsed.query)
+
+    assert response.status_code == 307
+    assert parsed.path == "/stream"
+    assert params["play"] == ["true"]

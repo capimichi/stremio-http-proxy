@@ -35,6 +35,8 @@ Environment:
 ```bash
 UPSTREAM_BASE_URL=https://example.com
 PUBLIC_BASE_URL=http://localhost:8691
+APP_SECRET=
+CACHE_TOKEN_TTL_SECONDS=259200
 TORRSERVER_BASE_URL=http://localhost:8090
 TORRSERVER_BASIC_AUTH_USER=
 TORRSERVER_BASIC_AUTH_PASSWORD=
@@ -61,3 +63,5 @@ docker compose up --build -d --scale stremio-http-proxy-worker=2
 ```
 
 If TorrServer runs outside Docker, set `TORRSERVER_BASE_URL` to a hostname or IP reachable from the container.
+
+`APP_SECRET` is required at startup and is used to sign `/cache/...` URLs. Cached media is served only through signed links that expire after `CACHE_TOKEN_TTL_SECONDS`.

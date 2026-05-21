@@ -1,26 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from injector import inject
 
-from stremio_http_proxy.service.basic_auth_service import BasicAuthService
 from stremio_http_proxy.service.cache_service import CacheService
+from stremio_http_proxy.service.cache_token_service import CacheTokenService
 
 
 class CacheController:
     @inject
-    def __init__(self, cache_service: CacheService, basic_auth_service: BasicAuthService):
+    def __init__(self, cache_service: CacheService, cache_token_service: CacheTokenService):
         self.cache_service = cache_service
-        self.basic_auth_service = basic_auth_service
+        self.cache_token_service = cache_token_service
         self.router = APIRouter(tags=["Cache"])
-        security = self.basic_auth_service.security
+        self.router.add_api_route("/cache/{infohash}/{index}", self.serve, methods=["GET"])
 
-        def require_auth(credentials=Depends(security)) -> None:
-            self.basic_auth_service.require_auth(credentials)
+    async def serve(self, infohash: str, index: int, expires: int = Query(), token: str = Query()) -> FileResponse:
+        if not self.cache_token_service.is_valid(infohash, index, expires, token):
+            raise HTTPException(status_code=403, detail="Invalid cache token")
 
-        dependencies = [Depends(require_auth)]
-        self.router.add_api_route("/cache/{infohash}/{index}", self.serve, methods=["GET"], dependencies=dependencies)
-
-    async def serve(self, infohash: str, index: int) -> FileResponse:
         file_path = self.cache_service.get_cached_file_path(infohash, index)
         if file_path is None:
             raise HTTPException(status_code=404, detail="Cached file not found")

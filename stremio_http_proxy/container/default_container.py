@@ -13,6 +13,8 @@ from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
+from stremio_http_proxy.service.cache_service import CacheService
+from stremio_http_proxy.service.cache_token_service import CacheTokenService
 from stremio_http_proxy.service.dashboard_service import DashboardService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
@@ -50,8 +52,10 @@ class DefaultContainer:
         self.torrserver_basic_auth_user = os.environ.get("TORRSERVER_BASIC_AUTH_USER")
         self.torrserver_basic_auth_password = os.environ.get("TORRSERVER_BASIC_AUTH_PASSWORD")
         self.public_base_url = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{self.api_port}")
+        self.app_secret = os.environ.get("APP_SECRET")
         self.dashboard_basic_auth_user = os.environ.get("DASHBOARD_BASIC_AUTH_USER")
         self.dashboard_basic_auth_password = os.environ.get("DASHBOARD_BASIC_AUTH_PASSWORD")
+        self.cache_token_ttl_seconds = int(os.environ.get("CACHE_TOKEN_TTL_SECONDS", str(72 * 60 * 60)))
         self.log_dir = os.environ.get("LOG_DIR", "var/log")
         self.local_cache_dir = os.environ.get("LOCAL_CACHE_DIR", "var/cache")
         self.sqlite_path = os.environ.get("SQLITE_PATH", "var/db/cache.sqlite")
@@ -68,6 +72,8 @@ class DefaultContainer:
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
+        if not self.app_secret or not self.app_secret.strip():
+            raise ValueError("APP_SECRET environment variable is required")
 
     def _init_logging(self) -> None:
         logging.basicConfig(level=getattr(logging, self.log_level.upper(), logging.INFO))
@@ -93,6 +99,8 @@ class DefaultContainer:
             self.dashboard_basic_auth_user,
             self.dashboard_basic_auth_password,
         )
+        cache_token_service = CacheTokenService(self.app_secret, self.cache_token_ttl_seconds)
+        cache_service = CacheService(cache_manager, self.public_base_url, cache_token_service)
         stream_rewrite_service = StreamRewriteService(self.public_base_url, cache_manager)
         download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts)
         next_episode_prefetch_service = NextEpisodePrefetchService(
@@ -123,6 +131,8 @@ class DefaultContainer:
         self.injector.binder.bind(DbManager, to=db_manager)
         self.injector.binder.bind(CacheManager, to=cache_manager)
         self.injector.binder.bind(BasicAuthService, to=basic_auth_service)
+        self.injector.binder.bind(CacheTokenService, to=cache_token_service)
+        self.injector.binder.bind(CacheService, to=cache_service)
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
         self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)

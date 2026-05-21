@@ -7,6 +7,7 @@ from starlette.responses import FileResponse
 from stremio_http_proxy.controller.cache_controller import CacheController
 from stremio_http_proxy.controller.dashboard_controller import DashboardController
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
+from stremio_http_proxy.service.cache_token_service import CacheTokenService
 
 
 class FakeDashboardService:
@@ -86,31 +87,47 @@ def test_dashboard_routes_require_auth_when_enabled():
     app = FastAPI()
     auth_service = BasicAuthService("admin", "secret")
     app.include_router(DashboardController(FakeDashboardService(), auth_service).router)
-    app.include_router(CacheController(FakeCacheService(), auth_service).router)
+    app.include_router(CacheController(FakeCacheService(), CacheTokenService("secret", 259200)).router)
     client = TestClient(app)
 
     dashboard_response = client.get("/")
     downloads_response = client.get("/downloads")
-    cache_response = client.get("/cache/abc/1")
+    token_service = CacheTokenService("secret", 259200)
+    expires = token_service.build_expires_at()
+    token = token_service.build_token("abc", 1, expires)
+    cache_response = client.get(f"/cache/abc/1?expires={expires}&token={token}")
 
     assert dashboard_response.status_code == 401
     assert dashboard_response.headers["www-authenticate"] == "Basic"
     assert downloads_response.status_code == 401
-    assert cache_response.status_code == 401
+    assert cache_response.status_code == 200
 
 
 def test_dashboard_routes_accept_valid_auth():
     app = FastAPI()
     auth_service = BasicAuthService("admin", "secret")
     app.include_router(DashboardController(FakeDashboardService(), auth_service).router)
-    app.include_router(CacheController(FakeCacheService(), auth_service).router)
+    app.include_router(CacheController(FakeCacheService(), CacheTokenService("secret", 259200)).router)
     client = TestClient(app)
+    token_service = CacheTokenService("secret", 259200)
+    expires = token_service.build_expires_at()
+    token = token_service.build_token("abc", 1, expires)
 
     dashboard_response = client.get("/", auth=("admin", "secret"))
     downloads_response = client.get("/downloads", auth=("admin", "secret"))
-    cache_response = client.get("/cache/abc/1", auth=("admin", "secret"))
+    cache_response = client.get(f"/cache/abc/1?expires={expires}&token={token}")
 
     assert dashboard_response.status_code == 200
     assert downloads_response.status_code == 200
     assert downloads_response.json()["active_downloads"] == 1
     assert cache_response.status_code == 200
+
+
+def test_cache_route_rejects_invalid_token():
+    app = FastAPI()
+    app.include_router(CacheController(FakeCacheService(), CacheTokenService("secret", 259200)).router)
+    client = TestClient(app)
+
+    response = client.get("/cache/abc/1?expires=1700000000&token=wrong")
+
+    assert response.status_code == 403
