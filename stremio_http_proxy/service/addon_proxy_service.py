@@ -19,7 +19,7 @@ class AddonProxyService:
         payload = await self.upstream_client.get_json(path, query_params=query_params)
         if path.startswith("/stream/"):
             context = rewrite_context or {}
-            return self.stream_rewrite_service.rewrite(
+            return await self.stream_rewrite_service.rewrite(
                 payload,
                 self._resolve_category(path),
                 context.get("content_type"),

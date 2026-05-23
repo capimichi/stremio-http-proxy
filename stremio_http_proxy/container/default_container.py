@@ -18,6 +18,7 @@ from stremio_http_proxy.service.cache_token_service import CacheTokenService
 from stremio_http_proxy.service.dashboard_service import DashboardService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
+from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
 
 
 class DefaultContainer:
@@ -70,6 +71,8 @@ class DefaultContainer:
         self.download_max_total_seconds = int(os.environ.get("DOWNLOAD_MAX_TOTAL_SECONDS", str(45 * 60)))
         self.download_progress_log_interval_seconds = int(os.environ.get("DOWNLOAD_PROGRESS_LOG_INTERVAL_SECONDS", "10"))
         self.cache_enabled = os.environ.get("CACHE_ENABLED", "true").lower() == "true"
+        self.torrserver_health_check_enabled = os.environ.get("TORRSERVER_HEALTH_CHECK_ENABLED", "false").lower() == "true"
+        self.torrserver_health_check_timeout_seconds = int(os.environ.get("TORRSERVER_HEALTH_CHECK_TIMEOUT_SECONDS", "15"))
         self.next_episode_prefetch_enabled = os.environ.get("NEXT_EPISODE_PREFETCH_ENABLED", "true").lower() == "true"
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -103,7 +106,15 @@ class DefaultContainer:
         )
         cache_token_service = CacheTokenService(self.app_secret, self.cache_token_ttl_seconds)
         cache_service = CacheService(cache_manager, self.public_base_url, cache_token_service, self.cache_enabled)
-        stream_rewrite_service = StreamRewriteService(self.public_base_url, cache_manager, self.cache_enabled)
+        torrent_health_service = TorrentHealthService(torrserver_client)
+        stream_rewrite_service = StreamRewriteService(
+            self.public_base_url,
+            cache_manager,
+            self.cache_enabled,
+            torrent_health_service,
+            self.torrserver_health_check_enabled,
+            self.torrserver_health_check_timeout_seconds,
+        )
         download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts, self.cache_enabled)
         next_episode_prefetch_service = NextEpisodePrefetchService(
             upstream_client,

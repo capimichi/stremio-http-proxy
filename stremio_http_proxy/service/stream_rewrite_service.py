@@ -4,18 +4,31 @@ from injector import inject
 
 from stremio_http_proxy.helper.hash_helper import extract_infohash
 from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
 
 
 class StreamRewriteService:
     CACHED_NAME_PREFIX = "🔥 "
+    HEALTHY_NAME_PREFIX = "✅ "
 
     @inject
-    def __init__(self, public_base_url: str, cache_manager: CacheManager, cache_enabled: bool = True):
+    def __init__(
+        self,
+        public_base_url: str,
+        cache_manager: CacheManager,
+        cache_enabled: bool = True,
+        torrent_health_service: TorrentHealthService | None = None,
+        torrserver_health_check_enabled: bool = False,
+        torrserver_health_check_timeout: int = 15,
+    ):
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_manager = cache_manager
         self.cache_enabled = cache_enabled
+        self.torrent_health_service = torrent_health_service
+        self.torrserver_health_check_enabled = torrserver_health_check_enabled
+        self.torrserver_health_check_timeout = torrserver_health_check_timeout
 
-    def rewrite(
+    async def rewrite(
         self,
         payload: dict,
         category: str | None = None,
@@ -27,6 +40,8 @@ class StreamRewriteService:
             return payload
 
         rewritten_streams = []
+        link_to_entries: dict[str, list[dict]] = {}
+
         for stream in streams:
             if not isinstance(stream, dict):
                 rewritten_streams.append(stream)
@@ -50,10 +65,43 @@ class StreamRewriteService:
                 content_id,
             )
             rewritten_streams.append(updated)
+            link_to_entries.setdefault(torrent_link, []).append(updated)
+
+        if self.torrserver_health_check_enabled and self.torrent_health_service:
+            non_cached_links = [
+                link
+                for link, entries in link_to_entries.items()
+                if not any(
+                    isinstance(e.get("_meta"), dict) and e["_meta"].get("cached")
+                    for e in entries
+                )
+            ]
+            if non_cached_links:
+                links_to_check = non_cached_links[:10]
+                health_map = await self.torrent_health_service.check_batch(
+                    links_to_check,
+                    timeout=self.torrserver_health_check_timeout,
+                )
+                for link, is_ok in health_map.items():
+                    if not is_ok:
+                        continue
+                    for entry in link_to_entries.get(link, []):
+                        self._mark_healthy(entry)
 
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams
         return updated_payload
+
+    def _mark_healthy(self, stream: dict) -> None:
+        name = stream.get("name")
+        if not isinstance(name, str) or not name.strip():
+            stream["name"] = self.HEALTHY_NAME_PREFIX.strip()
+            return
+        if name.startswith(self.CACHED_NAME_PREFIX):
+            rest = name[len(self.CACHED_NAME_PREFIX) :]
+            stream["name"] = f"{self.CACHED_NAME_PREFIX}{self.HEALTHY_NAME_PREFIX}{rest}"
+        elif not name.startswith(self.HEALTHY_NAME_PREFIX):
+            stream["name"] = f"{self.HEALTHY_NAME_PREFIX}{name}"
 
     def _mark_cached_if_ready(self, stream: dict, torrent_link: str, index: int | None) -> None:
         if not self.cache_enabled:

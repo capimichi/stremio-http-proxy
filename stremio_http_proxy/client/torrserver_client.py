@@ -19,6 +19,22 @@ class TorrServerClient:
         self.auth = httpx.BasicAuth(basic_auth_user, basic_auth_password or "") if basic_auth_user else None
         self.transport = transport
 
+    async def add_and_get_status(self, link: str, timeout: float | None = None) -> dict | None:
+        payload = {"action": "add", "link": link, "save_to_db": False}
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=timeout or self.timeout_seconds,
+                auth=self.auth,
+                transport=self.transport,
+            ) as client:
+                response = await client.post("/torrents", json=payload)
+                if response.status_code >= 400:
+                    return None
+                return response.json() if response.content else {}
+        except Exception:
+            return None
+
     async def add_torrent(
         self,
         link: str,

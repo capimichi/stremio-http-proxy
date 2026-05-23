@@ -12,7 +12,7 @@ class FakeStreamRewriteService:
     def __init__(self):
         self.calls: list[tuple] = []
 
-    def rewrite(
+    async def rewrite(
         self,
         payload: dict,
         category: str | None = None,
