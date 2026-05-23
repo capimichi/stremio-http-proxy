@@ -19,25 +19,21 @@ class TorrServerClient:
         self.auth = httpx.BasicAuth(basic_auth_user, basic_auth_password or "") if basic_auth_user else None
         self.transport = transport
 
-    async def check_stream_playable(self, link: str, index: int | None = None, timeout: float = 15.0) -> bool:
-        params = {"link": link, "play": "true"}
-        if index is not None:
-            params["index"] = str(index)
+    async def add_and_get_status(self, link: str, timeout: float | None = None) -> dict | None:
+        payload = {"action": "add", "link": link, "save_to_db": False}
         try:
             async with httpx.AsyncClient(
                 base_url=self.base_url,
-                timeout=httpx.Timeout(connect=5.0, read=timeout, write=5.0, pool=5.0),
+                timeout=timeout or self.timeout_seconds,
                 auth=self.auth,
                 transport=self.transport,
             ) as client:
-                async with client.stream("GET", "/stream", params=params) as response:
-                    if response.status_code >= 400:
-                        return False
-                    async for chunk in response.aiter_bytes():
-                        return len(chunk) > 0
-                    return False
+                response = await client.post("/torrents", json=payload)
+                if response.status_code >= 400:
+                    return None
+                return response.json() if response.content else {}
         except Exception:
-            return False
+            return None
 
     async def add_torrent(
         self,

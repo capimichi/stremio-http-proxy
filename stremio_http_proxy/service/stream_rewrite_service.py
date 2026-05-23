@@ -40,7 +40,7 @@ class StreamRewriteService:
             return payload
 
         rewritten_streams = []
-        link_to_entries: dict[str, list[tuple[dict, int | None]]] = {}
+        link_to_entries: dict[str, list[dict]] = {}
 
         for stream in streams:
             if not isinstance(stream, dict):
@@ -65,30 +65,33 @@ class StreamRewriteService:
                 content_id,
             )
             rewritten_streams.append(updated)
-            link_to_entries.setdefault(torrent_link, []).append((updated, index))
+            link_to_entries.setdefault(torrent_link, []).append(updated)
 
         if self.torrserver_health_check_enabled and self.torrent_health_service:
-            links_to_check: list[tuple[str, int | None]] = []
-            for link, entries in link_to_entries.items():
-                cached = any(
-                    isinstance(e[0].get("_meta"), dict) and e[0]["_meta"].get("cached")
+            non_cached_links = [
+                link
+                for link, entries in link_to_entries.items()
+                if not any(
+                    isinstance(e.get("_meta"), dict) and e["_meta"].get("cached")
                     for e in entries
                 )
-                if cached:
-                    continue
-                first_index = entries[0][1] if entries else None
-                if first_index is not None:
-                    links_to_check.append((link, first_index))
-            if links_to_check:
+            ]
+            if non_cached_links:
                 health_map = await self.torrent_health_service.check_batch(
-                    links_to_check[:10],
+                    non_cached_links[:10],
                     timeout=self.torrserver_health_check_timeout,
                 )
-                for link, is_ok in health_map.items():
-                    if not is_ok:
-                        continue
-                    for entry, _ in link_to_entries.get(link, []):
-                        self._mark_healthy(entry)
+                for link, (playable, seeders) in health_map.items():
+                    for entry in link_to_entries.get(link, []):
+                        if playable:
+                            self._mark_healthy(entry)
+                        if seeders is not None:
+                            meta = entry.get("_meta")
+                            if not isinstance(meta, dict):
+                                meta = {}
+                            updated_meta = dict(meta)
+                            updated_meta["seeders"] = seeders
+                            entry["_meta"] = updated_meta
 
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams

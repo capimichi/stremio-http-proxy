@@ -15,11 +15,11 @@ class FakeCacheManager:
 
 
 class FakeTorrentHealthService:
-    def __init__(self, health_map: dict[str, bool] | None = None):
+    def __init__(self, health_map: dict[str, tuple[bool, int | None]] | None = None):
         self.health_map = health_map or {}
 
-    async def check_batch(self, links_with_indices: list[tuple[str, int | None]], timeout: float = 15.0) -> dict[str, bool]:
-        return {link: self.health_map.get(link, False) for link, _ in links_with_indices}
+    async def check_batch(self, links: list[str], timeout: float = 15.0) -> dict[str, tuple[bool, int | None]]:
+        return {link: self.health_map.get(link, (False, None)) for link in links}
 
 
 @pytest.mark.asyncio
@@ -116,10 +116,10 @@ async def test_stream_rewrite_does_not_duplicate_cached_name_prefix():
 
 
 @pytest.mark.asyncio
-async def test_health_check_prefixes_non_cached_streams():
+async def test_health_check_prefixes_streams_with_stat_three():
     magnet1 = "magnet:?xt=urn:btih:A000000000000000000000000000000000000001"
     magnet2 = "magnet:?xt=urn:btih:A000000000000000000000000000000000000002"
-    fake_health = FakeTorrentHealthService({magnet1: True, magnet2: False})
+    fake_health = FakeTorrentHealthService({magnet1: (True, 12), magnet2: (False, None)})
     service = StreamRewriteService(
         "http://localhost:8691",
         FakeCacheManager(),
@@ -140,10 +140,53 @@ async def test_health_check_prefixes_non_cached_streams():
 
 
 @pytest.mark.asyncio
+async def test_health_check_sets_meta_seeders():
+    magnet = "magnet:?xt=urn:btih:A000000000000000000000000000000000000001"
+    fake_health = FakeTorrentHealthService({magnet: (True, 7)})
+    service = StreamRewriteService(
+        "http://localhost:8691",
+        FakeCacheManager(),
+        torrent_health_service=fake_health,
+        torrserver_health_check_enabled=True,
+    )
+    payload = {
+        "streams": [
+            {"name": "Stream A", "title": "a", "magnet": magnet, "fileIdx": 0}
+        ]
+    }
+
+    rewritten = await service.rewrite(payload, category="tv")
+
+    assert rewritten["streams"][0]["_meta"]["seeders"] == 7
+
+
+@pytest.mark.asyncio
+async def test_health_check_sets_meta_seeders_even_when_not_playable():
+    magnet = "magnet:?xt=urn:btih:A000000000000000000000000000000000000001"
+    fake_health = FakeTorrentHealthService({magnet: (False, 3)})
+    service = StreamRewriteService(
+        "http://localhost:8691",
+        FakeCacheManager(),
+        torrent_health_service=fake_health,
+        torrserver_health_check_enabled=True,
+    )
+    payload = {
+        "streams": [
+            {"name": "Stream A", "title": "a", "magnet": magnet, "fileIdx": 0}
+        ]
+    }
+
+    rewritten = await service.rewrite(payload, category="tv")
+
+    assert rewritten["streams"][0]["_meta"]["seeders"] == 3
+    assert rewritten["streams"][0]["name"] == "Stream A"
+
+
+@pytest.mark.asyncio
 async def test_health_check_skips_cached_streams():
     magnet1 = "magnet:?xt=urn:btih:A000000000000000000000000000000000000001"
     magnet2 = "magnet:?xt=urn:btih:A000000000000000000000000000000000000002"
-    fake_health = FakeTorrentHealthService({magnet1: True, magnet2: True})
+    fake_health = FakeTorrentHealthService({magnet1: (True, 5), magnet2: (True, 8)})
     service = StreamRewriteService(
         "http://localhost:8691",
         FakeCacheManager({f"{magnet1}:1"}),
@@ -160,13 +203,15 @@ async def test_health_check_skips_cached_streams():
     rewritten = await service.rewrite(payload, category="tv")
 
     assert rewritten["streams"][0]["name"] == "🔥 Cached"
+    assert "seeders" not in rewritten["streams"][0].get("_meta", {})
     assert rewritten["streams"][1]["name"] == "✅ Uncached"
+    assert rewritten["streams"][1]["_meta"]["seeders"] == 8
 
 
 @pytest.mark.asyncio
 async def test_health_check_skips_cached_when_all_cached():
     magnet = "magnet:?xt=urn:btih:ABCDEF1234567890ABCDEF1234567890ABCDEF12"
-    fake_health = FakeTorrentHealthService({magnet: True})
+    fake_health = FakeTorrentHealthService({magnet: (True, 10)})
     service = StreamRewriteService(
         "http://localhost:8691",
         FakeCacheManager({f"{magnet}:18"}),
@@ -186,30 +231,9 @@ async def test_health_check_skips_cached_when_all_cached():
 
 
 @pytest.mark.asyncio
-async def test_health_check_skips_streams_without_file_index():
-    magnet = "magnet:?xt=urn:btih:A000000000000000000000000000000000000001"
-    fake_health = FakeTorrentHealthService({magnet: True})
-    service = StreamRewriteService(
-        "http://localhost:8691",
-        FakeCacheManager(),
-        torrent_health_service=fake_health,
-        torrserver_health_check_enabled=True,
-    )
-    payload = {
-        "streams": [
-            {"name": "No fileIdx", "title": "a", "magnet": magnet}
-        ]
-    }
-
-    rewritten = await service.rewrite(payload, category="tv")
-
-    assert rewritten["streams"][0]["name"] == "No fileIdx"
-
-
-@pytest.mark.asyncio
 async def test_health_check_skipped_when_disabled():
     magnet = "magnet:?xt=urn:btih:A000000000000000000000000000000000000001"
-    fake_health = FakeTorrentHealthService({magnet: True})
+    fake_health = FakeTorrentHealthService({magnet: (True, 4)})
     service = StreamRewriteService(
         "http://localhost:8691",
         FakeCacheManager(),

@@ -15,52 +15,24 @@ async def _handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(404, request=request)
 
 
-def test_check_stream_playable_returns_true_when_data_received():
-    async def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/stream"
-        assert request.url.params["link"] == "magnet:?xt=urn:btih:abc"
-        assert request.url.params["play"] == "true"
-        assert request.url.params["index"] == "3"
-        return httpx.Response(200, content=b"\x00\x01\x02", request=request)
-
-    transport = httpx.MockTransport(handler)
-    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
-
-    result = asyncio.run(client.check_stream_playable("magnet:?xt=urn:btih:abc", index=3, timeout=15))
-
-    assert result is True
-
-
-def test_check_stream_playable_returns_false_on_http_error():
+def test_add_and_get_status_returns_none_on_http_error():
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, request=request)
 
     transport = httpx.MockTransport(handler)
     client = TorrServerClient("http://localhost:8090", 20, transport=transport)
 
-    result = asyncio.run(client.check_stream_playable("magnet:?xt=urn:btih:abc", timeout=15))
+    result = asyncio.run(client.add_and_get_status("magnet:?xt=urn:btih:abc", timeout=15))
 
-    assert result is False
-
-
-def test_check_stream_playable_returns_false_on_empty_response():
-    async def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, content=b"", request=request)
-
-    transport = httpx.MockTransport(handler)
-    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
-
-    result = asyncio.run(client.check_stream_playable("magnet:?xt=urn:btih:abc", timeout=15))
-
-    assert result is False
+    assert result is None
 
 
-def test_check_stream_playable_returns_false_on_connection_error():
+def test_add_and_get_status_returns_none_on_connection_error():
     client = TorrServerClient("http://localhost:1", 5)
 
-    result = asyncio.run(client.check_stream_playable("magnet:?xt=urn:btih:abc", timeout=2))
+    result = asyncio.run(client.add_and_get_status("magnet:?xt=urn:btih:abc", timeout=2))
 
-    assert result is False
+    assert result is None
 
 
 def test_add_torrent_posts_expected_payload():
