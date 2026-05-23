@@ -14,12 +14,16 @@ class CacheService:
         cache_manager: CacheManager,
         public_base_url: str,
         cache_token_service: CacheTokenService,
+        cache_enabled: bool = True,
     ):
         self.cache_manager = cache_manager
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_token_service = cache_token_service
+        self.cache_enabled = cache_enabled
 
     def get_cached_route(self, link: str, index: int | None = None) -> str | None:
+        if not self.cache_enabled:
+            return None
         cache_key = self.cache_manager.build_cache_key(link, index)
         if cache_key is None or not self.cache_manager.is_ready(cache_key):
             return None
@@ -31,6 +35,8 @@ class CacheService:
         return f"{self.public_base_url}/cache/{infohash}/{cache_index}?{params}"
 
     def get_cached_file_path(self, infohash: str, index: int) -> str | None:
+        if not self.cache_enabled:
+            return None
         cache_key = self.cache_manager.build_cache_key_from_parts(infohash, index)
         entry = self.cache_manager.get_entry(cache_key)
         if entry.status != CacheEntryStatusEnum.READY:

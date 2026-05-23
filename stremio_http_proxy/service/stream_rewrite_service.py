@@ -10,9 +10,10 @@ class StreamRewriteService:
     CACHED_NAME_PREFIX = "🔥 "
 
     @inject
-    def __init__(self, public_base_url: str, cache_manager: CacheManager):
+    def __init__(self, public_base_url: str, cache_manager: CacheManager, cache_enabled: bool = True):
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_manager = cache_manager
+        self.cache_enabled = cache_enabled
 
     def rewrite(
         self,
@@ -55,6 +56,8 @@ class StreamRewriteService:
         return updated_payload
 
     def _mark_cached_if_ready(self, stream: dict, torrent_link: str, index: int | None) -> None:
+        if not self.cache_enabled:
+            return
         cache_key = self.cache_manager.build_cache_key(torrent_link, index)
         if cache_key is None or not self.cache_manager.is_ready(cache_key):
             return

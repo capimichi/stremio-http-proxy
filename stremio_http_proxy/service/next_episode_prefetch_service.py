@@ -14,11 +14,13 @@ class NextEpisodePrefetchService:
         upstream_client: UpstreamClient,
         stream_rewrite_service: StreamRewriteService,
         download_queue_service: DownloadQueueService,
-        stream_limit: int,
+        enabled: bool = True,
+        stream_limit: int = 3,
     ):
         self.upstream_client = upstream_client
         self.stream_rewrite_service = stream_rewrite_service
         self.download_queue_service = download_queue_service
+        self.enabled = enabled
         self.stream_limit = stream_limit
 
     async def enqueue_next_episode(
@@ -27,6 +29,8 @@ class NextEpisodePrefetchService:
         content_id: str | None,
         category: str | None,
     ) -> None:
+        if not self.enabled:
+            return
         next_candidates = self._build_next_content_ids(content_id)
         if not content_type or not next_candidates:
             return

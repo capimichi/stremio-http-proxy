@@ -9,9 +9,10 @@ from stremio_http_proxy.model.download_job import DownloadJob
 
 class DownloadQueueService:
     @inject
-    def __init__(self, cache_manager: CacheManager, max_attempts: int):
+    def __init__(self, cache_manager: CacheManager, max_attempts: int, cache_enabled: bool = True):
         self.cache_manager = cache_manager
         self.max_attempts = max_attempts
+        self.cache_enabled = cache_enabled
 
     async def enqueue_download(
         self,
@@ -25,6 +26,8 @@ class DownloadQueueService:
         content_type: str | None = None,
         content_id: str | None = None,
     ) -> bool:
+        if not self.cache_enabled:
+            return False
         cache_key = self.cache_manager.build_cache_key(link, index)
         if cache_key is None or self.cache_manager.is_ready(cache_key):
             return False

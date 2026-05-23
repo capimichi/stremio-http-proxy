@@ -69,6 +69,8 @@ class DefaultContainer:
         self.download_min_progress_window_seconds = int(os.environ.get("DOWNLOAD_MIN_PROGRESS_WINDOW_SECONDS", "120"))
         self.download_max_total_seconds = int(os.environ.get("DOWNLOAD_MAX_TOTAL_SECONDS", str(45 * 60)))
         self.download_progress_log_interval_seconds = int(os.environ.get("DOWNLOAD_PROGRESS_LOG_INTERVAL_SECONDS", "10"))
+        self.cache_enabled = os.environ.get("CACHE_ENABLED", "true").lower() == "true"
+        self.next_episode_prefetch_enabled = os.environ.get("NEXT_EPISODE_PREFETCH_ENABLED", "true").lower() == "true"
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
@@ -100,13 +102,14 @@ class DefaultContainer:
             self.dashboard_basic_auth_password,
         )
         cache_token_service = CacheTokenService(self.app_secret, self.cache_token_ttl_seconds)
-        cache_service = CacheService(cache_manager, self.public_base_url, cache_token_service)
-        stream_rewrite_service = StreamRewriteService(self.public_base_url, cache_manager)
-        download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts)
+        cache_service = CacheService(cache_manager, self.public_base_url, cache_token_service, self.cache_enabled)
+        stream_rewrite_service = StreamRewriteService(self.public_base_url, cache_manager, self.cache_enabled)
+        download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts, self.cache_enabled)
         next_episode_prefetch_service = NextEpisodePrefetchService(
             upstream_client,
             stream_rewrite_service,
             download_queue_service,
+            self.next_episode_prefetch_enabled,
             self.next_episode_prefetch_stream_limit,
         )
         dashboard_service = DashboardService(cache_manager, self.public_base_url)
