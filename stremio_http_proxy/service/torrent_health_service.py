@@ -10,20 +10,24 @@ class TorrentHealthService:
     def __init__(self, torrserver_client: TorrServerClient):
         self.client = torrserver_client
 
-    async def check_batch(self, links: list[str], timeout: float = 15.0) -> dict[str, bool]:
-        links_to_check = links[:10]
+    async def check_batch(
+        self,
+        links_with_indices: list[tuple[str, int | None]],
+        timeout: float = 15.0,
+    ) -> dict[str, bool]:
+        links_to_check = links_with_indices[:10]
 
-        async def check_one(link: str) -> tuple[str, bool]:
+        async def check_one(link: str, index: int | None) -> tuple[str, bool]:
             try:
-                result = await self.client.add_and_get_status(link, timeout=timeout)
-                return link, result is not None
+                ok = await self.client.check_stream_playable(link, index=index, timeout=timeout)
+                return link, ok
             except Exception:
                 return link, False
 
         try:
             async with asyncio.timeout(timeout):
                 results = await asyncio.gather(
-                    *[check_one(link) for link in links_to_check],
+                    *[check_one(link, index) for link, index in links_to_check],
                     return_exceptions=True,
                 )
         except TimeoutError:
