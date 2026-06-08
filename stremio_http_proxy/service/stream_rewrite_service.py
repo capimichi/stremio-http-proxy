@@ -183,11 +183,19 @@ class StreamRewriteService:
         return urlparse(value).path.endswith(".torrent")
 
     def _extract_title(self, stream: dict) -> str | None:
+        parts = []
         for key in ("title", "name", "description"):
             value = stream.get(key)
             if isinstance(value, str) and value.strip():
-                return value.strip()
-        return None
+                clean_value = value.strip().replace("\r\n", " ").replace("\n", " ")
+                if clean_value:
+                    parts.append(clean_value)
+        if not parts:
+            return None
+        joined = " - ".join(parts)
+        if len(joined) > 255:
+            return joined[:252] + "..."
+        return joined
 
     def _extract_poster(self, stream: dict) -> str | None:
         for key in ("poster", "thumbnail"):
