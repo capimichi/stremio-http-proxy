@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from injector import inject
+from jinja2 import Environment, FileSystemLoader
 
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
 
@@ -10,7 +11,7 @@ class DashboardController:
     @inject
     def __init__(self, basic_auth_service: BasicAuthService):
         self.basic_auth_service = basic_auth_service
-        self.templates = Jinja2Templates(directory="templates", cache_size=0)
+        self.templates = Jinja2Templates(env=Environment(loader=FileSystemLoader("templates"), cache_size=0))
         self.router = APIRouter(tags=["Dashboard"])
         self._register_routes()
 
