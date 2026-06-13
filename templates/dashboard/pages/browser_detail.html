@@ -1,0 +1,207 @@
+{% extends "dashboard/components/base.html" %}
+{% set active_page = "browser" %}
+{% block title %}{{ imdb_id }} - Stremio HTTP Proxy{% endblock %}
+{% block page_title %}Dettaglio Media{% endblock %}
+
+{% block content %}
+<div class="rounded-xl border bg-white shadow-sm">
+  <div class="border-b px-5 py-4 flex items-center gap-3">
+    <a href="/dashboard/browser" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">&larr; Torna alla ricerca</a>
+    <h2 class="text-lg font-semibold text-gray-900">Dettaglio Media</h2>
+  </div>
+  <div class="p-5 space-y-4">
+    <div id="content-detail">
+      <div class="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
+        <img id="detail-poster" class="w-24 h-36 rounded object-cover bg-gray-200" src="" alt="">
+        <div>
+          <h3 id="detail-title" class="text-lg font-semibold text-gray-900"></h3>
+          <p id="detail-imdb" class="text-sm text-gray-500 mt-1"></p>
+          <div class="flex gap-2 mt-2">
+            <a id="detail-stremio-link" href="#" target="_blank" class="inline-block rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700">Apri in Stremio</a>
+          </div>
+          <div id="detail-series-controls" class="hidden mt-3 flex gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Stagione</label>
+              <select id="detail-season" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Episodio</label>
+              <select id="detail-episode" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"></select>
+            </div>
+            <div class="flex items-end">
+              <button id="load-streams-btn" class="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Carica stream</button>
+            </div>
+          </div>
+          <button id="load-streams-movie-btn" class="hidden mt-3 rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Carica stream</button>
+        </div>
+      </div>
+
+      <div id="streams-section" class="hidden mt-4">
+        <h4 class="text-sm font-semibold text-gray-700 mb-2">Stream disponibili</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th class="px-4 py-2">Nome</th>
+                <th class="px-4 py-2">Infohash</th>
+                <th class="px-4 py-2">Seeders</th>
+                <th class="px-4 py-2">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="streams-tbody" class="divide-y"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const mediaType = '{{ media_type }}';
+const imdbId = '{{ imdb_id }}';
+
+const detailPoster = document.getElementById('detail-poster');
+const detailTitle = document.getElementById('detail-title');
+const detailImdb = document.getElementById('detail-imdb');
+const detailStremioLink = document.getElementById('detail-stremio-link');
+const detailSeason = document.getElementById('detail-season');
+const detailEpisode = document.getElementById('detail-episode');
+const detailSeriesControls = document.getElementById('detail-series-controls');
+const loadStreamsBtn = document.getElementById('load-streams-btn');
+const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
+const streamsSection = document.getElementById('streams-section');
+const streamsTbody = document.getElementById('streams-tbody');
+
+let currentWhitelist = [];
+
+function buildStremioUrl(type, id, season, episode) {
+  if (type === 'movie') {
+    return 'stremio://detail/movie/' + id;
+  } else if (season != null && episode != null) {
+    return 'stremio://detail/series/' + id + '/' + season + '/' + episode;
+  }
+  return 'stremio://detail/series/' + id;
+}
+
+async function loadStreams(season, episode) {
+  const params = new URLSearchParams({ type: mediaType, id: imdbId });
+  if (mediaType === 'series' && season != null) {
+    params.set('season', season);
+    params.set('episode', episode);
+  }
+  const resp = await fetch('/api/browser/content?' + params.toString());
+  const data = await resp.json();
+  currentWhitelist = data.whitelist || [];
+
+  const meta = data.meta;
+  if (meta) {
+    detailPoster.src = meta.poster || meta.background || '';
+    detailTitle.textContent = meta.name || meta.title || '';
+  }
+
+  const tbody = streamsTbody;
+  tbody.innerHTML = '';
+  const streams = data.streams || [];
+  if (streams.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Nessuno stream disponibile</td></tr>';
+  } else {
+    for (const s of streams) {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b';
+
+      const infohash = s.infohash || '-';
+      const shortHash = infohash.length > 16 ? infohash.slice(0, 16) + '…' : infohash;
+      const seeders = s.meta?.seeders ?? '-';
+      const cached = s.meta?.cached ? '🔥' : '';
+      const playUrl = s.url || '#';
+
+      const episodeScope = mediaType === 'series' ? episode : null;
+      const seasonScope = mediaType === 'series' ? season : null;
+
+      const whitelistedEpisode = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === episodeScope);
+      const whitelistedSeason = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === null);
+      const whitelistedAll = currentWhitelist.some(w => w.infohash === infohash && w.season === null && w.episode === null);
+
+      tr.innerHTML = `
+        <td class="px-4 py-2">${cached} ${s.name || s.title || ''}</td>
+        <td class="px-4 py-2 font-mono text-xs text-gray-500">${shortHash}</td>
+        <td class="px-4 py-2">${seeders}</td>
+        <td class="px-4 py-2">
+          <a href="${playUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2">Play</a>
+          ${mediaType === 'series' ? `
+            <button class="wl-btn text-xs font-medium ${whitelistedEpisode ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="${seasonScope}" data-episode="${episodeScope}">${whitelistedEpisode ? '✓ Ep' : 'Ep'}</button>
+            <button class="wl-btn text-xs font-medium ml-1 ${whitelistedSeason ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="${seasonScope}" data-episode="">${whitelistedSeason ? '✓ Stag' : 'Stag'}</button>
+          ` : ''}
+          <button class="wl-btn text-xs font-medium ml-1 ${whitelistedAll ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="" data-episode="">${whitelistedAll ? '✓ Tutto' : 'Tutto'}</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    document.querySelectorAll('.wl-btn').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const infohash = this.dataset.infohash;
+        const seasonVal = this.dataset.season === '' ? null : parseInt(this.dataset.season);
+        const episodeVal = this.dataset.episode === '' ? null : parseInt(this.dataset.episode);
+        await fetch('/api/whitelist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ infohash, imdb_id: imdbId, season: seasonVal, episode: episodeVal }),
+        });
+        const currentSeason = mediaType === 'series' ? parseInt(detailSeason.value) : null;
+        const currentEpisode = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
+        await loadStreams(currentSeason, currentEpisode);
+      });
+    });
+  }
+
+  streamsSection.classList.remove('hidden');
+}
+
+async function init() {
+  detailImdb.textContent = 'IMDB: ' + imdbId;
+  detailStremioLink.href = buildStremioUrl(mediaType, imdbId);
+
+  if (mediaType === 'movie') {
+    loadStreamsMovieBtn.classList.remove('hidden');
+    loadStreamsMovieBtn.onclick = () => loadStreams(null, null);
+  } else {
+    detailSeriesControls.classList.remove('hidden');
+    async function loadEpisodes() {
+      const seasonVal = detailSeason.value;
+      const params = new URLSearchParams({ type: 'series', id: imdbId, season: seasonVal, episode: '1' });
+      const resp = await fetch('/api/browser/content?' + params.toString());
+      const data = await resp.json();
+      const meta = data.meta;
+      if (meta && meta.videos) {
+        const seasonNum = parseInt(seasonVal);
+        const eps = meta.videos.filter(v => v.season === seasonNum && v.episode);
+        detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}</option>`).join('');
+      }
+    }
+    const seasonsResp = await fetch('/api/browser/content?type=series&id=' + imdbId);
+    const seasonsData = await seasonsResp.json();
+    const meta = seasonsData.meta;
+    if (meta) {
+      detailPoster.src = meta.poster || meta.background || '';
+      detailTitle.textContent = meta.name || meta.title || '';
+    }
+    if (meta && meta.videos) {
+      const seasons = [...new Set(meta.videos.filter(v => v.season).map(v => v.season))].sort((a,b) => a-b);
+      detailSeason.innerHTML = seasons.map(s => `<option value="${s}">Stagione ${s}</option>`).join('');
+      detailSeason.onchange = loadEpisodes;
+      await loadEpisodes();
+    }
+    loadStreamsBtn.onclick = () => {
+      const seasonVal = parseInt(detailSeason.value);
+      const episodeVal = parseInt(detailEpisode.value);
+      loadStreams(seasonVal, episodeVal);
+    };
+  }
+}
+
+init();
+</script>
+{% endblock %}
