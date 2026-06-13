@@ -69,6 +69,49 @@ def test_dashboard_service_includes_completed_entries(tmp_path):
     assert payload.downloads[0].completed_at is not None
 
 
+def test_get_index_context_returns_empty_dict(tmp_path):
+    cache_manager = build_cache_manager(tmp_path)
+    service = DashboardService(cache_manager, "https://proxy.example.com")
+    ctx = service.get_index_context()
+    assert ctx == {}
+
+
+def test_get_cache_items_context_returns_empty_dict(tmp_path):
+    cache_manager = build_cache_manager(tmp_path)
+    service = DashboardService(cache_manager, "https://proxy.example.com")
+    ctx = service.get_cache_items_context()
+    assert ctx == {}
+
+
+def test_get_cache_entry_context_returns_entry_data(tmp_path):
+    cache_manager = build_cache_manager(tmp_path)
+    cache_key = cache_manager.build_cache_key_from_parts("a" * 40, 0)
+    entry = cache_manager.get_entry(cache_key).model_copy(update={
+        "title": "Test Episode",
+        "status": CacheEntryStatusEnum.READY,
+        "created_at": 100.0,
+    })
+    cache_manager._write_entry(cache_key, entry)
+
+    service = DashboardService(cache_manager, "https://proxy.example.com")
+    ctx, status = service.get_cache_entry_context("a" * 40, 0)
+
+    assert status == 200
+    assert ctx["entry"].title == "Test Episode"
+    assert ctx["infohash"] == "a" * 40
+    assert ctx["index"] == 0
+    assert "created_at_str" in ctx
+    assert "completed_at_str" in ctx
+
+
+def test_get_cache_entry_context_returns_none_for_missing(tmp_path):
+    cache_manager = build_cache_manager(tmp_path)
+    service = DashboardService(cache_manager, "https://proxy.example.com")
+    ctx, status = service.get_cache_entry_context("a" * 40, 0)
+    assert ctx is None
+    assert status == 404
+
+
 def test_dashboard_service_paginates_results(tmp_path):
     cache_manager = build_cache_manager(tmp_path)
     keys = []

@@ -126,7 +126,7 @@ class DefaultContainer:
             self.next_episode_prefetch_stream_limit,
         )
         jinja_manager = JinjaManager(self.template_dir)
-        dashboard_service = DashboardService(cache_manager, self.public_base_url, jinja_manager)
+        dashboard_service = DashboardService(cache_manager, self.public_base_url)
         download_worker_service = DownloadWorkerService(
             torrserver_client,
             cache_manager,

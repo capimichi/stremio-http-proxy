@@ -5,24 +5,22 @@ from injector import inject
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.manager.cache_manager import CacheManager
-from stremio_http_proxy.manager.jinja_manager import JinjaManager
 from stremio_http_proxy.model.download_status import DownloadStatus, DownloadStatusResponse
 
 
 class DashboardService:
     @inject
-    def __init__(self, cache_manager: CacheManager, public_base_url: str, jinja_manager: JinjaManager):
+    def __init__(self, cache_manager: CacheManager, public_base_url: str):
         self.cache_manager = cache_manager
         self.public_base_url = public_base_url.rstrip("/")
-        self.jinja_manager = jinja_manager
 
-    def get_index_html(self) -> str:
-        return self.jinja_manager.render("dashboard/pages/index.html")
+    def get_index_context(self) -> dict[str, object]:
+        return {}
 
-    def get_cache_items_html(self) -> str:
-        return self.jinja_manager.render("dashboard/pages/cache_items.html")
+    def get_cache_items_context(self) -> dict[str, object]:
+        return {}
 
-    def get_cache_entry_html(self, infohash: str, index: int) -> tuple[str | None, int]:
+    def get_cache_entry_context(self, infohash: str, index: int) -> tuple[dict | None, int]:
         cache_key = self.cache_manager.build_cache_key_from_parts(infohash, index)
         entry = self.cache_manager.get_entry(cache_key)
         if entry.status == CacheEntryStatusEnum.MISSING:
@@ -48,16 +46,14 @@ class DashboardService:
                 return "N/A"
             return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
 
-        html = self.jinja_manager.render(
-            "dashboard/pages/cache_entry.html",
-            entry=entry,
-            play_url=play_url,
-            infohash=infohash,
-            index=index,
-            created_at_str=fmt_ts(entry.created_at),
-            completed_at_str=fmt_ts(entry.completed_at),
-        )
-        return html, 200
+        return {
+            "entry": entry,
+            "play_url": play_url,
+            "infohash": infohash,
+            "index": index,
+            "created_at_str": fmt_ts(entry.created_at),
+            "completed_at_str": fmt_ts(entry.completed_at),
+        }, 200
 
     def get_download_status(self, page: int = 1, limit: int = 10, search: str | None = None) -> DownloadStatusResponse:
         entries = self.cache_manager.list_entries()
