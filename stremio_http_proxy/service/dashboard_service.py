@@ -1,3 +1,6 @@
+import time
+from urllib.parse import urlencode
+
 from injector import inject
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
@@ -18,6 +21,43 @@ class DashboardService:
 
     def get_cache_items_html(self) -> str:
         return self.jinja_manager.render("dashboard/pages/cache_items.html")
+
+    def get_cache_entry_html(self, infohash: str, index: int) -> tuple[str | None, int]:
+        cache_key = self.cache_manager.build_cache_key_from_parts(infohash, index)
+        entry = self.cache_manager.get_entry(cache_key)
+        if entry.status == CacheEntryStatusEnum.MISSING:
+            return None, 404
+
+        play_url = None
+        if entry.source_link:
+            params = {"link": entry.source_link, "index": str(index)}
+            if entry.title:
+                params["title"] = entry.title
+            if entry.poster:
+                params["poster"] = entry.poster
+            if entry.category:
+                params["category"] = entry.category
+            if entry.content_type:
+                params["content_type"] = entry.content_type
+            if entry.content_id:
+                params["content_id"] = entry.content_id
+            play_url = f"{self.public_base_url}/play?{urlencode(params)}"
+
+        def fmt_ts(ts: float | None) -> str:
+            if ts is None:
+                return "N/A"
+            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+
+        html = self.jinja_manager.render(
+            "dashboard/pages/cache_entry.html",
+            entry=entry,
+            play_url=play_url,
+            infohash=infohash,
+            index=index,
+            created_at_str=fmt_ts(entry.created_at),
+            completed_at_str=fmt_ts(entry.completed_at),
+        )
+        return html, 200
 
     def get_download_status(self, page: int = 1, limit: int = 10, search: str | None = None) -> DownloadStatusResponse:
         entries = self.cache_manager.list_entries()

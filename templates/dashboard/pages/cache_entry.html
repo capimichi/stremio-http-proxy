@@ -1,0 +1,117 @@
+{% extends "dashboard/components/base.html" %}
+{% set active_page = "cache_items" %}
+{% block title %}{{ entry.title or 'Dettaglio Cache' }} - Stremio HTTP Proxy{% endblock %}
+{% block page_title %}{{ entry.title or 'Dettaglio Cache' }}{% endblock %}
+
+{% macro format_bytes(value) %}
+{% if value is not none and value >= 1073741824 %}
+{{ '%.2f'|format(value / 1073741824) }} GB
+{% elif value is not none and value >= 1048576 %}
+{{ '%.2f'|format(value / 1048576) }} MB
+{% elif value is not none and value >= 1024 %}
+{{ '%.1f'|format(value / 1024) }} KB
+{% elif value is not none %}
+{{ value }} B
+{% else %}
+N/A
+{% endif %}
+{% endmacro %}
+
+{% macro format_speed(value) %}
+{% if value is not none and value >= 1048576 %}
+{{ '%.1f'|format(value / 1048576) }} MB/s
+{% elif value is not none and value >= 1024 %}
+{{ '%.1f'|format(value / 1024) }} KB/s
+{% elif value is not none %}
+{{ value }} B/s
+{% else %}
+N/A
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+  <div class="lg:col-span-2 space-y-6">
+    <div class="rounded-xl border bg-white p-6 shadow-sm">
+      <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+        <div>
+          <dt class="text-gray-500">Infohash</dt>
+          <dd class="mt-1 font-mono text-gray-900 break-all">{{ infohash }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-500">Index</dt>
+          <dd class="mt-1 text-gray-900">{{ index }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-500">Cache Key</dt>
+          <dd class="mt-1 font-mono text-gray-900 break-all">{{ infohash }}:{{ index }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-500">Stato</dt>
+          <dd class="mt-1">
+            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
+              {% if entry.status == 'ready' %}text-green-600 bg-green-50
+              {% elif entry.status == 'downloading' %}text-blue-600 bg-blue-50
+              {% elif entry.status == 'processing' %}text-yellow-600 bg-yellow-50
+              {% elif entry.status == 'queued' %}text-gray-600 bg-gray-100
+              {% elif entry.status == 'failed' %}text-red-600 bg-red-50
+              {% else %}text-gray-400 bg-gray-50{% endif %}">
+              {{ entry.status }}
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-gray-500">Dimensione totale</dt>
+          <dd class="mt-1 text-gray-900">{{ format_bytes(entry.expected_bytes) }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-500">Scaricato</dt>
+          <dd class="mt-1 text-gray-900">{{ format_bytes(entry.downloaded_bytes) }}</dd>
+        </div>
+        {% if entry.progress_percent is not none %}
+        <div>
+          <dt class="text-gray-500">Progresso</dt>
+          <dd class="mt-1 text-gray-900">{{ '%.1f'|format(entry.progress_percent) }}%</dd>
+        </div>
+        {% endif %}
+        {% if entry.download_speed_bytes_per_second is not none %}
+        <div>
+          <dt class="text-gray-500">Velocità</dt>
+          <dd class="mt-1 text-gray-900">{{ format_speed(entry.download_speed_bytes_per_second) }}</dd>
+        </div>
+        {% endif %}
+        <div>
+          <dt class="text-gray-500">Creato</dt>
+          <dd class="mt-1 text-gray-900">{{ created_at_str }}</dd>
+        </div>
+        <div>
+          <dt class="text-gray-500">Completato</dt>
+          <dd class="mt-1 text-gray-900">{{ completed_at_str }}</dd>
+        </div>
+        {% if entry.last_error %}
+        <div class="col-span-2">
+          <dt class="text-gray-500">Ultimo errore</dt>
+          <dd class="mt-1 text-red-600 bg-red-50 rounded-md p-2 text-xs">{{ entry.last_error }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+
+  <div class="space-y-6">
+    <div class="rounded-xl border bg-white p-6 shadow-sm">
+      <h3 class="text-sm font-semibold text-gray-900 mb-4">Azioni</h3>
+      <div class="space-y-3">
+        {% if play_url %}
+        <a href="{{ play_url }}" target="_blank" class="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors">
+          <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          Play
+        </a>
+        {% else %}
+        <p class="text-sm text-gray-400">Nessun link sorgente disponibile per la riproduzione.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -48,7 +48,7 @@ function renderTable(payload) {
   const tbody = document.getElementById("cache-table-body");
 
   if (!items.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="px-5 py-8 text-center text-sm text-gray-400">Nessun elemento trovato.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-5 py-8 text-center text-sm text-gray-400">Nessun elemento trovato.</td></tr>';
     return;
   }
 
@@ -69,6 +69,11 @@ function renderTable(payload) {
       </td>
       <td class="px-5 py-3 text-sm text-gray-500 whitespace-nowrap">${formatTime(d.created_at)}</td>
       <td class="px-5 py-3 text-xs text-gray-400 font-mono max-w-[120px] truncate" title="${d.infohash}">${d.infohash}</td>
+      <td class="px-5 py-3 whitespace-nowrap">
+        <a href="/dashboard/cache-entry/${d.infohash}/${d.index}" class="inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+          Apri
+        </a>
+      </td>
     </tr>`;
   }).join("");
 }
