@@ -10,7 +10,7 @@ class DashboardController:
     @inject
     def __init__(self, basic_auth_service: BasicAuthService):
         self.basic_auth_service = basic_auth_service
-        self.templates = Jinja2Templates(directory="templates")
+        self.templates = Jinja2Templates(directory="templates", cache_size=0)
         self.router = APIRouter(tags=["Dashboard"])
         self._register_routes()
 
