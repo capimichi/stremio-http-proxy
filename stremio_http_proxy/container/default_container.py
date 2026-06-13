@@ -23,6 +23,7 @@ from stremio_http_proxy.service.cache_service import CacheService
 from stremio_http_proxy.service.cache_token_service import CacheTokenService
 from stremio_http_proxy.service.dashboard_service import DashboardService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
+from stremio_http_proxy.service.content_browser_service import ContentBrowserService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
 
@@ -127,7 +128,8 @@ class DefaultContainer:
             self.torrserver_health_check_timeout_seconds,
             whitelist_repository if self.whitelist_enabled else None,
         )
-        whitelist_service = WhitelistService(upstream_client, tmdb_client, whitelist_repository, stream_rewrite_service)
+        whitelist_service = WhitelistService(whitelist_repository)
+        content_browser_service = ContentBrowserService(upstream_client, tmdb_client, stream_rewrite_service)
         download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts, self.cache_enabled)
         next_episode_prefetch_service = NextEpisodePrefetchService(
             upstream_client,
@@ -167,6 +169,7 @@ class DefaultContainer:
         self.injector.binder.bind(WhitelistRepository, to=whitelist_repository)
         self.injector.binder.bind(TMDBClient, to=tmdb_client)
         self.injector.binder.bind(WhitelistService, to=whitelist_service)
+        self.injector.binder.bind(ContentBrowserService, to=content_browser_service)
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
         self.injector.binder.bind(JinjaManager, to=jinja_manager)
         self.injector.binder.bind(ServeCommand, to=serve_command)

@@ -121,8 +121,8 @@ async function loadStreams() {
     params.set('season', detailSeason.value);
     params.set('episode', detailEpisode.value);
   }
-  const resp = await fetch('/api/whitelist/browse?' + params.toString());
-  const data = await resp.json();
+      const resp = await fetch('/api/browser/content?' + params.toString());
+      const data = await resp.json();
   currentWhitelist = data.whitelist || [];
 
   const meta = data.meta;
@@ -198,7 +198,7 @@ async function showContentByImdb(q, type) {
   } else {
     detailSeriesControls.classList.remove('hidden');
     async function loadEpisodes() {
-      const resp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=' + detailSeason.value + '&episode=1');
+      const resp = await fetch('/api/browser/content?type=' + type + '&id=' + q + '&season=' + detailSeason.value + '&episode=1');
       const data = await resp.json();
       const meta = data.meta;
       if (meta && meta.videos) {
@@ -207,7 +207,7 @@ async function showContentByImdb(q, type) {
         detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}</option>`).join('');
       }
     }
-    const seasonsResp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=1&episode=1');
+    const seasonsResp = await fetch('/api/browser/content?type=' + type + '&id=' + q);
     const seasonsData = await seasonsResp.json();
     const meta = seasonsData.meta;
     if (meta && meta.videos) {
@@ -221,7 +221,7 @@ async function showContentByImdb(q, type) {
 }
 
 async function fetchAndRenderResults(query, type, page, append) {
-  const resp = await fetch('/api/whitelist/search?q=' + encodeURIComponent(query) + '&type=' + type + '&page=' + page);
+  const resp = await fetch('/api/browser/search?q=' + encodeURIComponent(query) + '&type=' + type + '&page=' + page);
   const data = await resp.json();
 
   if (!append) {
@@ -240,7 +240,7 @@ async function fetchAndRenderResults(query, type, page, append) {
       <p class="text-xs text-gray-500">${r.year || ''}</p>
     `;
     div.onclick = async () => {
-      const resolveResp = await fetch('/api/whitelist/resolve?tmdb_id=' + r.tmdb_id + '&type=' + type);
+      const resolveResp = await fetch('/api/browser/resolve?tmdb_id=' + r.tmdb_id + '&type=' + type);
       const resolveData = await resolveResp.json();
       if (resolveData.imdb_id) {
         await showContentByImdb(resolveData.imdb_id, type);

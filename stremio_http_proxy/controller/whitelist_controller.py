@@ -37,18 +37,10 @@ class WhitelistController:
 
         auth = [Depends(require_auth)]
 
-        self.router.add_api_route("/dashboard/browser", self.browser_page, methods=["GET"], include_in_schema=False, dependencies=auth)
         self.router.add_api_route("/dashboard/whitelist", self.whitelist_page, methods=["GET"], include_in_schema=False, dependencies=auth)
-
         self.router.add_api_route("/api/whitelist", self.list_whitelist, methods=["GET"], dependencies=auth)
         self.router.add_api_route("/api/whitelist", self.add_whitelist, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/whitelist/{entry_id}", self.remove_whitelist, methods=["DELETE"], dependencies=auth)
-        self.router.add_api_route("/api/whitelist/search", self.search_content, methods=["GET"], dependencies=auth)
-        self.router.add_api_route("/api/whitelist/resolve", self.resolve_content, methods=["GET"], dependencies=auth)
-        self.router.add_api_route("/api/whitelist/browse", self.browse_content, methods=["GET"], dependencies=auth)
-
-    async def browser_page(self) -> HTMLResponse:
-        return HTMLResponse(self.jinja_manager.render("dashboard/pages/browser.html"))
 
     async def whitelist_page(self) -> HTMLResponse:
         return HTMLResponse(self.jinja_manager.render("dashboard/pages/whitelist.html"))
@@ -81,19 +73,3 @@ class WhitelistController:
     async def remove_whitelist(self, entry_id: int) -> dict:
         ok = self.whitelist_service.remove_from_whitelist(entry_id)
         return {"ok": ok}
-
-    async def search_content(self, q: str, type: str = "movie", page: int = 1) -> dict:
-        return await self.whitelist_service.search_content(q, type, page)
-
-    async def resolve_content(self, tmdb_id: int, type: str = "movie") -> dict:
-        imdb_id = await self.whitelist_service.resolve_content(tmdb_id, type)
-        return {"imdb_id": imdb_id}
-
-    async def browse_content(
-        self,
-        type: str,
-        id: str,
-        season: int | None = None,
-        episode: int | None = None,
-    ) -> dict:
-        return await self.whitelist_service.browse_content(type, id, season, episode)
