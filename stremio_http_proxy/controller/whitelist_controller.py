@@ -44,6 +44,7 @@ class WhitelistController:
         self.router.add_api_route("/api/whitelist", self.add_whitelist, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/whitelist/{entry_id}", self.remove_whitelist, methods=["DELETE"], dependencies=auth)
         self.router.add_api_route("/api/whitelist/search", self.search_content, methods=["GET"], dependencies=auth)
+        self.router.add_api_route("/api/whitelist/resolve", self.resolve_content, methods=["GET"], dependencies=auth)
         self.router.add_api_route("/api/whitelist/browse", self.browse_content, methods=["GET"], dependencies=auth)
 
     async def browser_page(self) -> HTMLResponse:
@@ -81,8 +82,12 @@ class WhitelistController:
         ok = self.whitelist_service.remove_from_whitelist(entry_id)
         return {"ok": ok}
 
-    async def search_content(self, q: str, type: str = "movie") -> list[dict]:
-        return await self.whitelist_service.search_content(q, type)
+    async def search_content(self, q: str, type: str = "movie", page: int = 1) -> dict:
+        return await self.whitelist_service.search_content(q, type, page)
+
+    async def resolve_content(self, tmdb_id: int, type: str = "movie") -> dict:
+        imdb_id = await self.whitelist_service.resolve_content(tmdb_id, type)
+        return {"imdb_id": imdb_id}
 
     async def browse_content(
         self,

@@ -21,12 +21,15 @@ class WhitelistService:
         self.whitelist_repository = whitelist_repository
         self.stream_rewrite_service = stream_rewrite_service
 
-    async def search_content(self, query: str, content_type: str) -> list[dict]:
+    async def search_content(self, query: str, content_type: str, page: int = 1) -> dict:
         if not self.tmdb_client.is_available():
-            return []
+            return {"results": [], "page": 1, "total_pages": 1}
         if content_type == "movie":
-            return await self.tmdb_client.search_movie(query)
-        return await self.tmdb_client.search_tv(query)
+            return await self.tmdb_client.search_movie(query, page)
+        return await self.tmdb_client.search_tv(query, page)
+
+    async def resolve_content(self, tmdb_id: int, content_type: str) -> str | None:
+        return await self.tmdb_client.get_imdb_id(tmdb_id, content_type)
 
     async def browse_content(
         self,

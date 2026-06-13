@@ -26,6 +26,9 @@
 
     <div id="search-results" class="hidden">
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" id="results-grid"></div>
+      <div id="load-more-container" class="hidden mt-4 text-center">
+        <button id="load-more-btn" class="rounded-lg border border-indigo-300 px-5 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">Carica altri risultati</button>
+      </div>
     </div>
 
     <div id="content-detail" class="hidden">
@@ -96,6 +99,13 @@ let currentType = null;
 let currentSeason = null;
 let currentEpisode = null;
 let currentWhitelist = [];
+let currentPage = 1;
+let totalPages = 1;
+let lastQuery = '';
+let lastSearchType = 'movie';
+
+const loadMoreContainer = document.getElementById('load-more-container');
+const loadMoreBtn = document.getElementById('load-more-btn');
 
 function showDetail(meta) {
   searchResults.classList.add('hidden');
@@ -178,56 +188,50 @@ async function loadStreams() {
   streamsSection.classList.remove('hidden');
 }
 
-async function doSearch() {
-  const q = searchQuery.value.trim();
-  const type = searchType.value;
-  if (!q) return;
-
-  if (q.startsWith('tt')) {
-    currentImdbId = q;
-    currentType = type;
-    showDetail({ imdb_id: q });
-    if (type === 'movie') {
-      loadStreamsMovieBtn.classList.remove('hidden');
-      loadStreamsMovieBtn.onclick = () => { currentSeason = null; currentEpisode = null; loadStreams(); };
-    } else {
-      detailSeriesControls.classList.remove('hidden');
-      async function loadEpisodes() {
-        const resp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=' + detailSeason.value + '&episode=1');
-        const data = await resp.json();
-        const meta = data.meta;
-        if (meta && meta.videos) {
-          const seasonNum = parseInt(detailSeason.value);
-          const eps = meta.videos.filter(v => v.season === seasonNum && v.episode);
-          detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}</option>`).join('');
-        }
-      }
-      const seasonsResp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=1&episode=1');
-      const seasonsData = await seasonsResp.json();
-      const meta = seasonsData.meta;
+async function showContentByImdb(q, type) {
+  currentImdbId = q;
+  currentType = type;
+  showDetail({ imdb_id: q });
+  if (type === 'movie') {
+    loadStreamsMovieBtn.classList.remove('hidden');
+    loadStreamsMovieBtn.onclick = () => { currentSeason = null; currentEpisode = null; loadStreams(); };
+  } else {
+    detailSeriesControls.classList.remove('hidden');
+    async function loadEpisodes() {
+      const resp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=' + detailSeason.value + '&episode=1');
+      const data = await resp.json();
+      const meta = data.meta;
       if (meta && meta.videos) {
-        const seasons = [...new Set(meta.videos.filter(v => v.season).map(v => v.season))].sort((a,b) => a-b);
-        detailSeason.innerHTML = seasons.map(s => `<option value="${s}">Stagione ${s}</option>`).join('');
-        detailSeason.onchange = loadEpisodes;
-        await loadEpisodes();
+        const seasonNum = parseInt(detailSeason.value);
+        const eps = meta.videos.filter(v => v.season === seasonNum && v.episode);
+        detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}</option>`).join('');
       }
-      loadStreamsBtn.onclick = () => { currentSeason = parseInt(detailSeason.value); currentEpisode = parseInt(detailEpisode.value); loadStreams(); };
     }
-    return;
+    const seasonsResp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=1&episode=1');
+    const seasonsData = await seasonsResp.json();
+    const meta = seasonsData.meta;
+    if (meta && meta.videos) {
+      const seasons = [...new Set(meta.videos.filter(v => v.season).map(v => v.season))].sort((a,b) => a-b);
+      detailSeason.innerHTML = seasons.map(s => `<option value="${s}">Stagione ${s}</option>`).join('');
+      detailSeason.onchange = loadEpisodes;
+      await loadEpisodes();
+    }
+    loadStreamsBtn.onclick = () => { currentSeason = parseInt(detailSeason.value); currentEpisode = parseInt(detailEpisode.value); loadStreams(); };
+  }
+}
+
+async function fetchAndRenderResults(query, type, page, append) {
+  const resp = await fetch('/api/whitelist/search?q=' + encodeURIComponent(query) + '&type=' + type + '&page=' + page);
+  const data = await resp.json();
+
+  if (!append) {
+    resultsGrid.innerHTML = '';
   }
 
-  const resp = await fetch('/api/whitelist/search?q=' + encodeURIComponent(q) + '&type=' + type);
-  const results = await resp.json();
-  resultsGrid.innerHTML = '';
-  searchResults.classList.remove('hidden');
-  contentDetail.classList.add('hidden');
+  totalPages = data.total_pages;
+  currentPage = data.page;
 
-  if (results.length === 0) {
-    resultsGrid.innerHTML = '<div class="col-span-full text-center py-8 text-gray-400">Nessun risultato</div>';
-    return;
-  }
-
-  for (const r of results) {
+  for (const r of data.results) {
     const div = document.createElement('div');
     div.className = 'rounded-lg border bg-white p-3 cursor-pointer hover:shadow-md transition-shadow';
     div.innerHTML = `
@@ -235,13 +239,51 @@ async function doSearch() {
       <p class="mt-2 text-sm font-medium text-gray-900">${r.title}</p>
       <p class="text-xs text-gray-500">${r.year || ''}</p>
     `;
-    div.onclick = () => {
-      searchQuery.value = r.imdb_id;
-      doSearch();
+    div.onclick = async () => {
+      const resolveResp = await fetch('/api/whitelist/resolve?tmdb_id=' + r.tmdb_id + '&type=' + type);
+      const resolveData = await resolveResp.json();
+      if (resolveData.imdb_id) {
+        await showContentByImdb(resolveData.imdb_id, type);
+      } else {
+        alert('IMDB ID non trovato per questo titolo');
+      }
     };
     resultsGrid.appendChild(div);
   }
+
+  if (currentPage < totalPages) {
+    loadMoreContainer.classList.remove('hidden');
+  } else {
+    loadMoreContainer.classList.add('hidden');
+  }
 }
+
+async function doSearch() {
+  const q = searchQuery.value.trim();
+  const type = searchType.value;
+  if (!q) return;
+
+  if (q.startsWith('tt')) {
+    await showContentByImdb(q, type);
+    return;
+  }
+
+  lastQuery = q;
+  lastSearchType = type;
+  currentPage = 1;
+  searchResults.classList.remove('hidden');
+  contentDetail.classList.add('hidden');
+  streamsSection.classList.add('hidden');
+  detailSeriesControls.classList.add('hidden');
+  loadStreamsMovieBtn.classList.add('hidden');
+
+  await fetchAndRenderResults(q, type, 1, false);
+}
+
+loadMoreBtn.addEventListener('click', async () => {
+  currentPage++;
+  await fetchAndRenderResults(lastQuery, lastSearchType, currentPage, true);
+});
 
 searchBtn.addEventListener('click', doSearch);
 searchQuery.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
