@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from injector import Injector
 
+from stremio_http_proxy.client.tmdb_client import TMDBClient
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.client.upstream_client import UpstreamClient
 from stremio_http_proxy.command.serve_command import ServeCommand
@@ -11,6 +12,10 @@ from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
+
+import stremio_http_proxy.entity.whitelist_entry  # noqa: F401 — ensure table creation
+from stremio_http_proxy.repository.whitelist_repository import WhitelistRepository
+from stremio_http_proxy.service.whitelist_service import WhitelistService
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
@@ -79,6 +84,8 @@ class DefaultContainer:
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
+        self.tmdb_api_key = os.environ.get("TMDB_API_KEY")
+        self.whitelist_enabled = os.environ.get("WHITELIST_ENABLED", "true").lower() == "true"
         if not self.app_secret or not self.app_secret.strip():
             raise ValueError("APP_SECRET environment variable is required")
 
@@ -109,6 +116,8 @@ class DefaultContainer:
         cache_token_service = CacheTokenService(self.app_secret, self.cache_token_ttl_seconds)
         cache_service = CacheService(cache_manager, self.public_base_url, cache_token_service, self.cache_enabled)
         torrent_health_service = TorrentHealthService(torrserver_client)
+        whitelist_repository = WhitelistRepository(db_manager)
+        tmdb_client = TMDBClient(self.tmdb_api_key)
         stream_rewrite_service = StreamRewriteService(
             self.public_base_url,
             cache_manager,
@@ -116,7 +125,9 @@ class DefaultContainer:
             torrent_health_service,
             self.torrserver_health_check_enabled,
             self.torrserver_health_check_timeout_seconds,
+            whitelist_repository if self.whitelist_enabled else None,
         )
+        whitelist_service = WhitelistService(upstream_client, tmdb_client, whitelist_repository, stream_rewrite_service)
         download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts, self.cache_enabled)
         next_episode_prefetch_service = NextEpisodePrefetchService(
             upstream_client,
@@ -153,6 +164,9 @@ class DefaultContainer:
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
         self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
+        self.injector.binder.bind(WhitelistRepository, to=whitelist_repository)
+        self.injector.binder.bind(TMDBClient, to=tmdb_client)
+        self.injector.binder.bind(WhitelistService, to=whitelist_service)
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
         self.injector.binder.bind(JinjaManager, to=jinja_manager)
         self.injector.binder.bind(ServeCommand, to=serve_command)

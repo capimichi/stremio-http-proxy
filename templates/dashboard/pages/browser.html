@@ -1,0 +1,249 @@
+{% extends "dashboard/components/base.html" %}
+{% set active_page = "browser" %}
+{% block title %}Browser - Stremio HTTP Proxy{% endblock %}
+{% block page_title %}Browser Media{% endblock %}
+
+{% block content %}
+<div class="rounded-xl border bg-white shadow-sm">
+  <div class="border-b px-5 py-4">
+    <h2 class="text-lg font-semibold text-gray-900">Cerca media</h2>
+  </div>
+  <div class="p-5 space-y-4">
+    <div class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Tipo</label>
+        <select id="search-type" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+          <option value="movie">Film</option>
+          <option value="series">Serie TV</option>
+        </select>
+      </div>
+      <div class="flex-1 min-w-[200px]">
+        <label class="block text-xs font-medium text-gray-500 mb-1">Nome o IMDB ID</label>
+        <input type="text" id="search-query" placeholder="es. The Matrix o tt0133093" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
+      </div>
+      <button id="search-btn" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Cerca</button>
+    </div>
+
+    <div id="search-results" class="hidden">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" id="results-grid"></div>
+    </div>
+
+    <div id="content-detail" class="hidden">
+      <div class="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
+        <img id="detail-poster" class="w-24 h-36 rounded object-cover bg-gray-200" src="" alt="">
+        <div>
+          <h3 id="detail-title" class="text-lg font-semibold text-gray-900"></h3>
+          <p id="detail-imdb" class="text-sm text-gray-500 mt-1"></p>
+          <div id="detail-series-controls" class="hidden mt-3 flex gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Stagione</label>
+              <select id="detail-season" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"></select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Episodio</label>
+              <select id="detail-episode" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"></select>
+            </div>
+            <div class="flex items-end">
+              <button id="load-streams-btn" class="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Carica stream</button>
+            </div>
+          </div>
+          <button id="load-streams-movie-btn" class="hidden mt-3 rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Carica stream</button>
+        </div>
+      </div>
+
+      <div id="streams-section" class="hidden mt-4">
+        <h4 class="text-sm font-semibold text-gray-700 mb-2">Stream disponibili</h4>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th class="px-4 py-2">Nome</th>
+                <th class="px-4 py-2">Infohash</th>
+                <th class="px-4 py-2">Seeders</th>
+                <th class="px-4 py-2">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="streams-tbody" class="divide-y"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const searchType = document.getElementById('search-type');
+const searchQuery = document.getElementById('search-query');
+const searchBtn = document.getElementById('search-btn');
+const searchResults = document.getElementById('search-results');
+const resultsGrid = document.getElementById('results-grid');
+const contentDetail = document.getElementById('content-detail');
+const detailPoster = document.getElementById('detail-poster');
+const detailTitle = document.getElementById('detail-title');
+const detailImdb = document.getElementById('detail-imdb');
+const detailSeason = document.getElementById('detail-season');
+const detailEpisode = document.getElementById('detail-episode');
+const detailSeriesControls = document.getElementById('detail-series-controls');
+const loadStreamsBtn = document.getElementById('load-streams-btn');
+const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
+const streamsSection = document.getElementById('streams-section');
+const streamsTbody = document.getElementById('streams-tbody');
+
+let currentImdbId = null;
+let currentType = null;
+let currentSeason = null;
+let currentEpisode = null;
+let currentWhitelist = [];
+
+function showDetail(meta) {
+  searchResults.classList.add('hidden');
+  contentDetail.classList.remove('hidden');
+  detailPoster.src = meta.poster || '';
+  detailTitle.textContent = meta.name || meta.title || '';
+  detailImdb.textContent = 'IMDB: ' + (meta.imdb_id || '');
+}
+
+async function loadStreams() {
+  const params = new URLSearchParams({ type: currentType, id: currentImdbId });
+  if (currentType === 'series') {
+    params.set('season', detailSeason.value);
+    params.set('episode', detailEpisode.value);
+  }
+  const resp = await fetch('/api/whitelist/browse?' + params.toString());
+  const data = await resp.json();
+  currentWhitelist = data.whitelist || [];
+
+  const meta = data.meta;
+  if (meta) {
+    detailPoster.src = meta.poster || meta.background || '';
+    detailTitle.textContent = meta.name || meta.title || '';
+  }
+
+  const tbody = streamsTbody;
+  tbody.innerHTML = '';
+  const streams = data.streams || [];
+  if (streams.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Nessuno stream disponibile</td></tr>';
+  } else {
+    for (const s of streams) {
+      const tr = document.createElement('tr');
+      tr.className = 'border-b';
+
+      const infohash = s.infohash || '-';
+      const shortHash = infohash.length > 16 ? infohash.slice(0, 16) + '…' : infohash;
+      const seeders = s.meta?.seeders ?? '-';
+      const cached = s.meta?.cached ? '🔥' : '';
+      const playUrl = s.url || '#';
+
+      const episodeScope = currentType === 'series' ? parseInt(detailEpisode.value) : null;
+      const seasonScope = currentType === 'series' ? parseInt(detailSeason.value) : null;
+
+      const whitelistedEpisode = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === episodeScope);
+      const whitelistedSeason = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === null);
+      const whitelistedAll = currentWhitelist.some(w => w.infohash === infohash && w.season === null && w.episode === null);
+
+      tr.innerHTML = `
+        <td class="px-4 py-2">${cached} ${s.name || s.title || ''}</td>
+        <td class="px-4 py-2 font-mono text-xs text-gray-500">${shortHash}</td>
+        <td class="px-4 py-2">${seeders}</td>
+        <td class="px-4 py-2">
+          <a href="${playUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2">Play</a>
+          ${currentType === 'series' ? `
+            <button class="wl-btn text-xs font-medium ${whitelistedEpisode ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="${seasonScope}" data-episode="${episodeScope}">${whitelistedEpisode ? '✓ Ep' : 'Ep'}</button>
+            <button class="wl-btn text-xs font-medium ml-1 ${whitelistedSeason ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="${seasonScope}" data-episode="">${whitelistedSeason ? '✓ Stag' : 'Stag'}</button>
+          ` : ''}
+          <button class="wl-btn text-xs font-medium ml-1 ${whitelistedAll ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="" data-episode="">${whitelistedAll ? '✓ Tutto' : 'Tutto'}</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    document.querySelectorAll('.wl-btn').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const infohash = this.dataset.infohash;
+        const season = this.dataset.season === '' ? null : parseInt(this.dataset.season);
+        const episode = this.dataset.episode === '' ? null : parseInt(this.dataset.episode);
+        await fetch('/api/whitelist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ infohash, imdb_id: currentImdbId, season, episode }),
+        });
+        await loadStreams();
+      });
+    });
+  }
+
+  streamsSection.classList.remove('hidden');
+}
+
+async function doSearch() {
+  const q = searchQuery.value.trim();
+  const type = searchType.value;
+  if (!q) return;
+
+  if (q.startsWith('tt')) {
+    currentImdbId = q;
+    currentType = type;
+    showDetail({ imdb_id: q });
+    if (type === 'movie') {
+      loadStreamsMovieBtn.classList.remove('hidden');
+      loadStreamsMovieBtn.onclick = () => { currentSeason = null; currentEpisode = null; loadStreams(); };
+    } else {
+      detailSeriesControls.classList.remove('hidden');
+      async function loadEpisodes() {
+        const resp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=' + detailSeason.value + '&episode=1');
+        const data = await resp.json();
+        const meta = data.meta;
+        if (meta && meta.videos) {
+          const seasonNum = parseInt(detailSeason.value);
+          const eps = meta.videos.filter(v => v.season === seasonNum && v.episode);
+          detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}</option>`).join('');
+        }
+      }
+      const seasonsResp = await fetch('/api/whitelist/browse?type=' + type + '&id=' + q + '&season=1&episode=1');
+      const seasonsData = await seasonsResp.json();
+      const meta = seasonsData.meta;
+      if (meta && meta.videos) {
+        const seasons = [...new Set(meta.videos.filter(v => v.season).map(v => v.season))].sort((a,b) => a-b);
+        detailSeason.innerHTML = seasons.map(s => `<option value="${s}">Stagione ${s}</option>`).join('');
+        detailSeason.onchange = loadEpisodes;
+        await loadEpisodes();
+      }
+      loadStreamsBtn.onclick = () => { currentSeason = parseInt(detailSeason.value); currentEpisode = parseInt(detailEpisode.value); loadStreams(); };
+    }
+    return;
+  }
+
+  const resp = await fetch('/api/whitelist/search?q=' + encodeURIComponent(q) + '&type=' + type);
+  const results = await resp.json();
+  resultsGrid.innerHTML = '';
+  searchResults.classList.remove('hidden');
+  contentDetail.classList.add('hidden');
+
+  if (results.length === 0) {
+    resultsGrid.innerHTML = '<div class="col-span-full text-center py-8 text-gray-400">Nessun risultato</div>';
+    return;
+  }
+
+  for (const r of results) {
+    const div = document.createElement('div');
+    div.className = 'rounded-lg border bg-white p-3 cursor-pointer hover:shadow-md transition-shadow';
+    div.innerHTML = `
+      <img class="w-full h-40 object-cover rounded bg-gray-100" src="${r.poster || ''}" alt="" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22185%22 height=%22278%22><rect fill=%22%23e5e7eb%22 width=%22185%22 height=%22278%22/></svg>'">
+      <p class="mt-2 text-sm font-medium text-gray-900">${r.title}</p>
+      <p class="text-xs text-gray-500">${r.year || ''}</p>
+    `;
+    div.onclick = () => {
+      searchQuery.value = r.imdb_id;
+      doSearch();
+    };
+    resultsGrid.appendChild(div);
+  }
+}
+
+searchBtn.addEventListener('click', doSearch);
+searchQuery.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+</script>
+{% endblock %}

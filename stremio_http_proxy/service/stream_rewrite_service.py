@@ -2,8 +2,9 @@ from urllib.parse import urlencode, urlparse
 
 from injector import inject
 
-from stremio_http_proxy.helper.hash_helper import extract_infohash
+from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.repository.whitelist_repository import WhitelistRepository
 from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
 
 
@@ -20,6 +21,7 @@ class StreamRewriteService:
         torrent_health_service: TorrentHealthService | None = None,
         torrserver_health_check_enabled: bool = False,
         torrserver_health_check_timeout: int = 15,
+        whitelist_repository: WhitelistRepository | None = None,
     ):
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_manager = cache_manager
@@ -27,6 +29,7 @@ class StreamRewriteService:
         self.torrent_health_service = torrent_health_service
         self.torrserver_health_check_enabled = torrserver_health_check_enabled
         self.torrserver_health_check_timeout = torrserver_health_check_timeout
+        self.whitelist_repository = whitelist_repository
 
     async def rewrite(
         self,
@@ -93,9 +96,39 @@ class StreamRewriteService:
                             updated_meta["seeders"] = seeders
                             entry["_meta"] = updated_meta
 
+        if self.whitelist_repository is not None:
+            imdb_id, season, episode = self._parse_content_id(content_id)
+            if imdb_id:
+                allowed = self.whitelist_repository.get_allowed_infohashes(imdb_id, season, episode)
+                if allowed:
+                    rewritten_streams = [
+                        s for s in rewritten_streams
+                        if self._extract_infohash_from_stream(s) in allowed
+                    ]
+
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams
         return updated_payload
+
+    def _extract_infohash_from_stream(self, stream: dict) -> str | None:
+        link = self._extract_torrent_link(stream)
+        if link is None:
+            return None
+        infohash = extract_infohash(link)
+        if infohash:
+            return normalize_infohash(infohash)
+        return None
+
+    def _parse_content_id(self, content_id: str | None) -> tuple[str | None, int | None, int | None]:
+        if not content_id:
+            return None, None, None
+        parts = content_id.split(":")
+        imdb_id = parts[0]
+        if not imdb_id.startswith("tt"):
+            return None, None, None
+        season = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+        episode = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else None
+        return imdb_id, season, episode
 
     def _mark_healthy(self, stream: dict) -> None:
         name = stream.get("name")

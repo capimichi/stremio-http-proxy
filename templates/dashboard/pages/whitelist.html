@@ -1,0 +1,120 @@
+{% extends "dashboard/components/base.html" %}
+{% set active_page = "whitelist" %}
+{% block title %}Whitelist - Stremio HTTP Proxy{% endblock %}
+{% block page_title %}Whitelist Rules{% endblock %}
+
+{% block content %}
+<div class="rounded-xl border bg-white shadow-sm">
+  <div class="border-b px-5 py-4">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">IMDB ID</label>
+          <input type="text" id="filter-imdb" placeholder="tt..." class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-32 focus:border-indigo-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Infohash</label>
+          <input type="text" id="filter-infohash" placeholder="hash..." class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-48 font-mono focus:border-indigo-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Stagione</label>
+          <input type="number" id="filter-season" placeholder="-" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-20 focus:border-indigo-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-500 mb-1">Episodio</label>
+          <input type="number" id="filter-episode" placeholder="-" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-20 focus:border-indigo-500 focus:outline-none">
+        </div>
+        <div class="flex items-end gap-1">
+          <button id="filter-btn" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Filtra</button>
+          <button id="clear-btn" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancella</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+          <th class="px-5 py-3">ID</th>
+          <th class="px-5 py-3">IMDB ID</th>
+          <th class="px-5 py-3">Infohash</th>
+          <th class="px-5 py-3">Stagione</th>
+          <th class="px-5 py-3">Episodio</th>
+          <th class="px-5 py-3">Creato</th>
+          <th class="px-5 py-3"></th>
+        </tr>
+      </thead>
+      <tbody id="whitelist-tbody" class="divide-y">
+        <tr><td colspan="7" class="px-5 py-8 text-center text-gray-400">Caricamento...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const tbody = document.getElementById('whitelist-tbody');
+const filterImdb = document.getElementById('filter-imdb');
+const filterInfohash = document.getElementById('filter-infohash');
+const filterSeason = document.getElementById('filter-season');
+const filterEpisode = document.getElementById('filter-episode');
+const filterBtn = document.getElementById('filter-btn');
+const clearBtn = document.getElementById('clear-btn');
+
+async function loadRules() {
+  const params = new URLSearchParams();
+  if (filterImdb.value.trim()) params.set('imdb_id', filterImdb.value.trim());
+  if (filterInfohash.value.trim()) params.set('infohash', filterInfohash.value.trim());
+  if (filterSeason.value) params.set('season', filterSeason.value);
+  if (filterEpisode.value) params.set('episode', filterEpisode.value);
+
+  const resp = await fetch('/api/whitelist?' + params.toString());
+  const rules = await resp.json();
+
+  tbody.innerHTML = '';
+  if (rules.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-5 py-8 text-center text-gray-400">Nessuna regola</td></tr>';
+    return;
+  }
+
+  for (const r of rules) {
+    const tr = document.createElement('tr');
+    tr.className = 'border-b';
+    const ts = r.created_at ? new Date(r.created_at * 1000).toLocaleString() : '-';
+    const shortHash = r.infohash.length > 20 ? r.infohash.slice(0, 20) + '…' : r.infohash;
+    tr.innerHTML = `
+      <td class="px-5 py-3 text-gray-500">${r.id}</td>
+      <td class="px-5 py-3 font-medium">${r.imdb_id}</td>
+      <td class="px-5 py-3 font-mono text-xs text-gray-500">${shortHash}</td>
+      <td class="px-5 py-3">${r.season ?? '-'}</td>
+      <td class="px-5 py-3">${r.episode ?? '-'}</td>
+      <td class="px-5 py-3 text-xs text-gray-500">${ts}</td>
+      <td class="px-5 py-3">
+        <button class="delete-btn text-red-600 hover:text-red-800 text-xs font-medium" data-id="${r.id}">Elimina</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      if (!confirm('Eliminare questa regola?')) return;
+      await fetch('/api/whitelist/' + this.dataset.id, { method: 'DELETE' });
+      await loadRules();
+    });
+  });
+}
+
+filterBtn.addEventListener('click', loadRules);
+clearBtn.addEventListener('click', () => {
+  filterImdb.value = '';
+  filterInfohash.value = '';
+  filterSeason.value = '';
+  filterEpisode.value = '';
+  loadRules();
+});
+
+loadRules();
+</script>
+{% endblock %}
