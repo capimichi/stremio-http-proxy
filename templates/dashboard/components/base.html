@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Stremio HTTP Proxy{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors; }
+    .sidebar-link:hover { @apply bg-gray-700 text-white; }
+    .sidebar-link.active { @apply bg-gray-700 text-white; }
+  </style>
+</head>
+<body class="bg-gray-100 antialiased">
+  <div class="flex h-screen overflow-hidden">
+    {% include "dashboard/components/sidebar.html" %}
+    <div class="flex flex-1 flex-col overflow-hidden">
+      {% include "dashboard/components/header.html" %}
+      <main class="flex-1 overflow-y-auto p-6">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

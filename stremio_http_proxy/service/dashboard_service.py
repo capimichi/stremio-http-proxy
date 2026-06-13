@@ -11,8 +11,14 @@ class DashboardService:
         self.cache_manager = cache_manager
         self.public_base_url = public_base_url.rstrip("/")
 
-    def get_download_status(self, page: int = 1, limit: int = 10) -> DownloadStatusResponse:
+    def get_download_status(self, page: int = 1, limit: int = 10, search: str | None = None) -> DownloadStatusResponse:
         entries = self.cache_manager.list_entries()
+        if search:
+            search_lower = search.lower()
+            entries = [
+                (k, e) for k, e in entries
+                if e.title and search_lower in e.title.lower()
+            ]
         total_items = len(entries)
         total_pages = max((total_items + limit - 1) // limit, 1)
         page = min(page, total_pages)
