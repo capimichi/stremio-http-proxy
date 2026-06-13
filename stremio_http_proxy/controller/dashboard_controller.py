@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter, Depends
+from fastapi.responses import HTMLResponse, RedirectResponse
 from injector import inject
-from jinja2 import Environment, FileSystemLoader
 
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
+from stremio_http_proxy.service.dashboard_service import DashboardService
 
 
 class DashboardController:
     @inject
-    def __init__(self, basic_auth_service: BasicAuthService):
+    def __init__(self, dashboard_service: DashboardService, basic_auth_service: BasicAuthService):
+        self.dashboard_service = dashboard_service
         self.basic_auth_service = basic_auth_service
-        self.templates = Jinja2Templates(env=Environment(loader=FileSystemLoader("templates"), cache_size=0))
         self.router = APIRouter(tags=["Dashboard"])
         self._register_routes()
 
@@ -29,8 +28,8 @@ class DashboardController:
     async def redirect_to_dashboard(self) -> RedirectResponse:
         return RedirectResponse(url="/dashboard/index")
 
-    async def dashboard_index(self, request: Request):
-        return self.templates.TemplateResponse("dashboard/pages/index.html", {"request": request})
+    async def dashboard_index(self) -> HTMLResponse:
+        return HTMLResponse(self.dashboard_service.get_index_html())
 
-    async def cache_items(self, request: Request):
-        return self.templates.TemplateResponse("dashboard/pages/cache_items.html", {"request": request})
+    async def cache_items(self) -> HTMLResponse:
+        return HTMLResponse(self.dashboard_service.get_cache_items_html())

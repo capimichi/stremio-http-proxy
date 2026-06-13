@@ -10,6 +10,7 @@ from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
+from stremio_http_proxy.manager.jinja_manager import JinjaManager
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
@@ -77,6 +78,7 @@ class DefaultContainer:
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
+        self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
         if not self.app_secret or not self.app_secret.strip():
             raise ValueError("APP_SECRET environment variable is required")
 
@@ -123,7 +125,8 @@ class DefaultContainer:
             self.next_episode_prefetch_enabled,
             self.next_episode_prefetch_stream_limit,
         )
-        dashboard_service = DashboardService(cache_manager, self.public_base_url)
+        jinja_manager = JinjaManager(self.template_dir)
+        dashboard_service = DashboardService(cache_manager, self.public_base_url, jinja_manager)
         download_worker_service = DownloadWorkerService(
             torrserver_client,
             cache_manager,
@@ -151,4 +154,5 @@ class DefaultContainer:
         self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
+        self.injector.binder.bind(JinjaManager, to=jinja_manager)
         self.injector.binder.bind(ServeCommand, to=serve_command)

@@ -2,14 +2,22 @@ from injector import inject
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.manager.jinja_manager import JinjaManager
 from stremio_http_proxy.model.download_status import DownloadStatus, DownloadStatusResponse
 
 
 class DashboardService:
     @inject
-    def __init__(self, cache_manager: CacheManager, public_base_url: str):
+    def __init__(self, cache_manager: CacheManager, public_base_url: str, jinja_manager: JinjaManager):
         self.cache_manager = cache_manager
         self.public_base_url = public_base_url.rstrip("/")
+        self.jinja_manager = jinja_manager
+
+    def get_index_html(self) -> str:
+        return self.jinja_manager.render("dashboard/pages/index.html")
+
+    def get_cache_items_html(self) -> str:
+        return self.jinja_manager.render("dashboard/pages/cache_items.html")
 
     def get_download_status(self, page: int = 1, limit: int = 10, search: str | None = None) -> DownloadStatusResponse:
         entries = self.cache_manager.list_entries()
