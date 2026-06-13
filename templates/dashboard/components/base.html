@@ -6,9 +6,22 @@
   <title>{% block title %}Stremio HTTP Proxy{% endblock %}</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .sidebar-link { @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors; }
-    .sidebar-link:hover { @apply bg-gray-700 text-white; }
-    .sidebar-link.active { @apply bg-gray-700 text-white; }
+    .sidebar-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 8px;
+      transition: background 0.15s, color 0.15s;
+      line-height: 1;
+      color: #d1d5db;
+      text-decoration: none;
+    }
+    .sidebar-link:hover { background: #374151; color: #fff; }
+    .sidebar-link.active { background: #374151; color: #fff; }
+    .sidebar-link svg { display: block; flex-shrink: 0; }
   </style>
 </head>
 <body class="bg-gray-100 antialiased">
