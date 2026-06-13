@@ -18,22 +18,15 @@
     <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-cache-size">-</p>
   </div>
   <div class="rounded-xl border bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-gray-500">Stati</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-status-counts">-</p>
+    <p class="text-sm font-medium text-gray-500">Pronti</p>
+    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-ready-count">-</p>
   </div>
 </div>
 
-<div class="mt-6 rounded-xl border bg-white p-5 shadow-sm">
-  <div class="flex items-center justify-between">
-    <h2 class="text-base font-semibold text-gray-900">Download in corso</h2>
-    <div class="flex items-center gap-2" id="downloads-pagination">
-      <button id="prev-page" class="rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled>Precedente</button>
-      <span id="page-info" class="text-sm text-gray-500">Pagina 1</span>
-      <button id="next-page" class="rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Successiva</button>
-    </div>
-  </div>
-  <div class="mt-4 space-y-3" id="downloads-list">
-    <p class="text-sm text-gray-400">Caricamento...</p>
+<div class="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4" id="extra-cards">
+  <div class="rounded-xl border bg-white p-5 shadow-sm">
+    <p class="text-sm font-medium text-gray-500">In elaborazione</p>
+    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-pending-count">-</p>
   </div>
 </div>
 {% endblock %}
