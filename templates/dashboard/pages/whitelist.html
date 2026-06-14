@@ -36,6 +36,7 @@
       <thead>
         <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
           <th class="px-5 py-3">ID</th>
+          <th class="px-5 py-3">Media</th>
           <th class="px-5 py-3">IMDB ID</th>
           <th class="px-5 py-3">Infohash</th>
           <th class="px-5 py-3">Stagione</th>
@@ -45,7 +46,7 @@
         </tr>
       </thead>
       <tbody id="whitelist-tbody" class="divide-y">
-        <tr><td colspan="7" class="px-5 py-8 text-center text-gray-400">Caricamento...</td></tr>
+        <tr><td colspan="8" class="px-5 py-8 text-center text-gray-400">Caricamento...</td></tr>
       </tbody>
     </table>
   </div>
@@ -74,7 +75,7 @@ async function loadRules() {
 
   tbody.innerHTML = '';
   if (rules.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="px-5 py-8 text-center text-gray-400">Nessuna regola</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="px-5 py-8 text-center text-gray-400">Nessuna regola</td></tr>';
     return;
   }
 
@@ -83,9 +84,12 @@ async function loadRules() {
     tr.className = 'border-b';
     const ts = r.created_at ? new Date(r.created_at * 1000).toLocaleString() : '-';
     const shortHash = r.infohash.length > 20 ? r.infohash.slice(0, 20) + '…' : r.infohash;
+    const mediaLabel = r.media_title || r.imdb_id;
+    const scopeLabel = r.season != null ? (r.episode != null ? `(S${r.season} E${r.episode})` : `(S${r.season})`) : '';
     tr.innerHTML = `
       <td class="px-5 py-3 text-gray-500">${r.id}</td>
-      <td class="px-5 py-3 font-medium">${r.imdb_id}</td>
+      <td class="px-5 py-3 font-medium">${mediaLabel} <span class="text-xs text-gray-400">${scopeLabel}</span></td>
+      <td class="px-5 py-3 text-gray-500">${r.imdb_id}</td>
       <td class="px-5 py-3 font-mono text-xs text-gray-500">${shortHash}</td>
       <td class="px-5 py-3">${r.season ?? '-'}</td>
       <td class="px-5 py-3">${r.episode ?? '-'}</td>

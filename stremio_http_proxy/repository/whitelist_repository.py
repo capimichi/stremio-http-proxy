@@ -16,6 +16,7 @@ class WhitelistRepository:
         self,
         infohash: str,
         imdb_id: str,
+        media_title: str | None = None,
         season: int | None = None,
         episode: int | None = None,
     ) -> WhitelistEntry:
@@ -23,6 +24,7 @@ class WhitelistRepository:
             entry = WhitelistEntry(
                 infohash=infohash,
                 imdb_id=imdb_id,
+                media_title=media_title,
                 season=season,
                 episode=episode,
                 created_at=time.time(),
@@ -53,7 +55,8 @@ class WhitelistRepository:
             if search is not None:
                 like = f"%{search.lower()}%"
                 query = query.where(
-                    WhitelistEntry.imdb_id.ilike(like)
+                    WhitelistEntry.imdb_id.ilike(like) |
+                    WhitelistEntry.media_title.ilike(like)
                 )
             if season is not None:
                 query = query.where(WhitelistEntry.season == season)

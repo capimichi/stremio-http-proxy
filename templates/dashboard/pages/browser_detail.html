@@ -123,35 +123,87 @@ async function loadStreams(season, episode) {
       const whitelistedEpisode = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === episodeScope);
       const whitelistedSeason = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === null);
       const whitelistedAll = currentWhitelist.some(w => w.infohash === infohash && w.season === null && w.episode === null);
+      const anyWhitelisted = whitelistedEpisode || whitelistedSeason || whitelistedAll;
 
       tr.innerHTML = `
         <td class="px-4 py-2" title="${(s.title || s.name || '').replace(/"/g, '&quot;')}">${cached} ${s.name || s.title || ''}</td>
         <td class="px-4 py-2 font-mono text-xs text-gray-500">${shortHash}</td>
         <td class="px-4 py-2">${seeders}</td>
         <td class="px-4 py-2">
-          <a href="${playUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800 text-xs font-medium mr-2">Play</a>
-          ${mediaType === 'series' ? `
-            <button class="wl-btn text-xs font-medium ${whitelistedEpisode ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="${seasonScope}" data-episode="${episodeScope}">${whitelistedEpisode ? '✓ Ep' : 'Ep'}</button>
-            <button class="wl-btn text-xs font-medium ml-1 ${whitelistedSeason ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="${seasonScope}" data-episode="">${whitelistedSeason ? '✓ Stag' : 'Stag'}</button>
-          ` : ''}
-          <button class="wl-btn text-xs font-medium ml-1 ${whitelistedAll ? 'text-green-600' : 'text-gray-600 hover:text-indigo-800'}" data-infohash="${infohash}" data-season="" data-episode="">${whitelistedAll ? '✓ Tutto' : 'Tutto'}</button>
+          <div class="flex items-center gap-2">
+            <a href="${playUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800" title="Play"><i class="fa-solid fa-play"></i></a>
+            <div class="relative wl-dropdown-container">
+              <button class="wl-toggle text-sm ${anyWhitelisted ? 'text-green-600' : 'text-gray-400 hover:text-indigo-600'}" title="Whitelist">
+                <i class="fa-solid fa-bookmark"></i>
+              </button>
+              <div class="wl-menu hidden absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+                <button class="wl-item flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-gray-50" data-scope="all" data-infohash="${infohash}">
+                  ${whitelistedAll ? '<i class="fa-solid fa-check text-green-600 w-4"></i>' : '<span class="w-4"></span>'}
+                  Intero Media
+                </button>
+                ${mediaType === 'series' ? `
+                  <button class="wl-item flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-gray-50" data-scope="season" data-infohash="${infohash}">
+                    ${whitelistedSeason ? '<i class="fa-solid fa-check text-green-600 w-4"></i>' : '<span class="w-4"></span>'}
+                    Intera Stagione
+                  </button>
+                  <button class="wl-item flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-gray-50" data-scope="episode" data-infohash="${infohash}">
+                    ${whitelistedEpisode ? '<i class="fa-solid fa-check text-green-600 w-4"></i>' : '<span class="w-4"></span>'}
+                    Singolo Episodio
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
         </td>
       `;
       tbody.appendChild(tr);
     }
 
-    document.querySelectorAll('.wl-btn').forEach(btn => {
+    document.addEventListener('click', function closeWlMenu(e) {
+      document.querySelectorAll('.wl-menu:not(.hidden)').forEach(menu => {
+        if (!menu.closest('.wl-dropdown-container')?.contains(e.target)) {
+          menu.classList.add('hidden');
+        }
+      });
+    });
+
+    document.querySelectorAll('.wl-toggle').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const menu = this.closest('.wl-dropdown-container').querySelector('.wl-menu');
+        menu.classList.toggle('hidden');
+      });
+    });
+
+    document.querySelectorAll('.wl-item').forEach(btn => {
       btn.addEventListener('click', async function() {
+        const container = this.closest('.wl-dropdown-container');
+        const toggle = container.querySelector('.wl-toggle');
         const infohash = this.dataset.infohash;
-        const seasonVal = this.dataset.season === '' ? null : parseInt(this.dataset.season);
-        const episodeVal = this.dataset.episode === '' ? null : parseInt(this.dataset.episode);
+        const scope = this.dataset.scope;
+        const currentSeason = mediaType === 'series' ? parseInt(detailSeason.value) : null;
+        const currentEpisode = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
+
+        let seasonVal, episodeVal;
+        if (scope === 'all') {
+          seasonVal = null;
+          episodeVal = null;
+        } else if (scope === 'season') {
+          seasonVal = currentSeason;
+          episodeVal = null;
+        } else {
+          seasonVal = currentSeason;
+          episodeVal = currentEpisode;
+        }
+
+        const title = detailTitle.textContent;
+
         await fetch('/api/whitelist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ infohash, imdb_id: imdbId, season: seasonVal, episode: episodeVal }),
+          body: JSON.stringify({ infohash, imdb_id: imdbId, media_title: title, season: seasonVal, episode: episodeVal }),
         });
-        const currentSeason = mediaType === 'series' ? parseInt(detailSeason.value) : null;
-        const currentEpisode = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
+        container.querySelector('.wl-menu').classList.add('hidden');
         await loadStreams(currentSeason, currentEpisode);
       });
     });

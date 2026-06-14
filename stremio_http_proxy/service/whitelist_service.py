@@ -18,6 +18,7 @@ class WhitelistService:
             {
                 "id": r.id,
                 "infohash": r.infohash,
+                "media_title": r.media_title,
                 "season": r.season,
                 "episode": r.episode,
             }
@@ -28,12 +29,14 @@ class WhitelistService:
         self,
         infohash: str,
         imdb_id: str,
+        media_title: str | None = None,
         season: int | None = None,
         episode: int | None = None,
     ) -> WhitelistEntry:
         return self.whitelist_repository.add_entry(
             infohash=infohash,
             imdb_id=imdb_id,
+            media_title=media_title,
             season=season,
             episode=episode,
         )
@@ -61,6 +64,7 @@ class WhitelistService:
                 "id": e.id,
                 "infohash": e.infohash,
                 "imdb_id": e.imdb_id,
+                "media_title": e.media_title,
                 "season": e.season,
                 "episode": e.episode,
                 "created_at": e.created_at,

@@ -11,6 +11,7 @@ from stremio_http_proxy.service.whitelist_service import WhitelistService
 class AddWhitelistRequest(BaseModel):
     infohash: str
     imdb_id: str
+    media_title: str | None = None
     season: int | None = None
     episode: int | None = None
 
@@ -65,10 +66,11 @@ class WhitelistController:
         entry = self.whitelist_service.add_to_whitelist(
             infohash=body.infohash,
             imdb_id=body.imdb_id,
+            media_title=body.media_title,
             season=body.season,
             episode=body.episode,
         )
-        return {"id": entry.id, "infohash": entry.infohash, "imdb_id": entry.imdb_id, "season": entry.season, "episode": entry.episode}
+        return {"id": entry.id, "infohash": entry.infohash, "imdb_id": entry.imdb_id, "media_title": entry.media_title, "season": entry.season, "episode": entry.episode}
 
     async def remove_whitelist(self, entry_id: int) -> dict:
         ok = self.whitelist_service.remove_from_whitelist(entry_id)
