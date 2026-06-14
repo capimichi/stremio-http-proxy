@@ -160,15 +160,29 @@ async function loadStreams(season, episode) {
   streamsSection.classList.remove('hidden');
 }
 
+async function loadMeta() {
+  const resp = await fetch('/api/browser/content?type=' + mediaType + '&id=' + imdbId);
+  const data = await resp.json();
+  const meta = data.meta;
+  if (meta) {
+    detailPoster.src = meta.poster || meta.background || '';
+    detailTitle.textContent = meta.name || meta.title || '';
+  }
+  return data;
+}
+
 async function init() {
   detailImdb.textContent = 'IMDB: ' + imdbId;
   detailStremioLink.href = buildStremioUrl(mediaType, imdbId);
+
+  const data = await loadMeta();
 
   if (mediaType === 'movie') {
     loadStreamsMovieBtn.classList.remove('hidden');
     loadStreamsMovieBtn.onclick = () => loadStreams(null, null);
   } else {
     detailSeriesControls.classList.remove('hidden');
+    const meta = data.meta;
     async function loadEpisodes() {
       const seasonVal = detailSeason.value;
       const params = new URLSearchParams({ type: 'series', id: imdbId, season: seasonVal, episode: '1' });
@@ -180,13 +194,6 @@ async function init() {
         const eps = meta.videos.filter(v => v.season === seasonNum && v.episode);
         detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}</option>`).join('');
       }
-    }
-    const seasonsResp = await fetch('/api/browser/content?type=series&id=' + imdbId);
-    const seasonsData = await seasonsResp.json();
-    const meta = seasonsData.meta;
-    if (meta) {
-      detailPoster.src = meta.poster || meta.background || '';
-      detailTitle.textContent = meta.name || meta.title || '';
     }
     if (meta && meta.videos) {
       const seasons = [...new Set(meta.videos.filter(v => v.season).map(v => v.season))].sort((a,b) => a-b);
