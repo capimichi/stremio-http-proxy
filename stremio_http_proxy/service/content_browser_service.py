@@ -52,6 +52,7 @@ class ContentBrowserService:
             streams.append({
                 "name": s.get("name"),
                 "title": s.get("title"),
+                "description": s.get("description"),
                 "infohash": infohash,
                 "url": s.get("url"),
                 "meta": s.get("_meta"),

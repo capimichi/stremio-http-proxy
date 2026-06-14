@@ -43,6 +43,7 @@
             <thead>
               <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 <th class="px-4 py-2">Nome</th>
+                <th class="px-4 py-2">Descrizione</th>
                 <th class="px-4 py-2">Infohash</th>
                 <th class="px-4 py-2">Seeders</th>
                 <th class="px-4 py-2">Azioni</th>
@@ -105,7 +106,7 @@ async function loadStreams(season, episode) {
   tbody.innerHTML = '';
   const streams = data.streams || [];
   if (streams.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Nessuno stream disponibile</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Nessuno stream disponibile</td></tr>';
   } else {
     for (const s of streams) {
       const tr = document.createElement('tr');
@@ -127,6 +128,7 @@ async function loadStreams(season, episode) {
 
       tr.innerHTML = `
         <td class="px-4 py-2" title="${(s.title || s.name || '').replace(/"/g, '&quot;')}">${cached} ${s.name || s.title || ''}</td>
+        <td class="px-4 py-2 max-w-[300px] truncate" title="${(s.description || '').replace(/"/g, '&quot;')}">${s.description || ''}</td>
         <td class="px-4 py-2 font-mono text-xs text-gray-500">${shortHash}</td>
         <td class="px-4 py-2">${seeders}</td>
         <td class="px-4 py-2">
