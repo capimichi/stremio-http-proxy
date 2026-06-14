@@ -53,3 +53,55 @@ class TMDBClient:
             if response.status_code != 200:
                 return None
             return response.json().get("imdb_id")
+
+    async def get_meta_by_imdb_id(self, imdb_id: str, media_type: str, season: int | None = None) -> dict:
+        if not self.is_available():
+            return {}
+
+        tmdb_type = "tv" if media_type == "series" else "movie"
+        url = urljoin(self.BASE_URL + "/", f"find/{imdb_id}")
+        params = {"api_key": self.api_key, "external_source": "imdb_id", "language": "it-IT"}
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                return {}
+            data = resp.json()
+            results = data.get(f"{tmdb_type}_results", [])
+            if not results:
+                return {}
+            tmdb_id = results[0]["id"]
+
+            detail_url = urljoin(self.BASE_URL + "/", f"{tmdb_type}/{tmdb_id}")
+            detail_params = {"api_key": self.api_key, "language": "it-IT"}
+            detail_resp = await client.get(detail_url, params=detail_params)
+            if detail_resp.status_code != 200:
+                return {}
+            detail = detail_resp.json()
+
+            meta = {
+                "name": detail.get("title") or detail.get("name"),
+                "poster": f"https://image.tmdb.org/t/p/w500{detail['poster_path']}" if detail.get("poster_path") else None,
+                "background": f"https://image.tmdb.org/t/p/w1280{detail['backdrop_path']}" if detail.get("backdrop_path") else None,
+                "videos": [],
+            }
+
+            if media_type == "series":
+                for s in detail.get("seasons", []):
+                    season_number = s.get("season_number")
+                    if season_number is not None and season_number > 0:
+                        meta["videos"].append({"season": season_number})
+
+                if season is not None:
+                    season_url = urljoin(self.BASE_URL + "/", f"tv/{tmdb_id}/season/{season}")
+                    season_resp = await client.get(season_url, params=detail_params)
+                    if season_resp.status_code == 200:
+                        season_data = season_resp.json()
+                        for ep in season_data.get("episodes", []):
+                            meta["videos"].append({
+                                "season": season,
+                                "episode": ep.get("episode_number"),
+                                "title": ep.get("name"),
+                            })
+
+            return meta

@@ -28,11 +28,14 @@ class ContentBrowserService:
         tmdb_type = "tv" if content_type == "series" else content_type
         return await self.tmdb_client.get_imdb_id(tmdb_id, tmdb_type)
 
-    async def browse_content(self, content_type: str, content_id: str) -> dict:
-        stream_path = f"/stream/{content_type}/{content_id}.json"
-        meta_path = f"/meta/{content_type}/{content_id}.json"
+    async def browse_content(self, content_type: str, content_id: str, season: int | None = None, episode: int | None = None) -> dict:
+        stream_id = content_id
+        if content_type == "series" and season is not None and episode is not None:
+            stream_id = f"{content_id}:{season}:{episode}"
 
-        meta_payload = await self.upstream_client.get_json(meta_path)
+        stream_path = f"/stream/{content_type}/{stream_id}.json"
+
+        meta_payload = await self.tmdb_client.get_meta_by_imdb_id(content_id, content_type, season)
 
         stream_payload = await self.stream_rewrite_service.rewrite(
             await self.upstream_client.get_json(stream_path),

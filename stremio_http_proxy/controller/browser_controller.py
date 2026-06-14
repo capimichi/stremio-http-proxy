@@ -51,8 +51,8 @@ class BrowserController:
         imdb_id = await self.content_browser_service.resolve_content(tmdb_id, type)
         return {"imdb_id": imdb_id}
 
-    async def browse_content(self, type: str, id: str) -> dict:
-        data = await self.content_browser_service.browse_content(type, id)
+    async def browse_content(self, type: str, id: str, season: int | None = None, episode: int | None = None) -> dict:
+        data = await self.content_browser_service.browse_content(type, id, season, episode)
         whitelist = self.whitelist_service.get_whitelist_for_content(id)
         data["whitelist"] = whitelist
         return data
