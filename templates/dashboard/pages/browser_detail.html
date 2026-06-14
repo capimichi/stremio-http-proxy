@@ -125,7 +125,7 @@ async function loadStreams(season, episode) {
       const whitelistedAll = currentWhitelist.some(w => w.infohash === infohash && w.season === null && w.episode === null);
 
       tr.innerHTML = `
-        <td class="px-4 py-2">${cached} ${s.name || s.title || ''}</td>
+        <td class="px-4 py-2" title="${(s.title || s.name || '').replace(/"/g, '&quot;')}">${cached} ${s.name || s.title || ''}</td>
         <td class="px-4 py-2 font-mono text-xs text-gray-500">${shortHash}</td>
         <td class="px-4 py-2">${seeders}</td>
         <td class="px-4 py-2">
