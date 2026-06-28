@@ -145,6 +145,13 @@ class DownloadWorkerService:
                     downloaded_bytes / max(time.time() - started_at, 0.001),
                 )
 
+        min_size_bytes = self.cache_manager.get_min_cache_size()
+        if downloaded_bytes < min_size_bytes:
+            raise RuntimeError(
+                f"Download rifiutato: il file è troppo piccolo ({downloaded_bytes} byte). "
+                f"Soglia minima: {min_size_bytes} byte."
+            )
+
         size_bytes = self.cache_manager.finalize_download(job.cache_key)
         self.cache_manager.mark_ready(job.cache_key, size_bytes)
         self.logger.info("Worker %s completed job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)

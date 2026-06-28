@@ -60,9 +60,20 @@ class CacheManager:
             return CacheEntryModel(file_path=str(media_path), tmp_path=str(tmp_path))
         return self._to_model(record)
 
+    def get_min_cache_size(self) -> int:
+        return 10 * 1024 * 1024
+
     def is_ready(self, cache_key: str) -> bool:
         entry = self.get_entry(cache_key)
-        return entry.status == CacheEntryStatusEnum.READY and Path(entry.file_path).exists()
+
+        if entry.status != CacheEntryStatusEnum.READY:
+            return False
+
+        min_size_bytes = self.get_min_cache_size()
+        if entry.size_bytes is None or entry.size_bytes < min_size_bytes:
+            return False
+
+        return Path(entry.file_path).exists()
 
     def mark_downloading(self, cache_key: str, attempt: int = 0) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
