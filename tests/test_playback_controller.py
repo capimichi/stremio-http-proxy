@@ -17,6 +17,16 @@ class FakeTorrServerClient:
     async def preload(self, link: str, title=None, poster=None, category=None, index=None) -> None:
         self.preloaded.append((link, title, poster, category, index))
 
+    async def add_and_get_status(self, link: str, timeout=None) -> dict:
+        return {
+            "hash": "abc",
+            "file_stats": [
+                {"id": 1, "path": "Show S01E01.mkv"},
+                {"id": 2, "path": "Show S01E02.mkv"},
+                {"id": 3, "path": "Show S01E03.srt"},
+            ]
+        }
+
     def build_play_url(self, link: str, title=None, poster=None, category=None, index=None) -> str:
         return f"http://localhost:8090/stream?link={link}&play=true&index={index}"
 
@@ -154,3 +164,20 @@ def test_playback_controller_redirects_to_signed_torrserver_url_when_cache_not_r
     assert response.status_code == 307
     assert parsed.path == "/stream"
     assert params["play"] == ["true"]
+
+
+def test_playback_controller_resolves_missing_series_index(tmp_path):
+    controller = build_controller(tmp_path)
+
+    response = asyncio.run(
+        controller.play(
+            link="magnet:?xt=urn:btih:abc",
+            content_type="series",
+            content_id="tt7587890:1:2",
+        )
+    )
+
+    assert response.status_code == 307
+    parsed = urlparse(response.headers["location"])
+    params = parse_qs(parsed.query)
+    assert params["index"] == ["2"]
