@@ -249,3 +249,38 @@ async def test_health_check_skipped_when_disabled():
     rewritten = await service.rewrite(payload, category="tv")
 
     assert rewritten["streams"][0]["name"] == "Stream A"
+
+
+def test_extract_download_candidates_filters_non_video_streams():
+    service = StreamRewriteService("http://localhost:8691", FakeCacheManager())
+    payload = {
+        "streams": [
+            {
+                "name": "Stream 1",
+                "title": "Episode 1.mp4",
+                "magnet": "magnet:?xt=urn:btih:ABC",
+            },
+            {
+                "name": "Stream 2",
+                "behaviorHints": {"filename": "Episode 1.srt"},
+                "magnet": "magnet:?xt=urn:btih:DEF",
+            },
+            {
+                "name": "Stream 3",
+                "title": "Episode 1.avi",
+                "magnet": "magnet:?xt=urn:btih:GHI",
+            },
+            {
+                "name": "Stream 4",
+                "description": "Episode 1.txt\nSome size info",
+                "magnet": "magnet:?xt=urn:btih:JKL",
+            },
+        ]
+    }
+
+    candidates = service.extract_download_candidates(payload)
+
+    # Stream 2 (.srt) and Stream 4 (.txt) should be filtered out
+    assert len(candidates) == 2
+    assert candidates[0]["link"] == "magnet:?xt=urn:btih:ABC"
+    assert candidates[1]["link"] == "magnet:?xt=urn:btih:GHI"

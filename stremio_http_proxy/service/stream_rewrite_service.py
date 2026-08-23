@@ -1,4 +1,5 @@
 from urllib.parse import urlencode, urlparse
+import os
 
 from injector import inject
 
@@ -165,9 +166,26 @@ class StreamRewriteService:
             return []
 
         candidates = []
+        excluded_extensions = {".srt", ".txt", ".nfo", ".jpg", ".png", ".jpeg", ".pdf", ".zip", ".rar", ".html"}
         for stream in streams:
             if not isinstance(stream, dict):
                 continue
+
+            # Exclude known non-video file extensions from candidate list
+            filename = None
+            behavior_hints = stream.get("behaviorHints")
+            if isinstance(behavior_hints, dict):
+                filename = behavior_hints.get("filename")
+            
+            if not filename:
+                filename = stream.get("title") or stream.get("description")
+                
+            if isinstance(filename, str):
+                name_to_check = filename.split("\n")[0].strip()
+                _, ext = os.path.splitext(name_to_check.lower())
+                if ext in excluded_extensions or any(name_to_check.lower().endswith(ex) for ex in excluded_extensions):
+                    continue
+
             torrent_link = self._extract_torrent_link(stream)
             if torrent_link is None:
                 continue
