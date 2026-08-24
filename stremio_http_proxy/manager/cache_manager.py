@@ -483,3 +483,21 @@ class CacheManager:
         record.claimed_by = entry.claimed_by
         record.processing_expires_at = entry.processing_expires_at
         record.last_error = entry.last_error
+
+    def is_content_ready(self, infohash: str, content_id: str | None) -> bool:
+        if not content_id:
+            return False
+        normalized = normalize_infohash(infohash)
+        if not normalized:
+            return False
+        with self.db_manager.session() as session:
+            records = session.scalars(
+                select(CacheEntryRecord)
+                .where(CacheEntryRecord.infohash == normalized)
+                .where(CacheEntryRecord.content_id == content_id)
+                .where(CacheEntryRecord.status == CacheEntryStatusEnum.READY)
+            ).all()
+        for r in records:
+            if Path(r.file_path).exists():
+                return True
+        return False

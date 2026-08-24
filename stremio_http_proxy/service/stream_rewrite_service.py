@@ -58,7 +58,7 @@ class StreamRewriteService:
             title = self._extract_title(updated)
             poster = self._extract_poster(updated)
             index = self._extract_index(updated)
-            self._mark_cached_if_ready(updated, torrent_link, index)
+            self._mark_cached_if_ready(updated, torrent_link, index, content_id)
             updated["url"] = self._build_playback_url(
                 torrent_link,
                 title,
@@ -142,11 +142,27 @@ class StreamRewriteService:
         elif not name.startswith(self.HEALTHY_NAME_PREFIX):
             stream["name"] = f"{self.HEALTHY_NAME_PREFIX}{name}"
 
-    def _mark_cached_if_ready(self, stream: dict, torrent_link: str, index: int | None) -> None:
+    def _mark_cached_if_ready(
+        self,
+        stream: dict,
+        torrent_link: str,
+        index: int | None,
+        content_id: str | None = None,
+    ) -> None:
         if not self.cache_enabled:
             return
+
+        infohash = extract_infohash(torrent_link)
+        normalized = normalize_infohash(infohash) if infohash else None
+
         cache_key = self.cache_manager.build_cache_key(torrent_link, index)
-        if cache_key is None or not self.cache_manager.is_ready(cache_key):
+        is_ready = False
+        if cache_key is not None and self.cache_manager.is_ready(cache_key):
+            is_ready = True
+        elif normalized and content_id and self.cache_manager.is_content_ready(normalized, content_id):
+            is_ready = True
+
+        if not is_ready:
             return
 
         meta = stream.get("_meta")

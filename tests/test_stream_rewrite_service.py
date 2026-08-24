@@ -4,14 +4,18 @@ from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteServi
 
 
 class FakeCacheManager:
-    def __init__(self, ready_cache_keys: set[str] | None = None):
+    def __init__(self, ready_cache_keys: set[str] | None = None, ready_contents: set[tuple[str, str]] | None = None):
         self.ready_cache_keys = ready_cache_keys or set()
+        self.ready_contents = ready_contents or set()
 
     def build_cache_key(self, link: str, index: int | None = None) -> str:
         return f"{link}:{index or 0}"
 
     def is_ready(self, cache_key: str) -> bool:
         return cache_key in self.ready_cache_keys
+
+    def is_content_ready(self, infohash: str, content_id: str | None) -> bool:
+        return (infohash.lower(), content_id) in self.ready_contents
 
 
 class FakeTorrentHealthService:
@@ -284,3 +288,27 @@ def test_extract_download_candidates_filters_non_video_streams():
     assert len(candidates) == 2
     assert candidates[0]["link"] == "magnet:?xt=urn:btih:ABC"
     assert candidates[1]["link"] == "magnet:?xt=urn:btih:GHI"
+
+
+@pytest.mark.asyncio
+async def test_stream_rewrite_marks_cached_stream_using_content_id_fallback_when_index_is_none():
+    infohash = "abcdef1234567890abcdef1234567890abcdef12"
+    magnet = f"magnet:?xt=urn:btih:{infohash}"
+    fake_cache = FakeCacheManager(ready_contents={(infohash, "tt987:1:1")})
+    service = StreamRewriteService("http://localhost:8691", fake_cache)
+    payload = {
+        "streams": [
+            {
+                "name": "Corsaro Viola 1080p",
+                "title": "demo",
+                "magnet": magnet,
+                "fileIdx": None,
+                "_meta": {"cached": False},
+            }
+        ]
+    }
+
+    rewritten = await service.rewrite(payload, category="tv", content_type="series", content_id="tt987:1:1")
+
+    assert rewritten["streams"][0]["_meta"]["cached"] is True
+    assert rewritten["streams"][0]["name"] == "🔥 Corsaro Viola 1080p"
