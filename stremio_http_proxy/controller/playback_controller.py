@@ -1,9 +1,11 @@
 import asyncio
 import os
 import re
+import urllib.parse
 
+import httpx
 from fastapi import APIRouter
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from injector import inject
 
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
@@ -31,7 +33,76 @@ class PlaybackController:
         self._in_flight_requests: set[tuple[str, int | None]] = set()
         self.router = APIRouter(tags=["Playback"])
         self.router.add_api_route("/play", self.play, methods=["GET"])
-        self.router.add_api_route("/play/manifest.m3u8", self.play, methods=["GET"])
+        self.router.add_api_route("/play/manifest.m3u8", self.play_manifest, methods=["GET"])
+
+    async def play_manifest(
+        self,
+        link: str,
+        title: str | None = None,
+        poster: str | None = None,
+        category: str | None = None,
+        index: int | None = None,
+        content_type: str | None = None,
+        content_id: str | None = None,
+    ) -> Response:
+        cached_route = self.cache_service.get_cached_route(link, index)
+        if cached_route is not None:
+            return RedirectResponse(url=cached_route, status_code=307)
+
+        if link.startswith(("http://", "https://")):
+            self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
+            cleaned = await self._fetch_and_clean_manifest(link)
+            if cleaned is not None:
+                return Response(
+                    content=cleaned,
+                    media_type="application/vnd.apple.mpegurl",
+                    headers={
+                        "Access-Control-Allow-Origin": "*",
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
+                    },
+                )
+            return RedirectResponse(url=link, status_code=307)
+
+        return await self.play(link, title, poster, category, index, content_type, content_id)
+
+    async def _fetch_and_clean_manifest(self, link: str) -> str | None:
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                resp = await client.get(link)
+                if resp.status_code != 200:
+                    self.logger.warning(f"Failed to fetch manifest from {link}: status {resp.status_code}")
+                    return None
+                return self._clean_hls_manifest(resp.text, str(resp.url))
+        except Exception:
+            self.logger.exception(f"Exception fetching manifest from {link}")
+            return None
+
+    @staticmethod
+    def _clean_hls_manifest(content: str, base_url: str) -> str:
+        lines = content.splitlines()
+        clean_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if "TYPE=SUBTITLES" in stripped:
+                continue
+            if stripped.startswith("#EXT-X-STREAM-INF"):
+                stripped = re.sub(r',?SUBTITLES="[^"]*"', "", stripped)
+            if not stripped.startswith("#"):
+                stripped = urllib.parse.urljoin(base_url, stripped)
+                if stripped.startswith("http://") and base_url.startswith("https://"):
+                    stripped = "https://" + stripped[7:]
+            elif 'URI="' in stripped:
+                def fix_uri(match: re.Match) -> str:
+                    uri = match.group(1)
+                    abs_uri = urllib.parse.urljoin(base_url, uri)
+                    if abs_uri.startswith("http://") and base_url.startswith("https://"):
+                        abs_uri = "https://" + abs_uri[7:]
+                    return f'URI="{abs_uri}"'
+                stripped = re.sub(r'URI="([^"]+)"', fix_uri, stripped)
+            clean_lines.append(stripped)
+        return "\n".join(clean_lines) + "\n"
 
     async def play(
         self,

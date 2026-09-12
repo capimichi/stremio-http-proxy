@@ -202,7 +202,7 @@ async def test_e2e_toastflix_mediaflow_flow(tmp_path, monkeypatch):
     stream_2 = rewritten_2["streams"][0]
     assert stream_2["name"].startswith("🔥")
     parsed_play_url_2 = urlparse(stream_2["url"])
-    assert parsed_play_url_2.path == "/play/manifest.m3u8"
+    assert parsed_play_url_2.path == "/play"
 
     # Step 5: Stremio plays the cached stream via /play
     play_cached_response = await playback_controller.play(

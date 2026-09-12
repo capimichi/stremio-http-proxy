@@ -206,3 +206,71 @@ def test_playback_controller_handles_http_streams_immediately(tmp_path):
         assert controller.download_queue_service.calls[0][0][0] == http_link
 
     asyncio.run(main())
+
+
+def test_clean_hls_manifest():
+    raw_manifest = """#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,AUDIO="audio",SUBTITLES="subs"
+http://mediaflow.example.com/video_1080.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1280x720,AUDIO="audio",SUBTITLES="subs"
+video_720.m3u8
+#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Italian",URI="http://mediaflow.example.com/audio_it.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="ar",URI="http://mediaflow.example.com/sub_ar.m3u8"
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="en",URI="http://mediaflow.example.com/sub_en.m3u8"
+"""
+    base_url = "https://mediaflow.example.com/manifest.m3u8"
+    cleaned = PlaybackController._clean_hls_manifest(raw_manifest, base_url)
+
+    # Subtitles must be removed
+    assert "TYPE=SUBTITLES" not in cleaned
+    assert "sub_ar.m3u8" not in cleaned
+    assert "sub_en.m3u8" not in cleaned
+
+    # SUBTITLES attribute must be removed from EXT-X-STREAM-INF
+    assert 'SUBTITLES="subs"' not in cleaned
+    assert '#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,AUDIO="audio"' in cleaned
+
+    # http URLs must be upgraded to https
+    assert "https://mediaflow.example.com/video_1080.m3u8" in cleaned
+    assert "http://mediaflow.example.com/video_1080.m3u8" not in cleaned
+    assert 'URI="https://mediaflow.example.com/audio_it.m3u8"' in cleaned
+
+    # Relative URL must be resolved to absolute https URL
+    assert "https://mediaflow.example.com/video_720.m3u8" in cleaned
+
+
+def test_playback_controller_play_manifest_cleans_and_serves(tmp_path, monkeypatch):
+    controller = build_controller(tmp_path)
+    http_link = "https://mediaflow.example.com/_token_123/proxy/hls/manifest.m3u8"
+
+    raw_manifest = """#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,AUDIO="audio"
+https://mediaflow.example.com/video.m3u8
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="ar",URI="https://mediaflow.example.com/sub.m3u8"
+"""
+
+    import respx
+    import httpx
+
+    with respx.mock:
+        respx.get(http_link).respond(
+            status_code=200,
+            text=raw_manifest,
+            headers={"content-type": "application/vnd.apple.mpegurl"},
+        )
+
+        async def main():
+            response = await controller.play_manifest(
+                link=http_link,
+                title="Ted Lasso",
+                content_type="series",
+                content_id="tt10986410:2:1",
+            )
+            assert response.status_code == 200
+            assert response.media_type == "application/vnd.apple.mpegurl"
+            body = response.body.decode("utf-8")
+            assert "TYPE=SUBTITLES" not in body
+            assert "https://mediaflow.example.com/video.m3u8" in body
+
+        asyncio.run(main())
+

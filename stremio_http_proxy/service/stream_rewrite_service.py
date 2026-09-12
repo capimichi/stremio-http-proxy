@@ -94,6 +94,7 @@ class StreamRewriteService:
                         poster = self._extract_poster(updated)
                         index = self._extract_index(updated)
                         self._mark_cached_if_ready(updated, http_link, index, content_id)
+                        is_cached = bool(isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cached"))
                         updated["url"] = self._build_playback_url(
                             http_link,
                             title,
@@ -102,6 +103,7 @@ class StreamRewriteService:
                             index,
                             content_type,
                             content_id,
+                            is_cached=is_cached,
                         )
 
                 rewritten_streams.append(updated)
@@ -111,6 +113,7 @@ class StreamRewriteService:
             poster = self._extract_poster(updated)
             index = self._extract_index(updated)
             self._mark_cached_if_ready(updated, torrent_link, index, content_id)
+            is_cached = bool(isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cached"))
             updated["url"] = self._build_playback_url(
                 torrent_link,
                 title,
@@ -119,6 +122,7 @@ class StreamRewriteService:
                 index,
                 content_type,
                 content_id,
+                is_cached=is_cached,
             )
             rewritten_streams.append(updated)
             link_to_entries.setdefault(torrent_link, []).append(updated)
@@ -373,6 +377,7 @@ class StreamRewriteService:
         index: int | None,
         content_type: str | None,
         content_id: str | None,
+        is_cached: bool = False,
     ) -> str:
         params = {"link": link}
         if title:
@@ -387,5 +392,6 @@ class StreamRewriteService:
             params["content_type"] = content_type
         if content_id:
             params["content_id"] = content_id
-        path = "/play/manifest.m3u8" if (".m3u8" in link or "/proxy/hls" in link) else "/play"
+        is_hls = (".m3u8" in link or "/proxy/hls" in link) and not is_cached
+        path = "/play/manifest.m3u8" if is_hls else "/play"
         return f"{self.public_base_url}{path}?{urlencode(params)}"
