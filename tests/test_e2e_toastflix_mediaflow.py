@@ -135,9 +135,9 @@ async def test_e2e_toastflix_mediaflow_flow(tmp_path, monkeypatch):
     stream_1 = rewritten_1["streams"][0]
     # No flame icon yet
     assert "🔥" not in stream_1["name"]
-    # Proxied through /play with fixed HLS URL
+    # Proxied through /play/manifest.m3u8 with fixed HLS URL
     parsed_play_url = urlparse(stream_1["url"])
-    assert parsed_play_url.path == "/play"
+    assert parsed_play_url.path == "/play/manifest.m3u8"
     play_params = parse_qs(parsed_play_url.query)
     assert play_params["link"] == [expected_fixed_hls_url]
     assert play_params["content_id"] == ["tt3749900:1:1"]
@@ -202,7 +202,7 @@ async def test_e2e_toastflix_mediaflow_flow(tmp_path, monkeypatch):
     stream_2 = rewritten_2["streams"][0]
     assert stream_2["name"].startswith("🔥")
     parsed_play_url_2 = urlparse(stream_2["url"])
-    assert parsed_play_url_2.path == "/play"
+    assert parsed_play_url_2.path == "/play/manifest.m3u8"
 
     # Step 5: Stremio plays the cached stream via /play
     play_cached_response = await playback_controller.play(

@@ -31,6 +31,7 @@ class PlaybackController:
         self._in_flight_requests: set[tuple[str, int | None]] = set()
         self.router = APIRouter(tags=["Playback"])
         self.router.add_api_route("/play", self.play, methods=["GET"])
+        self.router.add_api_route("/play/manifest.m3u8", self.play, methods=["GET"])
 
     async def play(
         self,

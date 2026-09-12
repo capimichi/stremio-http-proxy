@@ -330,14 +330,15 @@ async def test_stream_rewrite_fixes_misconfigured_mediaflow_hls_stream():
                 "name": "Toastflix 720p",
                 "url": "https://mediaflow.example.com/_token_123/proxy/stream/Gotham.mp4",
                 "description": "manifest.m3u8 stream",
-                "behaviorHints": {"filename": "Gotham.m3u8"},
+                "behaviorHints": {"filename": "Gotham.m3u8", "notWebReady": True},
             }
         ]
     }
     rewritten = await service.rewrite(payload, category="tv", content_id="tt3749900:1:1")
     from urllib.parse import urlparse, parse_qs
     parsed = urlparse(rewritten["streams"][0]["url"])
-    assert parsed.path == "/play"
+    assert parsed.path == "/play/manifest.m3u8"
+    assert "notWebReady" not in rewritten["streams"][0].get("behaviorHints", {})
     params = parse_qs(parsed.query)
     assert params["link"] == ["https://mediaflow.example.com/_token_123/proxy/hls/manifest.m3u8"]
 

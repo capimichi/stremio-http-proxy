@@ -84,6 +84,11 @@ class StreamRewriteService:
                             is_mediaflow = True
 
                     if is_mediaflow:
+                        if "behaviorHints" in updated and isinstance(updated["behaviorHints"], dict):
+                            updated_bh = dict(updated["behaviorHints"])
+                            updated_bh.pop("notWebReady", None)
+                            updated["behaviorHints"] = updated_bh
+
                         http_link = updated["url"]
                         title = self._extract_title(updated)
                         poster = self._extract_poster(updated)
@@ -382,4 +387,5 @@ class StreamRewriteService:
             params["content_type"] = content_type
         if content_id:
             params["content_id"] = content_id
-        return f"{self.public_base_url}/play?{urlencode(params)}"
+        path = "/play/manifest.m3u8" if (".m3u8" in link or "/proxy/hls" in link) else "/play"
+        return f"{self.public_base_url}{path}?{urlencode(params)}"
