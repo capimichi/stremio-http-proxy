@@ -40,11 +40,11 @@ class PlaybackController:
             self.hls_chunk_manager = None
         self._in_flight_requests: set[tuple[str, int | None]] = set()
         self.router = APIRouter(tags=["Playback"])
-        self.router.add_api_route("/play", self.play, methods=["GET"])
-        self.router.add_api_route("/play/manifest.m3u8", self.play_manifest, methods=["GET"])
-        self.router.add_api_route("/play/variant.m3u8", self.play_variant, methods=["GET"])
-        self.router.add_api_route("/play/chunk", self.play_chunk, methods=["GET"])
-        self.router.add_api_route("/chunk", self.play_chunk, methods=["GET"])
+        self.router.add_api_route("/play", self.play, methods=["GET", "HEAD"])
+        self.router.add_api_route("/play/manifest.m3u8", self.play_manifest, methods=["GET", "HEAD"])
+        self.router.add_api_route("/play/variant.m3u8", self.play_variant, methods=["GET", "HEAD"])
+        self.router.add_api_route("/play/chunk", self.play_chunk, methods=["GET", "HEAD"])
+        self.router.add_api_route("/chunk", self.play_chunk, methods=["GET", "HEAD"])
 
     async def play_manifest(
         self,
