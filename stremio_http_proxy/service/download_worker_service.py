@@ -82,9 +82,21 @@ class DownloadWorkerService:
     async def _download(self, job: DownloadJob) -> None:
         self.cache_manager.mark_downloading(job.cache_key, job.attempt)
         self.cache_manager.touch_processing_lease(job.cache_key, self.worker_id)
-        await self.torrserver_client.add_torrent(job.link, job.title, job.poster, job.category)
 
-        download_url = self.torrserver_client.build_play_url(job.link, job.title, job.poster, job.category, job.index)
+        if job.link.startswith(("http://", "https://")):
+            if self._is_hls_stream(job.link):
+                await self._download_hls(job, job.link)
+            else:
+                await self._download_http_stream(job, job.link)
+        else:
+            await self.torrserver_client.add_torrent(job.link, job.title, job.poster, job.category)
+            download_url = self.torrserver_client.build_play_url(job.link, job.title, job.poster, job.category, job.index)
+            await self._download_http_stream(job, download_url)
+
+    def _is_hls_stream(self, url: str) -> bool:
+        return "/proxy/hls" in url or ".m3u8" in url
+
+    async def _download_http_stream(self, job: DownloadJob, download_url: str) -> None:
         timeout = httpx.Timeout(connect=self.connect_timeout_seconds, read=self.no_progress_timeout_seconds, write=30, pool=30)
         tmp_path = self.cache_manager.prepare_download_path(job.cache_key)
 
@@ -151,6 +163,111 @@ class DownloadWorkerService:
                 f"Download rifiutato: il file è troppo piccolo ({downloaded_bytes} byte). "
                 f"Soglia minima: {min_size_bytes} byte."
             )
+
+        size_bytes = self.cache_manager.finalize_download(job.cache_key)
+        self.cache_manager.mark_ready(job.cache_key, size_bytes)
+        self.logger.info("Worker %s completed job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
+
+    async def _download_hls(self, job: DownloadJob, url: str) -> None:
+        tmp_path = self.cache_manager.prepare_download_path(job.cache_key)
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-i",
+            url,
+            "-c",
+            "copy",
+            "-f",
+            "mp4",
+            str(tmp_path),
+        ]
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError:
+            raise RuntimeError("ffmpeg binary not found in PATH")
+
+        downloaded_bytes = 0
+        started_at = time.time()
+        window_started_at = started_at
+        bytes_at_window_start = 0
+        last_progress_log_at = started_at
+
+        while True:
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=float(min(self.progress_log_interval_seconds, 2)))
+                break
+            except asyncio.TimeoutError:
+                pass
+
+            now = time.time()
+            downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
+            elapsed_seconds = max(now - started_at, 0.001)
+            speed_bytes_per_second = downloaded_bytes / elapsed_seconds
+
+            if now - started_at > self.max_total_seconds:
+                proc.kill()
+                await proc.wait()
+                raise TimeoutError("download exceeded maximum duration")
+
+            if now - window_started_at >= self.min_progress_window_seconds:
+                if downloaded_bytes - bytes_at_window_start < self.min_progress_bytes:
+                    proc.kill()
+                    await proc.wait()
+                    raise TimeoutError("download progress stayed below threshold")
+                window_started_at = now
+                bytes_at_window_start = downloaded_bytes
+
+            if now - last_progress_log_at >= self.progress_log_interval_seconds:
+                self.cache_manager.mark_progress(
+                    job.cache_key,
+                    downloaded_bytes,
+                    None,
+                    None,
+                    speed_bytes_per_second,
+                )
+                self.cache_manager.touch_processing_lease(job.cache_key, self.worker_id)
+                self.progress_logger.info(
+                    "worker=%s job=%s cache_key=%s downloaded_mb=%.2f total_mb=unknown progress_pct=unknown speed_mbps=%.2f elapsed_s=%.0f",
+                    self.worker_id,
+                    job.job_id,
+                    job.cache_key,
+                    downloaded_bytes / (1024 * 1024),
+                    speed_bytes_per_second / (1024 * 1024),
+                    elapsed_seconds,
+                )
+                last_progress_log_at = now
+
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            error_msg = stderr.decode(errors="replace").strip() if stderr else ""
+            raise RuntimeError(f"ffmpeg exited with code {proc.returncode}: {error_msg}")
+
+        downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
+        min_size_bytes = self.cache_manager.get_min_cache_size()
+        if downloaded_bytes < min_size_bytes:
+            raise RuntimeError(
+                f"Download rifiutato: il file è troppo piccolo ({downloaded_bytes} byte). "
+                f"Soglia minima: {min_size_bytes} byte."
+            )
+
+        self.cache_manager.mark_progress(
+            job.cache_key,
+            downloaded_bytes,
+            downloaded_bytes,
+            100.0,
+            downloaded_bytes / max(time.time() - started_at, 0.001),
+        )
 
         size_bytes = self.cache_manager.finalize_download(job.cache_key)
         self.cache_manager.mark_ready(job.cache_key, size_bytes)

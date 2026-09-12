@@ -312,3 +312,68 @@ async def test_stream_rewrite_marks_cached_stream_using_content_id_fallback_when
 
     assert rewritten["streams"][0]["_meta"]["cached"] is True
     assert rewritten["streams"][0]["name"] == "🔥 Corsaro Viola 1080p"
+
+
+@pytest.mark.asyncio
+async def test_stream_rewrite_fixes_misconfigured_mediaflow_hls_stream():
+    from stremio_http_proxy.client.mediaflow_client import MediaflowClient
+
+    mediaflow_client = MediaflowClient("https://mediaflow.example.com", "secret")
+    service = StreamRewriteService(
+        "http://localhost:8691",
+        FakeCacheManager(),
+        mediaflow_client=mediaflow_client,
+    )
+    payload = {
+        "streams": [
+            {
+                "name": "Toastflix 720p",
+                "url": "https://mediaflow.example.com/_token_123/proxy/stream/Gotham.mp4",
+                "description": "manifest.m3u8 stream",
+                "behaviorHints": {"filename": "Gotham.m3u8"},
+            }
+        ]
+    }
+    rewritten = await service.rewrite(payload, category="tv", content_id="tt3749900:1:1")
+    from urllib.parse import urlparse, parse_qs
+    parsed = urlparse(rewritten["streams"][0]["url"])
+    assert parsed.path == "/play"
+    params = parse_qs(parsed.query)
+    assert params["link"] == ["https://mediaflow.example.com/_token_123/proxy/hls/manifest.m3u8"]
+
+
+@pytest.mark.asyncio
+async def test_stream_rewrite_preserves_http_streams_when_whitelist_is_active():
+    from unittest.mock import MagicMock
+
+    allowed_hash = "a" * 40
+    disallowed_hash = "b" * 40
+    whitelist_repo = MagicMock()
+    whitelist_repo.get_allowed_infohashes.return_value = {allowed_hash}
+
+    service = StreamRewriteService(
+        "http://localhost:8691",
+        FakeCacheManager(),
+        whitelist_repository=whitelist_repo,
+    )
+    payload = {
+        "streams": [
+            {
+                "name": "Torrent Allowed",
+                "infoHash": allowed_hash,
+            },
+            {
+                "name": "Torrent Disallowed",
+                "infoHash": disallowed_hash,
+            },
+            {
+                "name": "Toastflix 720p",
+                "url": "https://toastflix.example.com/manifest.m3u8",
+            },
+        ]
+    }
+    rewritten = await service.rewrite(payload, content_id="tt3749900:1:1")
+    names = [s["name"] for s in rewritten["streams"]]
+    assert "Torrent Allowed" in names
+    assert "Torrent Disallowed" not in names
+    assert "Toastflix 720p" in names

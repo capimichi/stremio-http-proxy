@@ -3,6 +3,7 @@ import os
 
 from injector import inject
 
+from stremio_http_proxy.client.mediaflow_client import MediaflowClient
 from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.repository.whitelist_repository import WhitelistRepository
@@ -23,6 +24,7 @@ class StreamRewriteService:
         torrserver_health_check_enabled: bool = False,
         torrserver_health_check_timeout: int = 15,
         whitelist_repository: WhitelistRepository | None = None,
+        mediaflow_client: MediaflowClient | None = None,
     ):
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_manager = cache_manager
@@ -31,6 +33,7 @@ class StreamRewriteService:
         self.torrserver_health_check_enabled = torrserver_health_check_enabled
         self.torrserver_health_check_timeout = torrserver_health_check_timeout
         self.whitelist_repository = whitelist_repository
+        self.mediaflow_client = mediaflow_client
 
     async def rewrite(
         self,
@@ -52,7 +55,51 @@ class StreamRewriteService:
                 continue
             torrent_link = self._extract_torrent_link(stream)
             if torrent_link is None:
-                rewritten_streams.append(stream)
+                updated = dict(stream)
+                raw_url = updated.get("url")
+                if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")):
+                    is_mediaflow = False
+                    if self.mediaflow_client and self.mediaflow_client.is_available():
+                        if self.mediaflow_client.is_mediaflow_url(raw_url):
+                            hint = None
+                            bh = updated.get("behaviorHints")
+                            if isinstance(bh, dict) and bh.get("filename"):
+                                hint = bh.get("filename")
+                            elif updated.get("description") and ".m3u8" in updated.get("description"):
+                                hint = ".m3u8"
+                            updated["url"] = self.mediaflow_client.fix_mediaflow_url(raw_url, destination_hint=hint)
+                            is_mediaflow = True
+                        elif self._needs_mediaflow_proxy(updated):
+                            proxy_headers = self._extract_proxy_headers(updated)
+                            filename = self._extract_filename(updated)
+                            updated["url"] = await self.mediaflow_client.generate_proxy_url(
+                                destination_url=raw_url,
+                                request_headers=proxy_headers,
+                                filename=filename,
+                            )
+                            if "behaviorHints" in updated and isinstance(updated["behaviorHints"], dict):
+                                updated_bh = dict(updated["behaviorHints"])
+                                updated_bh.pop("proxyHeaders", None)
+                                updated["behaviorHints"] = updated_bh
+                            is_mediaflow = True
+
+                    if is_mediaflow:
+                        http_link = updated["url"]
+                        title = self._extract_title(updated)
+                        poster = self._extract_poster(updated)
+                        index = self._extract_index(updated)
+                        self._mark_cached_if_ready(updated, http_link, index, content_id)
+                        updated["url"] = self._build_playback_url(
+                            http_link,
+                            title,
+                            poster,
+                            category,
+                            index,
+                            content_type,
+                            content_id,
+                        )
+
+                rewritten_streams.append(updated)
                 continue
             updated = dict(stream)
             title = self._extract_title(updated)
@@ -104,12 +151,40 @@ class StreamRewriteService:
                 if allowed:
                     rewritten_streams = [
                         s for s in rewritten_streams
-                        if self._extract_infohash_from_stream(s) in allowed
+                        if self._is_stream_allowed(s, allowed)
                     ]
 
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams
         return updated_payload
+
+    def _is_stream_allowed(self, stream: dict, allowed_infohashes: set[str]) -> bool:
+        infohash = self._extract_infohash_from_stream(stream)
+        if infohash is not None:
+            return infohash in allowed_infohashes
+        return True
+
+    def _needs_mediaflow_proxy(self, stream: dict) -> bool:
+        bh = stream.get("behaviorHints")
+        if isinstance(bh, dict) and bh.get("proxyHeaders"):
+            return True
+        return False
+
+    def _extract_proxy_headers(self, stream: dict) -> dict[str, str] | None:
+        bh = stream.get("behaviorHints")
+        if isinstance(bh, dict):
+            ph = bh.get("proxyHeaders")
+            if isinstance(ph, dict):
+                req = ph.get("request")
+                if isinstance(req, dict):
+                    return req
+        return None
+
+    def _extract_filename(self, stream: dict) -> str | None:
+        bh = stream.get("behaviorHints")
+        if isinstance(bh, dict) and bh.get("filename"):
+            return bh.get("filename")
+        return None
 
     def _extract_infohash_from_stream(self, stream: dict) -> str | None:
         link = self._extract_torrent_link(stream)

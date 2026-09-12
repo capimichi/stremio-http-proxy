@@ -5,16 +5,19 @@ from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.service.cache_service import CacheService
 from stremio_http_proxy.service.cache_token_service import CacheTokenService
 from stremio_http_proxy.manager.cache_manager import CacheManager
+import stremio_http_proxy.entity.whitelist_entry  # noqa: F401
 
 
 def build_manager(tmp_path):
-    return CacheManager(
+    mgr = CacheManager(
         str(tmp_path),
         DbManager(str(tmp_path / "cache.sqlite")),
         7,
         20,
         LoggerFactory(str(tmp_path / "logs")),
     )
+    mgr.get_min_cache_size = lambda: 1
+    return mgr
 
 
 def test_cache_service_returns_cached_route_for_ready_entry(tmp_path):

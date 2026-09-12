@@ -6,7 +6,7 @@ from sqlalchemy import or_, select, update
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.entity.cache_entry import CacheEntry as CacheEntryRecord
-from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
+from stremio_http_proxy.helper.hash_helper import extract_infohash, hash_url, normalize_infohash
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
@@ -30,12 +30,15 @@ class CacheManager:
         self.max_size_bytes = max_size_gb * 1024 * 1024 * 1024
         self.logger = logger_factory.get_logger("stremio_http_proxy.cache", "cache.log")
 
-    def build_cache_key(self, link: str, index: int | None = None) -> str | None:
+    def build_cache_key(self, link: str, index: int | None = None, content_id: str | None = None) -> str | None:
         infohash = extract_infohash(link)
-        if infohash is None:
-            return None
-        normalized = normalize_infohash(infohash)
-        return f"{normalized}:{index or 0}"
+        if infohash is not None:
+            normalized = normalize_infohash(infohash)
+            return f"{normalized}:{index or 0}"
+        if link and link.startswith(("http://", "https://")):
+            url_hash = hash_url(link)
+            return f"{url_hash}:{index or 0}"
+        return None
 
     def build_cache_key_from_parts(self, infohash: str, index: int | None = None) -> str:
         return f"{normalize_infohash(infohash)}:{index or 0}"

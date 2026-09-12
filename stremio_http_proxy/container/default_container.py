@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from injector import Injector
 
+from stremio_http_proxy.client.mediaflow_client import MediaflowClient
 from stremio_http_proxy.client.tmdb_client import TMDBClient
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.client.upstream_client import UpstreamClient
@@ -87,6 +88,12 @@ class DefaultContainer:
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
         self.tmdb_api_key = os.environ.get("TMDB_API_KEY")
         self.whitelist_enabled = os.environ.get("WHITELIST_ENABLED", "true").lower() == "true"
+        self.mediaflow_base_url = os.environ.get("MEDIAFLOW_BASE_URL", "").rstrip("/")
+        self.mediaflow_api_password = os.environ.get("MEDIAFLOW_API_PASSWORD")
+        self.mediaflow_enabled = (
+            os.environ.get("MEDIAFLOW_ENABLED", "true").lower() == "true"
+            and bool(self.mediaflow_base_url)
+        )
         if not self.app_secret or not self.app_secret.strip():
             raise ValueError("APP_SECRET environment variable is required")
 
@@ -119,6 +126,12 @@ class DefaultContainer:
         torrent_health_service = TorrentHealthService(torrserver_client)
         whitelist_repository = WhitelistRepository(db_manager)
         tmdb_client = TMDBClient(self.tmdb_api_key)
+        mediaflow_client = MediaflowClient(
+            self.mediaflow_base_url,
+            self.mediaflow_api_password,
+            self.request_timeout_seconds,
+            self.mediaflow_enabled,
+        )
         stream_rewrite_service = StreamRewriteService(
             self.public_base_url,
             cache_manager,
@@ -127,6 +140,7 @@ class DefaultContainer:
             self.torrserver_health_check_enabled,
             self.torrserver_health_check_timeout_seconds,
             whitelist_repository if self.whitelist_enabled else None,
+            mediaflow_client=mediaflow_client,
         )
         whitelist_service = WhitelistService(whitelist_repository)
         content_browser_service = ContentBrowserService(upstream_client, tmdb_client, stream_rewrite_service)
@@ -157,6 +171,7 @@ class DefaultContainer:
         self.injector.binder.bind(LoggerFactory, to=logger_factory)
         self.injector.binder.bind(TorrServerClient, to=torrserver_client)
         self.injector.binder.bind(UpstreamClient, to=upstream_client)
+        self.injector.binder.bind(MediaflowClient, to=mediaflow_client)
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
         self.injector.binder.bind(DbManager, to=db_manager)
         self.injector.binder.bind(CacheManager, to=cache_manager)

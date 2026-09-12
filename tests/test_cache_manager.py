@@ -2,6 +2,7 @@ from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
+import stremio_http_proxy.entity.whitelist_entry  # noqa: F401
 
 
 def build_manager(tmp_path):
@@ -39,3 +40,16 @@ def test_cache_manager_uses_sqlite_instead_of_json_files(tmp_path):
 
     assert (tmp_path / "cache.sqlite").exists()
     assert list(tmp_path.glob("*/*.json")) == []
+
+
+def test_build_cache_key_supports_http_urls(tmp_path):
+    import stremio_http_proxy.entity.whitelist_entry  # noqa: F401
+    manager = build_manager(tmp_path)
+    url = "https://toastflix.invalid/clone/manifest.m3u8?d=123"
+    key = manager.build_cache_key(url)
+    assert key is not None
+    assert ":" in key
+    prefix, idx = key.split(":", 1)
+    assert len(prefix) == 40
+    # Deterministic
+    assert manager.build_cache_key(url) == key

@@ -1,4 +1,9 @@
+import hashlib
 from urllib.parse import parse_qs, urlparse
+
+
+def hash_url(url: str) -> str:
+    return hashlib.sha1(url.strip().encode("utf-8")).hexdigest().lower()
 
 
 def normalize_infohash(value: str) -> str:

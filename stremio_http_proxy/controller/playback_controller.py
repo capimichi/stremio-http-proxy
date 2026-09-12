@@ -42,6 +42,15 @@ class PlaybackController:
         content_type: str | None = None,
         content_id: str | None = None,
     ) -> RedirectResponse:
+        cached_route = self.cache_service.get_cached_route(link, index)
+        if cached_route is not None:
+            return RedirectResponse(url=cached_route, status_code=307)
+
+        # Non-torrent direct HTTP / HLS streams
+        if link.startswith(("http://", "https://")):
+            self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
+            return RedirectResponse(url=link, status_code=307)
+
         if index is None and content_type == "series" and content_id:
             resolved_index = await self._resolve_series_index(link, content_id, title, poster, category)
             if resolved_index is not None:
@@ -51,10 +60,6 @@ class PlaybackController:
 
         self._schedule_initialization(link, title, poster, category, index)
         self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
-
-        cached_route = self.cache_service.get_cached_route(link, index)
-        if cached_route is not None:
-            return RedirectResponse(url=cached_route, status_code=307)
 
         return RedirectResponse(
             url=self.torrserver_client.build_play_url(link, title, poster, category, index),

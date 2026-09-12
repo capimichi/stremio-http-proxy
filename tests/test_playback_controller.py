@@ -181,3 +181,28 @@ def test_playback_controller_resolves_missing_series_index(tmp_path):
     parsed = urlparse(response.headers["location"])
     params = parse_qs(parsed.query)
     assert params["index"] == ["2"]
+
+
+def test_playback_controller_handles_http_streams_immediately(tmp_path):
+    controller = build_controller(tmp_path)
+    http_link = "https://mediaflow.example.com/_token_123/proxy/hls/manifest.m3u8"
+
+    async def main():
+        response = await controller.play(
+            link=http_link,
+            title="Gotham S01E01",
+            content_type="series",
+            content_id="tt3749900:1:1",
+        )
+
+        # Immediately redirects to the live HTTP stream without touching TorrServer
+        assert response.status_code == 307
+        assert response.headers["location"] == http_link
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        assert len(controller.torrserver_client.added) == 0
+        # And background download was enqueued
+        assert len(controller.download_queue_service.calls) == 1
+        assert controller.download_queue_service.calls[0][0][0] == http_link
+
+    asyncio.run(main())
