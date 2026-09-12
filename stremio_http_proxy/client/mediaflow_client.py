@@ -47,6 +47,8 @@ class MediaflowClient:
 
         if is_hls and "/proxy/stream" in url:
             return re.sub(r"/proxy/stream/?[^?#]*", "/proxy/hls/manifest.m3u8", url)
+        if "/proxy/hls/manifest.m3u8/" in url:
+            return re.sub(r"/proxy/hls/manifest\.m3u8/?[^?#]*", "/proxy/hls/manifest.m3u8", url)
         return url
 
     async def generate_proxy_url(
@@ -60,6 +62,8 @@ class MediaflowClient:
             return destination_url
 
         endpoint = self.resolve_endpoint(destination_url)
+        # MediaFlow appends /<filename> to endpoint. For /proxy/hls/manifest.m3u8 this results in 404.
+        clean_filename = filename if endpoint != "/proxy/hls/manifest.m3u8" else None
         payload = {
             "mediaflow_proxy_url": self.base_url,
             "api_password": self.api_password,
@@ -69,7 +73,7 @@ class MediaflowClient:
                     "destination_url": destination_url,
                     "request_headers": request_headers or {},
                     "response_headers": response_headers or {},
-                    "filename": filename,
+                    "filename": clean_filename,
                 }
             ],
         }
@@ -80,5 +84,5 @@ class MediaflowClient:
             data = res.json()
             urls = data.get("urls", [])
             if urls:
-                return urls[0]
+                return self.fix_mediaflow_url(urls[0])
             return destination_url
