@@ -12,6 +12,7 @@ from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
+from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
 
 import stremio_http_proxy.entity.whitelist_entry  # noqa: F401 — ensure table creation
@@ -117,6 +118,10 @@ class DefaultContainer:
             self.local_cache_max_size_gb,
             logger_factory,
         )
+        hls_chunk_manager = HlsChunkManager(
+            self.local_cache_dir,
+            logger_factory,
+        )
         basic_auth_service = BasicAuthService(
             self.dashboard_basic_auth_user,
             self.dashboard_basic_auth_password,
@@ -165,6 +170,7 @@ class DefaultContainer:
             self.download_min_progress_window_seconds,
             self.download_max_total_seconds,
             self.download_progress_log_interval_seconds,
+            hls_chunk_manager=hls_chunk_manager,
         )
         serve_command = ServeCommand(self.api_host, self.api_port)
 
@@ -175,6 +181,7 @@ class DefaultContainer:
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
         self.injector.binder.bind(DbManager, to=db_manager)
         self.injector.binder.bind(CacheManager, to=cache_manager)
+        self.injector.binder.bind(HlsChunkManager, to=hls_chunk_manager)
         self.injector.binder.bind(BasicAuthService, to=basic_auth_service)
         self.injector.binder.bind(CacheTokenService, to=cache_token_service)
         self.injector.binder.bind(CacheService, to=cache_service)

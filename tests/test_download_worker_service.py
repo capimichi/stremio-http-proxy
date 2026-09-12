@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.model.download_job import DownloadJob
@@ -201,3 +202,88 @@ def test_download_worker_downloads_hls_stream(tmp_path, monkeypatch):
     assert len(cache_manager.ready_keys) == 1
     assert cache_manager.ready_keys[0][0] == "hash456:0"
     assert cache_manager.ready_keys[0][1] == 1400
+
+
+def test_download_worker_downloads_hls_chunks_cooperatively(tmp_path, monkeypatch):
+    import respx
+    from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
+
+    hls_url = "https://mediaflow.example.com/manifest.m3u8"
+    job = DownloadJob(
+        job_id="job-hls-chunks-1",
+        cache_key="hash789:0",
+        link=hls_url,
+        enqueued_at=0,
+        available_at=0,
+    )
+    cache_manager = FakeCacheManager(tmp_path)
+    cache_manager.claimed_job = job
+
+    chunk_manager = HlsChunkManager(tmp_path / "cache", LoggerFactory(str(tmp_path)))
+
+    # Pre-seed chunk 0 (simulating player already buffered chunk 0)
+    chunks_dir = chunk_manager.get_chunks_dir("hash789:0")
+    (chunks_dir / "00000.ts").write_bytes(b"CHUNK_0_PRE_CACHED")
+
+    variant_url = "https://mediaflow.example.com/variant.m3u8"
+    chunk1_url = "https://mediaflow.example.com/chunk1.ts"
+
+    raw_master = f"""#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=5000000
+{variant_url}
+"""
+    raw_variant = f"""#EXTM3U
+#EXTINF:4.000000,
+https://mediaflow.example.com/chunk0.ts
+#EXTINF:4.000000,
+{chunk1_url}
+"""
+
+    with respx.mock:
+        respx.get(hls_url).respond(status_code=200, text=raw_master)
+        respx.get(variant_url).respond(status_code=200, text=raw_variant)
+        # chunk 0 should NOT be requested because it's already pre-cached!
+        respx.get("https://mediaflow.example.com/chunk0.ts").respond(status_code=500)
+        # chunk 1 is downloaded by the worker
+        respx.get(chunk1_url).respond(status_code=200, content=b"CHUNK_1_DOWNLOADED_DATA")
+
+        class FakeProc:
+            def __init__(self, target_file):
+                self.returncode = 0
+                self.target_file = target_file
+
+            async def communicate(self):
+                self.target_file.parent.mkdir(parents=True, exist_ok=True)
+                self.target_file.write_bytes(b"MERGED_MP4_RESULT" * 10)
+                return b"", b""
+
+        async def fake_create_subprocess_exec(*cmd, **kwargs):
+            output_file = Path(cmd[-1])
+            return FakeProc(output_file)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+
+        service = DownloadWorkerService(
+            FakeTorrServerClient(),
+            cache_manager,
+            LoggerFactory(str(tmp_path)),
+            poll_seconds=1,
+            connect_timeout_seconds=10,
+            no_progress_timeout_seconds=30,
+            min_progress_bytes=10,
+            min_progress_window_seconds=120,
+            max_total_seconds=60,
+            progress_log_interval_seconds=1,
+            hls_chunk_manager=chunk_manager,
+        )
+
+        processed = asyncio.run(service.process_next_job())
+
+        assert processed is True
+        assert (cache_manager.retried, cache_manager.dead) == ([], [])
+        assert cache_manager.acknowledged == ["job-hls-chunks-1"]
+        assert len(cache_manager.ready_keys) == 1
+        assert cache_manager.ready_keys[0][0] == "hash789:0"
+        # chunk 1 was downloaded to disk
+        assert chunk_manager.has_chunk("hash789:0", 1)
+

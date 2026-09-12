@@ -1,3 +1,4 @@
+import shutil
 import time
 from pathlib import Path
 
@@ -327,6 +328,9 @@ class CacheManager:
         tmp_path = self._tmp_path(infohash, index)
         if tmp_path.exists():
             tmp_path.unlink()
+        chunks_dir = self.base_dir / infohash / f"chunks_{index}"
+        if chunks_dir.exists():
+            shutil.rmtree(chunks_dir, ignore_errors=True)
 
     def prepare_download_path(self, cache_key: str) -> Path:
         infohash, index = self.parse_cache_key(cache_key)
@@ -402,6 +406,9 @@ class CacheManager:
         for path in (self._media_path(infohash, index), self._tmp_path(infohash, index)):
             if path.exists():
                 path.unlink()
+        chunks_dir = self.base_dir / infohash / f"chunks_{index}"
+        if chunks_dir.exists():
+            shutil.rmtree(chunks_dir, ignore_errors=True)
         parent = self.base_dir / infohash
         if parent.exists() and not any(parent.iterdir()):
             parent.rmdir()
