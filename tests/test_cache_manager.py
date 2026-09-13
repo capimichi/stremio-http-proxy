@@ -53,3 +53,35 @@ def test_build_cache_key_supports_http_urls(tmp_path):
     assert len(prefix) == 40
     # Deterministic
     assert manager.build_cache_key(url) == key
+
+
+def test_count_and_candidate_attempted(tmp_path):
+    manager = build_manager(tmp_path)
+    content_id = "series:tt12345:1:2"
+    key1 = "1111111111111111111111111111111111111111:0"
+    key2 = "2222222222222222222222222222222222222222:0"
+
+    assert not manager.is_candidate_attempted(key1)
+    assert manager.count_active_or_ready_for_content(content_id) == 0
+    assert manager.count_ready_for_content(content_id) == 0
+
+    entry1 = manager.get_entry(key1).model_copy(
+        update={"status": CacheEntryStatusEnum.QUEUED, "content_id": content_id}
+    )
+    manager._write_entry(key1, entry1)
+    assert manager.is_candidate_attempted(key1)
+    assert manager.count_active_or_ready_for_content(content_id) == 1
+    assert manager.count_ready_for_content(content_id) == 0
+
+    entry1_ready = entry1.model_copy(update={"status": CacheEntryStatusEnum.READY})
+    manager._write_entry(key1, entry1_ready)
+    assert manager.count_active_or_ready_for_content(content_id) == 1
+    assert manager.count_ready_for_content(content_id) == 1
+
+    entry2 = manager.get_entry(key2).model_copy(
+        update={"status": CacheEntryStatusEnum.DOWNLOADING, "content_id": content_id}
+    )
+    manager._write_entry(key2, entry2)
+    assert manager.count_active_or_ready_for_content(content_id) == 2
+    assert manager.count_ready_for_content(content_id) == 1
+

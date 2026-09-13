@@ -200,7 +200,8 @@ class CacheManager:
                     CacheEntryRecord.status.in_([
                         CacheEntryStatusEnum.READY.value,
                         CacheEntryStatusEnum.DOWNLOADING.value,
-                        CacheEntryStatusEnum.PENDING.value,
+                        CacheEntryStatusEnum.QUEUED.value,
+                        CacheEntryStatusEnum.PROCESSING.value,
                     ]),
                 )
             )
