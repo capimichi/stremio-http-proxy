@@ -66,13 +66,14 @@ class DummyTask:
         self.callbacks.append(callback)
 
 
-def build_controller(tmp_path, ready=False):
+def build_controller(tmp_path, ready=False, http_streams_proxy_enabled=True):
     return PlaybackController(
         FakeTorrServerClient(),
         FakeCacheService(ready=ready),
         FakeDownloadQueueService(),
         FakeNextEpisodePrefetchService(),
         LoggerFactory(str(tmp_path)),
+        http_streams_proxy_enabled=http_streams_proxy_enabled,
     )
 
 
@@ -448,5 +449,42 @@ https://mediaflow.example.com/segment1.ts
             assert err_resp.headers["location"] == "https://mediaflow.example.com/broken.ts"
 
         asyncio.run(main())
+
+
+def test_playback_controller_http_stream_redirects_and_prefetches_without_caching_self(monkeypatch, tmp_path):
+    controller = build_controller(tmp_path, http_streams_proxy_enabled=False)
+    scheduled = []
+
+    def fake_create_task(coro):
+        scheduled.append(coro)
+        return DummyTask()
+
+    monkeypatch.setattr(asyncio, "create_task", fake_create_task)
+
+    http_url = "https://easyproxy.example.com/dual/manifest.m3u8?d=123"
+    response = asyncio.run(
+        controller.play(
+            link=http_url,
+            title="Gotham S01E01",
+            category="tv",
+            content_type="series",
+            content_id="tt3749900:1:1",
+        )
+    )
+
+    # 1. Must redirect 307 directly to the original HTTP URL
+    assert response.status_code == 307
+    assert response.headers["location"] == http_url
+
+    # 2. Execute background tasks scheduled
+    assert len(scheduled) == 1
+    asyncio.run(scheduled[0])
+
+    # 3. Must NOT enqueue the HTTP stream itself into download queue
+    assert len(controller.download_queue_service.calls) == 0
+
+    # 4. Must trigger next episode prefetch for Gotham S01E02!
+    assert len(controller.next_episode_prefetch_service.calls) == 1
+    assert controller.next_episode_prefetch_service.calls[0] == ("series", "tt3749900:1:1", "tv")
 
 

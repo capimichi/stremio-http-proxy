@@ -28,6 +28,7 @@ from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisode
 from stremio_http_proxy.service.content_browser_service import ContentBrowserService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
+from stremio_http_proxy.controller.playback_controller import PlaybackController
 
 
 class DefaultContainer:
@@ -178,6 +179,15 @@ class DefaultContainer:
             self.download_progress_log_interval_seconds,
             hls_chunk_manager=hls_chunk_manager,
         )
+        playback_controller = PlaybackController(
+            torrserver_client,
+            cache_service,
+            download_queue_service,
+            next_episode_prefetch_service,
+            logger_factory,
+            hls_chunk_manager=hls_chunk_manager,
+            http_streams_proxy_enabled=self.http_streams_proxy_enabled,
+        )
         serve_command = ServeCommand(self.api_host, self.api_port)
 
         self.injector.binder.bind(LoggerFactory, to=logger_factory)
@@ -194,6 +204,7 @@ class DefaultContainer:
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
         self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
+        self.injector.binder.bind(PlaybackController, to=playback_controller)
         self.injector.binder.bind(WhitelistRepository, to=whitelist_repository)
         self.injector.binder.bind(TMDBClient, to=tmdb_client)
         self.injector.binder.bind(WhitelistService, to=whitelist_service)

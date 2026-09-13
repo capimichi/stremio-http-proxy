@@ -26,12 +26,14 @@ class PlaybackController:
         next_episode_prefetch_service: NextEpisodePrefetchService,
         logger_factory: LoggerFactory,
         hls_chunk_manager: HlsChunkManager | None = None,
+        http_streams_proxy_enabled: bool = True,
     ):
         self.logger = logger_factory.get_logger("stremio_http_proxy.api", "api.log")
         self.torrserver_client = torrserver_client
         self.cache_service = cache_service
         self.download_queue_service = download_queue_service
         self.next_episode_prefetch_service = next_episode_prefetch_service
+        self.http_streams_proxy_enabled = http_streams_proxy_enabled
         if hls_chunk_manager is not None:
             self.hls_chunk_manager = hls_chunk_manager
         elif hasattr(cache_service, "cache_manager") and hasattr(cache_service.cache_manager, "base_dir"):
@@ -474,17 +476,22 @@ class PlaybackController:
         content_id: str | None,
     ) -> None:
         try:
-            await self.download_queue_service.enqueue_download(
-                link,
-                title,
-                poster,
-                category,
-                index,
-                priority=100,
-                trigger="playback",
-                content_type=content_type,
-                content_id=content_id,
+            should_enqueue = (
+                not link.startswith(("http://", "https://"))
+                or self.http_streams_proxy_enabled
             )
+            if should_enqueue:
+                await self.download_queue_service.enqueue_download(
+                    link,
+                    title,
+                    poster,
+                    category,
+                    index,
+                    priority=100,
+                    trigger="playback",
+                    content_type=content_type,
+                    content_id=content_id,
+                )
             await self.next_episode_prefetch_service.enqueue_next_episode(content_type, content_id, category)
         except Exception:
             self.logger.exception("Unable to enqueue cache download work")

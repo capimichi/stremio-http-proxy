@@ -58,7 +58,24 @@ class StreamRewriteService:
             torrent_link = self._extract_torrent_link(stream)
             if torrent_link is None:
                 if not self.http_streams_proxy_enabled:
-                    rewritten_streams.append(dict(stream))
+                    updated = dict(stream)
+                    raw_url = updated.get("url")
+                    if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")):
+                        title = self._extract_title(updated)
+                        poster = self._extract_poster(updated)
+                        index = self._extract_index(updated)
+                        updated["url"] = self._build_playback_url(
+                            raw_url,
+                            title,
+                            poster,
+                            category,
+                            index,
+                            content_type,
+                            content_id,
+                            is_cached=False,
+                            force_play_route=True,
+                        )
+                    rewritten_streams.append(updated)
                     continue
 
                 updated = dict(stream)
@@ -384,6 +401,7 @@ class StreamRewriteService:
         content_type: str | None,
         content_id: str | None,
         is_cached: bool = False,
+        force_play_route: bool = False,
     ) -> str:
         params = {"link": link}
         if title:
@@ -398,6 +416,6 @@ class StreamRewriteService:
             params["content_type"] = content_type
         if content_id:
             params["content_id"] = content_id
-        is_hls = (".m3u8" in link or "/proxy/hls" in link) and not is_cached
+        is_hls = (".m3u8" in link or "/proxy/hls" in link) and not is_cached and not force_play_route
         path = "/play/manifest.m3u8" if is_hls else "/play"
         return f"{self.public_base_url}{path}?{urlencode(params)}"

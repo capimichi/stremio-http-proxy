@@ -1,3 +1,4 @@
+import urllib.parse
 import pytest
 
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
@@ -415,10 +416,15 @@ async def test_stream_rewrite_passes_http_streams_as_is_when_http_streams_proxy_
 
     rewritten = await service.rewrite(payload, category="tv", content_id="tt3749900:1:1")
 
-    # HTTP streams must be completely untouched (as is)
-    assert rewritten["streams"][0]["url"] == raw_toastflix_url
+    # HTTP streams are routed through /play trampoline (never /play/manifest.m3u8)
+    assert rewritten["streams"][0]["url"].startswith("http://localhost:8691/play?")
+    assert "link=" + urllib.parse.quote(raw_toastflix_url, safe="") in rewritten["streams"][0]["url"]
     assert rewritten["streams"][0]["behaviorHints"]["notWebReady"] is True
-    assert rewritten["streams"][1]["url"] == direct_hls_url
+
+    assert rewritten["streams"][1]["url"].startswith("http://localhost:8691/play?")
+    assert "link=" + urllib.parse.quote(direct_hls_url, safe="") in rewritten["streams"][1]["url"]
+    # Even though direct_hls_url contains .m3u8, force_play_route ensures it uses /play and NOT /play/manifest.m3u8
+    assert "/play/manifest.m3u8" not in rewritten["streams"][1]["url"]
 
     # Torrent stream must still be rewritten through the proxy
     assert "http://localhost:8691/play?" in rewritten["streams"][2]["url"]
