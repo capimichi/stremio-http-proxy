@@ -26,7 +26,7 @@
 <div class="mt-8">
   <div class="flex items-center justify-between mb-4">
     <div class="flex items-center gap-2.5">
-      <h2 class="text-base font-semibold text-gray-900">Ultimi Download Attivi</h2>
+      <h2 class="text-base font-semibold text-gray-900" id="active-downloads-title">Download in corso</h2>
       <span id="active-downloads-badge" class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">0</span>
     </div>
     <a href="/dashboard/cache-items" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
@@ -50,7 +50,11 @@
         <tbody id="active-downloads-body" class="divide-y divide-gray-100 bg-white">
           <tr>
             <td colspan="6" class="px-5 py-8 text-center text-sm text-gray-400">
-              <i class="fa-solid fa-spinner fa-spin mr-2"></i> Caricamento download in corso...
+              <div class="flex flex-col items-center justify-center gap-1.5">
+                <i class="fa-solid fa-circle-check text-green-500 text-2xl"></i>
+                <span class="font-medium text-gray-600">Nessun download attivo al momento.</span>
+                <span class="text-xs text-gray-400">Tutti i contenuti accodati sono pronti in cache.</span>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -61,5 +65,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/dashboard.js"></script>
+<script src="/static/dashboard.js?v=4"></script>
 {% endblock %}

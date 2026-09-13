@@ -58,14 +58,19 @@ function updateSummary(payload) {
   if (pendingEl) pendingEl.textContent = pending;
 }
 
-function renderActiveDownloadsTable(items, isActiveList) {
+function renderTable(items, isActive) {
   const tbody = document.getElementById("active-downloads-body");
   const badge = document.getElementById("active-downloads-badge");
+  const titleEl = document.getElementById("active-downloads-title");
   if (!tbody) return;
 
+  if (titleEl) {
+    titleEl.textContent = isActive ? "Download in corso" : "Ultimi download completati";
+  }
+
   if (badge) {
-    badge.textContent = isActiveList ? items.length : "0";
-    if (isActiveList && items.length > 0) {
+    badge.textContent = isActive ? items.length : "0";
+    if (isActive && items.length > 0) {
       badge.className = "inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 animate-pulse";
     } else {
       badge.className = "inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600";
@@ -127,26 +132,17 @@ function renderActiveDownloadsTable(items, isActiveList) {
 
 async function refresh() {
   try {
-    const activeRes = await fetch("/downloads?status=active&page=1&limit=5", {
+    const res = await fetch("/downloads?page=1&limit=5", {
       headers: { Accept: "application/json" },
     });
-    if (activeRes.ok) {
-      const activePayload = await activeRes.json();
-      updateSummary(activePayload);
+    if (res.ok) {
+      const payload = await res.json();
+      updateSummary(payload);
 
-      if (activePayload.downloads && activePayload.downloads.length > 0) {
-        renderActiveDownloadsTable(activePayload.downloads, true);
+      if (payload.active_items && payload.active_items.length > 0) {
+        renderTable(payload.active_items, true);
       } else {
-        // Se non ci sono download attivi, mostra comunque gli ultimi 5 download registrati
-        const recentRes = await fetch("/downloads?page=1&limit=5", {
-          headers: { Accept: "application/json" },
-        });
-        if (recentRes.ok) {
-          const recentPayload = await recentRes.json();
-          renderActiveDownloadsTable(recentPayload.downloads, false);
-        } else {
-          renderActiveDownloadsTable([], false);
-        }
+        renderTable(payload.downloads, false);
       }
     }
   } catch (err) {
@@ -155,5 +151,6 @@ async function refresh() {
 }
 
 refresh();
-setInterval(refresh, 4000);
+setInterval(refresh, 3000);
+
 

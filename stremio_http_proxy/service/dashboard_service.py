@@ -62,7 +62,44 @@ class DashboardService:
         search: str | None = None,
         status: str | None = None,
     ) -> DownloadStatusResponse:
-        entries = self.cache_manager.list_entries()
+        all_entries = self.cache_manager.list_entries()
+        total_cache_bytes = sum(
+            entry.size_bytes if entry.status == CacheEntryStatusEnum.READY else entry.downloaded_bytes
+            for _, entry in all_entries
+        )
+        status_counts: dict[str, int] = {}
+        active_downloads = 0
+        active_items = []
+        for cache_key, entry in all_entries:
+            status_counts[entry.status] = status_counts.get(entry.status, 0) + 1
+            if entry.status in {CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING}:
+                active_downloads += 1
+            if entry.status in {
+                CacheEntryStatusEnum.DOWNLOADING,
+                CacheEntryStatusEnum.PROCESSING,
+                CacheEntryStatusEnum.QUEUED,
+            }:
+                infohash, index = self.cache_manager.parse_cache_key(cache_key)
+                active_items.append(
+                    DownloadStatus(
+                        cache_key=cache_key,
+                        title=entry.title,
+                        infohash=infohash,
+                        index=index,
+                        status=entry.status,
+                        created_at=entry.created_at,
+                        completed_at=entry.completed_at,
+                        downloaded_bytes=entry.downloaded_bytes,
+                        expected_bytes=entry.expected_bytes,
+                        progress_percent=entry.progress_percent,
+                        download_speed_bytes_per_second=entry.download_speed_bytes_per_second,
+                        attempt=entry.attempt,
+                        last_error=entry.last_error,
+                        last_progress_at=entry.last_progress_at,
+                    )
+                )
+
+        entries = all_entries
         if search:
             search_lower = search.lower()
             entries = [
@@ -81,21 +118,12 @@ class DashboardService:
                 ]
             else:
                 entries = [(k, e) for k, e in entries if e.status == status]
-        total_items = len(entries)
+
+        total_items = len(entries) if (search or status) else len(all_entries)
         total_pages = max((total_items + limit - 1) // limit, 1)
         page = min(page, total_pages)
         start = (page - 1) * limit
         end = start + limit
-        total_cache_bytes = sum(
-            entry.size_bytes if entry.status == CacheEntryStatusEnum.READY else entry.downloaded_bytes
-            for _, entry in entries
-        )
-        status_counts: dict[str, int] = {}
-        active_downloads = 0
-        for _, entry in entries:
-            status_counts[entry.status] = status_counts.get(entry.status, 0) + 1
-            if entry.status in {CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING}:
-                active_downloads += 1
 
         downloads = []
         for cache_key, entry in entries[start:end]:
@@ -129,4 +157,5 @@ class DashboardService:
             status_counts=status_counts,
             active_downloads=active_downloads,
             downloads=downloads,
+            active_items=active_items[:5],
         )

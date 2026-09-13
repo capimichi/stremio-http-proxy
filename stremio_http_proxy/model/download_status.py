@@ -28,3 +28,5 @@ class DownloadStatusResponse(BaseModel):
     status_counts: dict[str, int]
     active_downloads: int
     downloads: list[DownloadStatus]
+    active_items: list[DownloadStatus] = []
+
