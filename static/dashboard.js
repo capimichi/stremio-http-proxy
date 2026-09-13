@@ -39,15 +39,23 @@ function statusBadgeClasses(status) {
 }
 
 function updateSummary(payload) {
-  document.getElementById("summary-total-items").textContent = payload.total_items;
-  document.getElementById("summary-active-downloads").textContent = payload.active_downloads;
-  document.getElementById("summary-cache-size").textContent = formatBytes(payload.total_cache_bytes);
+  const totalEl = document.getElementById("summary-total-items");
+  if (totalEl) totalEl.textContent = payload.total_items;
+
+  const activeEl = document.getElementById("summary-active-downloads");
+  if (activeEl) activeEl.textContent = payload.active_downloads;
+
+  const cacheEl = document.getElementById("summary-cache-size");
+  if (cacheEl) cacheEl.textContent = formatBytes(payload.total_cache_bytes);
 
   const counts = payload.status_counts || {};
   const ready = counts.ready || 0;
+  const readyEl = document.getElementById("summary-ready-count");
+  if (readyEl) readyEl.textContent = ready;
+
   const pending = (counts.downloading || 0) + (counts.processing || 0) + (counts.queued || 0) + (counts.failed || 0) + (counts.missing || 0);
-  document.getElementById("summary-ready-count").textContent = ready;
-  document.getElementById("summary-pending-count").textContent = pending;
+  const pendingEl = document.getElementById("summary-pending-count");
+  if (pendingEl) pendingEl.textContent = pending;
 }
 
 function renderActiveDownloadsTable(items, isActiveList) {

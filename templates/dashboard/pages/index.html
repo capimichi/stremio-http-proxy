@@ -4,29 +4,22 @@
 {% block page_title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4" id="summary-cards">
-  <div class="rounded-xl border bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-gray-500">Entry totali</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-total-items">-</p>
+<div class="grid grid-cols-2 gap-3 sm:gap-4 lg:gap-6 lg:grid-cols-4" id="summary-cards">
+  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
+    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Entry totali</p>
+    <p class="mt-1 text-xl font-bold text-gray-900 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-total-items">-</p>
   </div>
-  <div class="rounded-xl border bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-gray-500">Download attivi</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-active-downloads">-</p>
+  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
+    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Download attivi</p>
+    <p class="mt-1 text-xl font-bold text-blue-600 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-active-downloads">-</p>
   </div>
-  <div class="rounded-xl border bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-gray-500">Cache occupata</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-cache-size">-</p>
+  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
+    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Cache occupata</p>
+    <p class="mt-1 text-xl font-bold text-gray-900 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-cache-size">-</p>
   </div>
-  <div class="rounded-xl border bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-gray-500">Pronti</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-ready-count">-</p>
-  </div>
-</div>
-
-<div class="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4" id="extra-cards">
-  <div class="rounded-xl border bg-white p-5 shadow-sm">
-    <p class="text-sm font-medium text-gray-500">In elaborazione</p>
-    <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-pending-count">-</p>
+  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
+    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Pronti in cache</p>
+    <p class="mt-1 text-xl font-bold text-green-600 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-ready-count">-</p>
   </div>
 </div>
 
