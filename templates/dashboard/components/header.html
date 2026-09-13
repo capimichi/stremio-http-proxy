@@ -1,4 +1,18 @@
-<header class="flex h-16 items-center justify-between border-b bg-white px-6 shadow-sm">
-  <h1 class="text-lg font-semibold text-gray-900">{% block page_title %}{% endblock %}</h1>
+<header class="flex h-16 items-center justify-between border-b bg-white px-4 sm:px-6 shadow-sm">
+  <div class="flex items-center gap-3">
+    <button
+      id="sidebar-toggle"
+      type="button"
+      onclick="toggleSidebar()"
+      class="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+      aria-label="Toggle sidebar"
+      title="Toggle sidebar"
+    >
+      <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+      </svg>
+    </button>
+    <h1 class="text-lg font-semibold text-gray-900">{% block page_title %}{% endblock %}</h1>
+  </div>
   <span class="text-sm text-gray-500" id="manifest-link"></span>
 </header>

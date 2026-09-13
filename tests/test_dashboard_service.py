@@ -133,3 +133,21 @@ def test_dashboard_service_paginates_results(tmp_path):
     assert payload.status_counts == {"queued": 12}
     assert payload.active_downloads == 0
     assert len(payload.downloads) == 2
+
+
+def test_dashboard_service_filters_by_active_status(tmp_path):
+    cache_manager = build_cache_manager(tmp_path)
+    key_downloading = cache_manager.build_cache_key_from_parts("1" * 40, 0)
+    key_ready = cache_manager.build_cache_key_from_parts("2" * 40, 0)
+    key_failed = cache_manager.build_cache_key_from_parts("3" * 40, 0)
+
+    cache_manager._write_entry(key_downloading, cache_manager.get_entry(key_downloading).model_copy(update={"status": CacheEntryStatusEnum.DOWNLOADING}))
+    cache_manager._write_entry(key_ready, cache_manager.get_entry(key_ready).model_copy(update={"status": CacheEntryStatusEnum.READY}))
+    cache_manager._write_entry(key_failed, cache_manager.get_entry(key_failed).model_copy(update={"status": CacheEntryStatusEnum.FAILED}))
+
+    service = DashboardService(cache_manager, "https://proxy.example.com")
+    payload = service.get_download_status(status="active", limit=5)
+
+    assert len(payload.downloads) == 1
+    assert payload.downloads[0].cache_key == key_downloading
+

@@ -42,5 +42,6 @@ class CacheController:
         page: int = Query(default=1, ge=1),
         limit: int = Query(default=10, ge=1, le=100),
         search: str | None = Query(default=None),
+        status: str | None = Query(default=None),
     ) -> dict:
-        return self.dashboard_service.get_download_status(page=page, limit=limit, search=search).model_dump()
+        return self.dashboard_service.get_download_status(page=page, limit=limit, search=search, status=status).model_dump()

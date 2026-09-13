@@ -29,6 +29,42 @@
     <p class="mt-2 text-3xl font-bold text-gray-900" id="summary-pending-count">-</p>
   </div>
 </div>
+
+<div class="mt-8">
+  <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center gap-2.5">
+      <h2 class="text-base font-semibold text-gray-900">Ultimi Download Attivi</h2>
+      <span id="active-downloads-badge" class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">0</span>
+    </div>
+    <a href="/dashboard/cache-items" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
+      Tutti gli elementi in cache &rarr;
+    </a>
+  </div>
+
+  <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
+        <thead class="bg-gray-50 text-xs font-medium uppercase tracking-wider text-gray-500">
+          <tr>
+            <th class="px-5 py-3">Contenuto</th>
+            <th class="px-5 py-3">Dimensione</th>
+            <th class="px-5 py-3">Stato</th>
+            <th class="px-5 py-3">Progresso / Velocità</th>
+            <th class="px-5 py-3">Data</th>
+            <th class="px-5 py-3">Azione</th>
+          </tr>
+        </thead>
+        <tbody id="active-downloads-body" class="divide-y divide-gray-100 bg-white">
+          <tr>
+            <td colspan="6" class="px-5 py-8 text-center text-sm text-gray-400">
+              <i class="fa-solid fa-spinner fa-spin mr-2"></i> Caricamento download in corso...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

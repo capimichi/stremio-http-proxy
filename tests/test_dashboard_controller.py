@@ -36,8 +36,8 @@ class FakeDashboardService:
         self.calls.append(("get_cache_entry_context", infohash, index))
         return self.context_entry_to_return
 
-    def get_download_status(self, page=1, limit=10, search=None):
-        self.calls.append((page, limit, search))
+    def get_download_status(self, page=1, limit=10, search=None, status=None):
+        self.calls.append((page, limit, search, status))
         return type(
             "Payload",
             (),
