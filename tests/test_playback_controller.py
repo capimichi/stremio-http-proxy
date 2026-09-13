@@ -258,6 +258,14 @@ https://mediaflow.example.com/video.m3u8
             text=raw_manifest,
             headers={"content-type": "application/vnd.apple.mpegurl"},
         )
+        respx.get("https://mediaflow.example.com/video.m3u8").respond(
+            status_code=200,
+            text="#EXTM3U\n#EXTINF:10.0,\nhttps://mediaflow.example.com/chunk_0.ts\n",
+        )
+        respx.get("https://mediaflow.example.com/chunk_0.ts").respond(
+            status_code=200,
+            content=b"CHUNK_DATA",
+        )
 
         async def main():
             response = await controller.play_manifest(
@@ -311,12 +319,54 @@ https://mediaflow.example.com/variant_1080.m3u8
             text=raw_manifest,
             headers={"content-type": "application/vnd.apple.mpegurl"},
         )
+        respx.get("https://mediaflow.example.com/variant_1080.m3u8").respond(
+            status_code=200,
+            text="#EXTM3U\n#EXTINF:10.0,\nhttps://mediaflow.example.com/chunk_1080_0.ts\n",
+        )
+        respx.get("https://mediaflow.example.com/chunk_1080_0.ts").respond(
+            status_code=200,
+            content=b"CHUNK_DATA",
+        )
 
         async def main():
             response = await controller.play_manifest(link=http_link)
             assert response.status_code == 200
             body = response.body.decode("utf-8")
             assert "http://localhost:8691/play/variant.m3u8?key=key123%3A0&link=https%3A%2F%2Fmediaflow.example.com%2Fvariant_1080.m3u8" in body
+
+        asyncio.run(main())
+
+
+def test_playback_controller_play_manifest_fails_when_upstream_chunk_returns_403(tmp_path):
+    controller = build_controller(tmp_path)
+    http_link = "https://mediaflow.example.com/_token_bad/proxy/hls/manifest.m3u8"
+    raw_manifest = """#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080
+https://mediaflow.example.com/variant.m3u8
+"""
+    import respx
+
+    with respx.mock:
+        respx.get(http_link).respond(
+            status_code=200,
+            text=raw_manifest,
+            headers={"content-type": "application/vnd.apple.mpegurl"},
+        )
+        respx.get("https://mediaflow.example.com/variant.m3u8").respond(
+            status_code=200,
+            text="#EXTM3U\n#EXTINF:10.0,\nhttps://mediaflow.example.com/chunk_0.ts\n",
+        )
+        respx.get("https://mediaflow.example.com/chunk_0.ts").respond(
+            status_code=403,
+            text="Access Denied",
+        )
+
+        async def main():
+            response = await controller.play_manifest(link=http_link)
+            assert response.status_code == 502
+            assert "403" in response.body.decode("utf-8")
+            # Ensure downloads were NOT scheduled
+            assert len(controller.download_queue_service.calls) == 0
 
         asyncio.run(main())
 

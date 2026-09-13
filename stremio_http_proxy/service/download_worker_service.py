@@ -71,9 +71,14 @@ class DownloadWorkerService:
         except Exception as exc:
             error = str(exc)
             self.cache_manager.cleanup_partial(job.cache_key)
-            if job.attempt + 1 >= job.max_attempts:
+            if job.attempt + 1 >= job.max_attempts or self._is_permanent_error(exc):
                 self.cache_manager.mark_failed(job.cache_key, error, job.attempt + 1)
-                self.logger.error("Worker %s discarding job %s: %s", self.worker_id, job.job_id, error)
+                self.logger.error(
+                    "Worker %s discarding job %s (permanent error or max attempts reached): %s",
+                    self.worker_id,
+                    job.job_id,
+                    error,
+                )
                 await self.cache_manager.move_to_dead_letter(job, error)
                 return True
 
@@ -82,6 +87,23 @@ class DownloadWorkerService:
             self.logger.warning("Worker %s retrying job %s in %ss: %s", self.worker_id, job.job_id, delay_seconds, error)
             await self.cache_manager.retry_download(job, delay_seconds, error)
             return True
+
+    @staticmethod
+    def _is_permanent_error(exc: Exception) -> bool:
+        if isinstance(exc, httpx.HTTPStatusError):
+            return exc.response.status_code in (400, 401, 403, 404, 410, 451)
+        err_msg = str(exc).lower()
+        return any(
+            code in err_msg
+            for code in (
+                "401 unauthorized",
+                "403 forbidden",
+                "404 not found",
+                "410 gone",
+                "451 unavailable for legal reasons",
+                "access denied",
+            )
+        )
 
     async def _download(self, job: DownloadJob) -> None:
         self.cache_manager.mark_downloading(job.cache_key, job.attempt)
@@ -178,6 +200,9 @@ class DownloadWorkerService:
                 await self._download_hls_chunks(job, url)
                 return
             except Exception as e:
+                if self._is_permanent_error(e):
+                    self.logger.error("HLS chunk download encountered permanent error for %s: %s", job.cache_key, e)
+                    raise
                 self.logger.warning("Chunk-based HLS download failed for %s (%s), falling back to ffmpeg direct stream", job.cache_key, e)
 
         await self._download_hls_ffmpeg(job, url)
@@ -185,8 +210,7 @@ class DownloadWorkerService:
     async def _resolve_hls_chunks(self, url: str) -> list[str]:
         async with httpx.AsyncClient(follow_redirects=True, timeout=self.connect_timeout_seconds) as client:
             resp = await client.get(url)
-            if resp.status_code != 200:
-                return []
+            resp.raise_for_status()
             content = resp.text
             base_url = str(resp.url)
             lines = content.splitlines()
@@ -207,8 +231,7 @@ class DownloadWorkerService:
                 if not variant_url:
                     return []
                 resp = await client.get(variant_url)
-                if resp.status_code != 200:
-                    return []
+                resp.raise_for_status()
                 content = resp.text
                 base_url = str(resp.url)
                 lines = content.splitlines()

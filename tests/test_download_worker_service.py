@@ -284,6 +284,48 @@ https://mediaflow.example.com/chunk0.ts
         assert cache_manager.acknowledged == ["job-hls-chunks-1"]
         assert len(cache_manager.ready_keys) == 1
         assert cache_manager.ready_keys[0][0] == "hash789:0"
-        # chunk 1 was downloaded to disk
         assert chunk_manager.has_chunk("hash789:0", 1)
+
+
+def test_download_worker_discards_job_on_permanent_403_error(tmp_path):
+    import respx
+
+    hls_url = "https://mediaflow.example.com/dead_manifest.m3u8"
+    job = DownloadJob(
+        job_id="job-dead-403",
+        cache_key="dead403:0",
+        link=hls_url,
+        enqueued_at=0,
+        available_at=0,
+    )
+    cache_manager = FakeCacheManager(tmp_path)
+    cache_manager.claimed_job = job
+
+    with respx.mock:
+        respx.get(hls_url).respond(status_code=403, text="Access Denied")
+
+        from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
+
+        chunk_manager = HlsChunkManager(tmp_path / "cache", LoggerFactory(str(tmp_path)))
+        service = DownloadWorkerService(
+            FakeTorrServerClient(),
+            cache_manager,
+            LoggerFactory(str(tmp_path)),
+            poll_seconds=1,
+            connect_timeout_seconds=10,
+            no_progress_timeout_seconds=30,
+            min_progress_bytes=10,
+            min_progress_window_seconds=120,
+            max_total_seconds=60,
+            progress_log_interval_seconds=1,
+            hls_chunk_manager=chunk_manager,
+        )
+
+        processed = asyncio.run(service.process_next_job())
+        assert processed is True
+        # Must be moved to dead letter immediately without retry
+        assert cache_manager.retried == []
+        assert len(cache_manager.dead) == 1
+        assert cache_manager.dead[0][0] == "job-dead-403"
+
 

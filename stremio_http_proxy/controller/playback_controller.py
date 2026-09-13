@@ -61,11 +61,23 @@ class PlaybackController:
             return RedirectResponse(url=cached_route, status_code=307)
 
         if link.startswith(("http://", "https://")):
-            self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
             cache_key = None
             if hasattr(self.cache_service, "cache_manager"):
                 cache_key = self.cache_service.cache_manager.build_cache_key(link, index)
-            cleaned = await self._fetch_and_clean_manifest(link, cache_key)
+
+            cleaned, error = await self._verify_and_prepare_manifest(link, cache_key)
+            if error is not None:
+                self.logger.warning("Stream verification failed on play for %s: %s", link, error)
+                if (
+                    cache_key
+                    and hasattr(self.cache_service, "cache_manager")
+                    and hasattr(self.cache_service.cache_manager, "mark_failed")
+                ):
+                    self.cache_service.cache_manager.mark_failed(cache_key, error, attempt=1)
+                return Response(content=f"Stream unreachable: {error}", status_code=502, media_type="text/plain")
+
+            self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
+
             if cleaned is not None:
                 return Response(
                     content=cleaned,
@@ -79,24 +91,127 @@ class PlaybackController:
 
         return await self.play(link, title, poster, category, index, content_type, content_id)
 
-    async def _fetch_and_clean_manifest(self, link: str, cache_key: str | None = None) -> str | None:
+    async def _verify_and_prepare_manifest(
+        self, link: str, cache_key: str | None = None
+    ) -> tuple[str | None, str | None]:
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
                 resp = await client.get(link)
                 if resp.status_code != 200:
                     self.logger.warning(f"Failed to fetch manifest from {link}: status {resp.status_code}")
-                    return None
-                public_base_url = getattr(self.cache_service, "public_base_url", None)
-                return self._clean_hls_manifest(
-                    resp.text,
-                    str(resp.url),
-                    cache_key=cache_key,
-                    public_base_url=public_base_url,
-                    chunk_manager=self.hls_chunk_manager,
-                )
-        except Exception:
+                    return None, f"Upstream manifest returned HTTP {resp.status_code}"
+                manifest_content = resp.text
+                base_url = str(resp.url)
+        except Exception as e:
             self.logger.exception(f"Exception fetching manifest from {link}")
-            return None
+            return None, f"Exception fetching manifest: {e}"
+
+        lines = manifest_content.splitlines()
+        is_master = any(l.strip().startswith("#EXT-X-STREAM-INF") for l in lines)
+
+        first_chunk_url = None
+
+        if is_master:
+            expect_variant = False
+            first_variant_url = None
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("#EXT-X-STREAM-INF"):
+                    expect_variant = True
+                    continue
+                if expect_variant and not stripped.startswith("#") and stripped:
+                    abs_variant = urllib.parse.urljoin(base_url, stripped)
+                    if abs_variant.startswith("http://") and base_url.startswith("https://"):
+                        abs_variant = "https://" + abs_variant[7:]
+                    first_variant_url = abs_variant
+                    break
+
+            if first_variant_url:
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=10.0) as client:
+                        v_resp = await client.get(first_variant_url)
+                        if v_resp.status_code != 200:
+                            self.logger.warning(
+                                "Failed to fetch variant playlist from %s: status %s",
+                                first_variant_url,
+                                v_resp.status_code,
+                            )
+                            return None, f"Upstream variant returned HTTP {v_resp.status_code}"
+                        var_lines = v_resp.text.splitlines()
+                        var_base = str(v_resp.url)
+                        expect_c = False
+                        for vl in var_lines:
+                            v_str = vl.strip()
+                            if v_str.startswith("#EXTINF"):
+                                expect_c = True
+                                continue
+                            if expect_c and not v_str.startswith("#") and v_str:
+                                c_url = urllib.parse.urljoin(var_base, v_str)
+                                if c_url.startswith("http://") and var_base.startswith("https://"):
+                                    c_url = "https://" + c_url[7:]
+                                first_chunk_url = c_url
+                                break
+                except Exception as e:
+                    self.logger.warning("Exception fetching variant playlist from %s: %s", first_variant_url, e)
+                    return None, f"Failed to fetch variant playlist: {e}"
+        else:
+            expect_c = False
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith("#EXTINF"):
+                    expect_c = True
+                    continue
+                if expect_c and not stripped.startswith("#") and stripped:
+                    c_url = urllib.parse.urljoin(base_url, stripped)
+                    if c_url.startswith("http://") and base_url.startswith("https://"):
+                        c_url = "https://" + c_url[7:]
+                    first_chunk_url = c_url
+                    break
+
+        if first_chunk_url:
+            if cache_key and self.hls_chunk_manager is not None:
+                if not self.hls_chunk_manager.has_chunk(cache_key, 0):
+                    try:
+                        await self.hls_chunk_manager.get_or_download_chunk(
+                            cache_key,
+                            0,
+                            first_chunk_url,
+                            timeout=5.0,
+                        )
+                    except httpx.HTTPStatusError as e:
+                        self.logger.warning(
+                            "Probe chunk 0 failed for %s: HTTP %s",
+                            cache_key,
+                            e.response.status_code,
+                        )
+                        return None, f"Upstream chunk returned HTTP {e.response.status_code}"
+                    except Exception as e:
+                        self.logger.warning("Probe chunk 0 failed for %s: %s", cache_key, e)
+                        return None, f"Upstream chunk probe failed: {e}"
+            else:
+                try:
+                    async with httpx.AsyncClient(follow_redirects=True, timeout=5.0) as client:
+                        c_resp = await client.get(first_chunk_url, headers={"Range": "bytes=0-1024"})
+                        if c_resp.status_code in (401, 403, 404, 410, 502):
+                            self.logger.warning(
+                                "Probe chunk 0 returned HTTP %s for %s",
+                                c_resp.status_code,
+                                first_chunk_url,
+                            )
+                            return None, f"Upstream chunk returned HTTP {c_resp.status_code}"
+                except Exception as e:
+                    self.logger.warning("Probe chunk 0 failed for %s: %s", first_chunk_url, e)
+                    return None, f"Upstream chunk probe failed: {e}"
+
+        public_base_url = getattr(self.cache_service, "public_base_url", None)
+        cleaned = self._clean_hls_manifest(
+            manifest_content,
+            base_url,
+            cache_key=cache_key,
+            public_base_url=public_base_url,
+            chunk_manager=self.hls_chunk_manager,
+        )
+        return cleaned, None
 
     @staticmethod
     def _clean_hls_manifest(
@@ -246,6 +361,17 @@ class PlaybackController:
                         "Cache-Control": "public, max-age=86400",
                     },
                 )
+            except httpx.HTTPStatusError as e:
+                self.logger.warning(
+                    f"Chunk seq={seq} key={key} failed with upstream HTTP {e.response.status_code}"
+                )
+                if e.response.status_code in (401, 403, 404, 410, 502):
+                    return Response(
+                        content=f"Chunk error: HTTP {e.response.status_code}",
+                        status_code=502,
+                        media_type="text/plain",
+                    )
+                return RedirectResponse(url=url, status_code=307)
             except Exception as e:
                 self.logger.warning(f"Failed to get/download chunk seq={seq} key={key}: {e}, redirecting to upstream")
                 return RedirectResponse(url=url, status_code=307)
