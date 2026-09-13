@@ -95,6 +95,11 @@ class DefaultContainer:
             os.environ.get("MEDIAFLOW_ENABLED", "true").lower() == "true"
             and bool(self.mediaflow_base_url)
         )
+        self.http_streams_passthrough = os.environ.get("HTTP_STREAMS_PASSTHROUGH", "false").lower() == "true"
+        self.http_streams_proxy_enabled = (
+            os.environ.get("HTTP_STREAMS_PROXY_ENABLED", "true").lower() == "true"
+            and not self.http_streams_passthrough
+        )
         if not self.app_secret or not self.app_secret.strip():
             raise ValueError("APP_SECRET environment variable is required")
 
@@ -146,6 +151,7 @@ class DefaultContainer:
             self.torrserver_health_check_timeout_seconds,
             whitelist_repository if self.whitelist_enabled else None,
             mediaflow_client=mediaflow_client,
+            http_streams_proxy_enabled=self.http_streams_proxy_enabled,
         )
         whitelist_service = WhitelistService(whitelist_repository)
         content_browser_service = ContentBrowserService(upstream_client, tmdb_client, stream_rewrite_service)

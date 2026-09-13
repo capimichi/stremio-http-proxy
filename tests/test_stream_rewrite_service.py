@@ -378,3 +378,48 @@ async def test_stream_rewrite_preserves_http_streams_when_whitelist_is_active():
     assert "Torrent Allowed" in names
     assert "Torrent Disallowed" not in names
     assert "Toastflix 720p" in names
+
+
+@pytest.mark.asyncio
+async def test_stream_rewrite_passes_http_streams_as_is_when_http_streams_proxy_disabled():
+    from stremio_http_proxy.client.mediaflow_client import MediaflowClient
+
+    mediaflow_client = MediaflowClient("https://mediaflow.example.com", "secret")
+    service = StreamRewriteService(
+        "http://localhost:8691",
+        FakeCacheManager(),
+        mediaflow_client=mediaflow_client,
+        http_streams_proxy_enabled=False,
+    )
+    raw_toastflix_url = "https://mediaflow.example.com/_token_123/proxy/stream/Gotham.mp4"
+    direct_hls_url = "https://toastflix.example.com/manifest.m3u8"
+    torrent_hash = "c" * 40
+
+    payload = {
+        "streams": [
+            {
+                "name": "Toastflix 1080p",
+                "url": raw_toastflix_url,
+                "behaviorHints": {"notWebReady": True},
+            },
+            {
+                "name": "Direct HLS",
+                "url": direct_hls_url,
+            },
+            {
+                "name": "Torrent Stream",
+                "infoHash": torrent_hash,
+            },
+        ]
+    }
+
+    rewritten = await service.rewrite(payload, category="tv", content_id="tt3749900:1:1")
+
+    # HTTP streams must be completely untouched (as is)
+    assert rewritten["streams"][0]["url"] == raw_toastflix_url
+    assert rewritten["streams"][0]["behaviorHints"]["notWebReady"] is True
+    assert rewritten["streams"][1]["url"] == direct_hls_url
+
+    # Torrent stream must still be rewritten through the proxy
+    assert "http://localhost:8691/play?" in rewritten["streams"][2]["url"]
+

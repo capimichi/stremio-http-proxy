@@ -25,6 +25,7 @@ class StreamRewriteService:
         torrserver_health_check_timeout: int = 15,
         whitelist_repository: WhitelistRepository | None = None,
         mediaflow_client: MediaflowClient | None = None,
+        http_streams_proxy_enabled: bool = True,
     ):
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_manager = cache_manager
@@ -34,6 +35,7 @@ class StreamRewriteService:
         self.torrserver_health_check_timeout = torrserver_health_check_timeout
         self.whitelist_repository = whitelist_repository
         self.mediaflow_client = mediaflow_client
+        self.http_streams_proxy_enabled = http_streams_proxy_enabled
 
     async def rewrite(
         self,
@@ -55,6 +57,10 @@ class StreamRewriteService:
                 continue
             torrent_link = self._extract_torrent_link(stream)
             if torrent_link is None:
+                if not self.http_streams_proxy_enabled:
+                    rewritten_streams.append(dict(stream))
+                    continue
+
                 updated = dict(stream)
                 raw_url = updated.get("url")
                 if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")):
