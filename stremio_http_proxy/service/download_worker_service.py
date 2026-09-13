@@ -201,6 +201,8 @@ class DownloadWorkerService:
                         continue
                     if expect_variant and not stripped.startswith("#") and stripped:
                         variant_url = urljoin(base_url, stripped)
+                        if variant_url.startswith("http://") and base_url.startswith("https://"):
+                            variant_url = "https://" + variant_url[7:]
                         break
                 if not variant_url:
                     return []
@@ -219,7 +221,10 @@ class DownloadWorkerService:
                     expect_chunk = True
                     continue
                 if expect_chunk and not stripped.startswith("#") and stripped:
-                    chunk_urls.append(urljoin(base_url, stripped))
+                    chunk_url = urljoin(base_url, stripped)
+                    if chunk_url.startswith("http://") and base_url.startswith("https://"):
+                        chunk_url = "https://" + chunk_url[7:]
+                    chunk_urls.append(chunk_url)
                     expect_chunk = False
 
             return chunk_urls
