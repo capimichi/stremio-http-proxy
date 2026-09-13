@@ -12,6 +12,7 @@ from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.model.download_job import DownloadJob
+from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 
 
 class DownloadWorkerService:
@@ -29,10 +30,14 @@ class DownloadWorkerService:
         max_total_seconds: int,
         progress_log_interval_seconds: int,
         hls_chunk_manager: HlsChunkManager | None = None,
+        prefetch_min_progress_bytes: int = 1048576,
+        next_episode_prefetch_service: NextEpisodePrefetchService | None = None,
     ):
         self.torrserver_client = torrserver_client
         self.cache_manager = cache_manager
         self.hls_chunk_manager = hls_chunk_manager
+        self.prefetch_min_progress_bytes = prefetch_min_progress_bytes
+        self.next_episode_prefetch_service = next_episode_prefetch_service
         self.logger = logger_factory.get_logger("stremio_http_proxy.download_worker", "download_worker.log")
         self.progress_logger = logger_factory.get_logger("stremio_http_proxy.download_progress", "download_progress.log")
         self.worker_id = socket.gethostname()
@@ -43,6 +48,11 @@ class DownloadWorkerService:
         self.min_progress_window_seconds = min_progress_window_seconds
         self.max_total_seconds = max_total_seconds
         self.progress_log_interval_seconds = progress_log_interval_seconds
+
+    def _required_min_progress_bytes(self, job: DownloadJob) -> int:
+        if job.trigger == "next_episode_prefetch":
+            return self.prefetch_min_progress_bytes
+        return self.min_progress_bytes
 
     async def run_forever(self) -> None:
         while True:
@@ -80,6 +90,13 @@ class DownloadWorkerService:
                     error,
                 )
                 await self.cache_manager.move_to_dead_letter(job, error)
+                if self.next_episode_prefetch_service and job.trigger == "next_episode_prefetch":
+                    try:
+                        await self.next_episode_prefetch_service.on_download_failed(
+                            job.content_type, job.content_id, job.category
+                        )
+                    except Exception:
+                        self.logger.exception("Error triggering fallback for prefetch job %s", job.job_id)
                 return True
 
             delay_seconds = self._retry_delay(job.attempt + 1)
@@ -149,7 +166,7 @@ class DownloadWorkerService:
                         if now - started_at > self.max_total_seconds:
                             raise TimeoutError("download exceeded maximum duration")
                         if now - window_started_at >= self.min_progress_window_seconds:
-                            if downloaded_bytes - bytes_at_window_start < self.min_progress_bytes:
+                            if downloaded_bytes - bytes_at_window_start < self._required_min_progress_bytes(job):
                                 raise TimeoutError("download progress stayed below threshold")
                             window_started_at = now
                             bytes_at_window_start = downloaded_bytes
@@ -295,7 +312,7 @@ class DownloadWorkerService:
                 progress_percent = (downloaded_count / total_chunks) * 100.0
 
                 if now - window_started_at >= self.min_progress_window_seconds:
-                    if downloaded_bytes - bytes_at_window_start < self.min_progress_bytes:
+                    if downloaded_bytes - bytes_at_window_start < self._required_min_progress_bytes(job):
                         raise TimeoutError("HLS chunk download progress stayed below threshold")
                     window_started_at = now
                     bytes_at_window_start = downloaded_bytes
@@ -414,7 +431,7 @@ class DownloadWorkerService:
                 raise TimeoutError("download exceeded maximum duration")
 
             if now - window_started_at >= self.min_progress_window_seconds:
-                if downloaded_bytes - bytes_at_window_start < self.min_progress_bytes:
+                if downloaded_bytes - bytes_at_window_start < self._required_min_progress_bytes(job):
                     proc.kill()
                     await proc.wait()
                     raise TimeoutError("download progress stayed below threshold")

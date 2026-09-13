@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 from injector import inject
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.entity.cache_entry import CacheEntry as CacheEntryRecord
@@ -177,6 +177,39 @@ class CacheManager:
                 .order_by(CacheEntryRecord.last_progress_at.desc(), CacheEntryRecord.created_at.desc())
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
+
+    def count_ready_for_content(self, content_id: str) -> int:
+        with self.db_manager.session() as session:
+            count = session.scalar(
+                select(func.count())
+                .select_from(CacheEntryRecord)
+                .where(
+                    CacheEntryRecord.content_id == content_id,
+                    CacheEntryRecord.status == CacheEntryStatusEnum.READY.value,
+                )
+            )
+            return int(count or 0)
+
+    def count_active_or_ready_for_content(self, content_id: str) -> int:
+        with self.db_manager.session() as session:
+            count = session.scalar(
+                select(func.count())
+                .select_from(CacheEntryRecord)
+                .where(
+                    CacheEntryRecord.content_id == content_id,
+                    CacheEntryRecord.status.in_([
+                        CacheEntryStatusEnum.READY.value,
+                        CacheEntryStatusEnum.DOWNLOADING.value,
+                        CacheEntryStatusEnum.PENDING.value,
+                    ]),
+                )
+            )
+            return int(count or 0)
+
+    def is_candidate_attempted(self, cache_key: str) -> bool:
+        with self.db_manager.session() as session:
+            record = session.get(CacheEntryRecord, cache_key)
+            return record is not None
 
     def list_entries(self) -> list[tuple[str, CacheEntryModel]]:
         with self.db_manager.session() as session:

@@ -329,3 +329,70 @@ def test_download_worker_discards_job_on_permanent_403_error(tmp_path):
         assert cache_manager.dead[0][0] == "job-dead-403"
 
 
+def test_download_worker_triggers_prefetch_fallback_on_permanent_failure(tmp_path):
+    from unittest.mock import AsyncMock
+    import respx
+
+    prefetch_service = AsyncMock()
+
+    job = DownloadJob(
+        job_id="job-prefetch-fail",
+        cache_key="prefetchfail:0",
+        link="https://example.com/dead.m3u8",
+        enqueued_at=0,
+        available_at=0,
+        trigger="next_episode_prefetch",
+        content_type="series",
+        content_id="tt3749900:1:2",
+        category="tv",
+    )
+    cache_manager = FakeCacheManager(tmp_path)
+    cache_manager.claimed_job = job
+
+    with respx.mock:
+        respx.get("https://example.com/dead.m3u8").respond(status_code=403, text="Forbidden")
+
+        service = DownloadWorkerService(
+            FakeTorrServerClient(),
+            cache_manager,
+            LoggerFactory(str(tmp_path)),
+            poll_seconds=1,
+            connect_timeout_seconds=10,
+            no_progress_timeout_seconds=30,
+            min_progress_bytes=100,
+            min_progress_window_seconds=120,
+            max_total_seconds=60,
+            progress_log_interval_seconds=1,
+            prefetch_min_progress_bytes=10,
+            next_episode_prefetch_service=prefetch_service,
+        )
+
+        processed = asyncio.run(service.process_next_job())
+        assert processed is True
+        assert len(cache_manager.dead) == 1
+        assert prefetch_service.on_download_failed.call_count == 1
+        prefetch_service.on_download_failed.assert_called_once_with("series", "tt3749900:1:2", "tv")
+
+
+def test_download_worker_uses_prefetch_min_progress_bytes(tmp_path):
+    service = DownloadWorkerService(
+        FakeTorrServerClient(),
+        FakeCacheManager(tmp_path),
+        LoggerFactory(str(tmp_path)),
+        poll_seconds=1,
+        connect_timeout_seconds=10,
+        no_progress_timeout_seconds=90,
+        min_progress_bytes=33554432,
+        min_progress_window_seconds=600,
+        max_total_seconds=60,
+        progress_log_interval_seconds=1,
+        prefetch_min_progress_bytes=1048576,
+    )
+
+    playback_job = DownloadJob(job_id="1", cache_key="1", link="http://example.com", enqueued_at=0, available_at=0, trigger="playback")
+    prefetch_job = DownloadJob(job_id="2", cache_key="2", link="http://example.com", enqueued_at=0, available_at=0, trigger="next_episode_prefetch")
+
+    assert service._required_min_progress_bytes(playback_job) == 33554432
+    assert service._required_min_progress_bytes(prefetch_job) == 1048576
+
+

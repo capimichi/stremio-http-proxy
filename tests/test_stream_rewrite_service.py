@@ -1,4 +1,5 @@
 import urllib.parse
+from unittest.mock import MagicMock
 import pytest
 
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
@@ -428,4 +429,68 @@ async def test_stream_rewrite_passes_http_streams_as_is_when_http_streams_proxy_
 
     # Torrent stream must still be rewritten through the proxy
     assert "http://localhost:8691/play?" in rewritten["streams"][2]["url"]
+
+
+@pytest.mark.asyncio
+async def test_stream_rewrite_puts_cached_streams_at_the_top():
+    cached_hash = "a" * 40
+    other_hash = "b" * 40
+    cache_manager = FakeCacheManager(ready_cache_keys={f"{cached_hash}:0"})
+
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=cache_manager,
+        http_streams_proxy_enabled=True,
+    )
+
+    payload = {
+        "streams": [
+            {"name": "Stream 1", "infoHash": other_hash, "title": "Other Torrent"},
+            {"name": "Stream 2", "infoHash": cached_hash, "title": "Cached Torrent"},
+            {"name": "Stream 3", "url": "https://example.com/stream.mp4", "title": "HTTP Stream"},
+        ]
+    }
+
+    result = await service.rewrite(payload, category="tv", content_id="tt1234567:1:1")
+    streams = result["streams"]
+
+    # Stream 2 (the cached one) must now be at index 0
+    assert "🔥" in streams[0]["name"]
+    assert streams[0]["_meta"]["cached"] is True
+    assert streams[0]["infoHash"] == cached_hash
+
+    # Other streams retain their relative order
+    assert streams[1]["infoHash"] == other_hash
+    assert streams[2]["url"] == "https://example.com/stream.mp4"
+
+
+def test_extract_download_candidates_extracts_seeders():
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=FakeCacheManager(),
+    )
+    payload = {
+        "streams": [
+            {
+                "name": "Stream 1",
+                "description": "📄 File1.mkv\n💾 1.2 GB\n🌍 🇮🇹 | 👤 10 | ⏰",
+                "infoHash": "a" * 40,
+            },
+            {
+                "name": "Stream 2",
+                "description": "📄 File2.mkv\n💾 500 MB\n🌍 🇮🇹 | 👤 0 | ⏰",
+                "infoHash": "b" * 40,
+            },
+            {
+                "name": "Stream 3",
+                "description": "📄 File3.mkv\n💾 500 MB",
+                "infoHash": "c" * 40,
+            },
+        ]
+    }
+    candidates = service.extract_download_candidates(payload)
+    assert len(candidates) == 3
+    assert candidates[0]["seeders"] == 10
+    assert candidates[1]["seeders"] == 0
+    assert candidates[2]["seeders"] is None
 

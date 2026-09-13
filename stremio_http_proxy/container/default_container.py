@@ -75,8 +75,9 @@ class DefaultContainer:
         self.download_queue_poll_seconds = int(os.environ.get("DOWNLOAD_QUEUE_POLL_SECONDS", "1"))
         self.download_max_attempts = int(os.environ.get("DOWNLOAD_MAX_ATTEMPTS", "3"))
         self.download_connect_timeout_seconds = int(os.environ.get("DOWNLOAD_CONNECT_TIMEOUT_SECONDS", "10"))
-        self.download_no_progress_timeout_seconds = int(os.environ.get("DOWNLOAD_NO_PROGRESS_TIMEOUT_SECONDS", "30"))
+        self.download_no_progress_timeout_seconds = int(os.environ.get("DOWNLOAD_NO_PROGRESS_TIMEOUT_SECONDS", "90"))
         self.download_min_progress_bytes = int(os.environ.get("DOWNLOAD_MIN_PROGRESS_BYTES", str(32 * 1024 * 1024)))
+        self.download_prefetch_min_progress_bytes = int(os.environ.get("DOWNLOAD_PREFETCH_MIN_PROGRESS_BYTES", str(1024 * 1024)))
         self.download_min_progress_window_seconds = int(os.environ.get("DOWNLOAD_MIN_PROGRESS_WINDOW_SECONDS", "120"))
         self.download_max_total_seconds = int(os.environ.get("DOWNLOAD_MAX_TOTAL_SECONDS", str(45 * 60)))
         self.download_progress_log_interval_seconds = int(os.environ.get("DOWNLOAD_PROGRESS_LOG_INTERVAL_SECONDS", "10"))
@@ -85,6 +86,8 @@ class DefaultContainer:
         self.torrserver_health_check_timeout_seconds = int(os.environ.get("TORRSERVER_HEALTH_CHECK_TIMEOUT_SECONDS", "15"))
         self.next_episode_prefetch_enabled = os.environ.get("NEXT_EPISODE_PREFETCH_ENABLED", "true").lower() == "true"
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
+        self.prefetch_target_completed_per_episode = int(os.environ.get("PREFETCH_TARGET_COMPLETED_PER_EPISODE", "1"))
+        self.prefetch_skip_zero_seeders = os.environ.get("PREFETCH_SKIP_ZERO_SEEDERS", "true").lower() == "true"
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
@@ -158,11 +161,14 @@ class DefaultContainer:
         content_browser_service = ContentBrowserService(upstream_client, tmdb_client, stream_rewrite_service)
         download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts, self.cache_enabled)
         next_episode_prefetch_service = NextEpisodePrefetchService(
-            upstream_client,
-            stream_rewrite_service,
-            download_queue_service,
-            self.next_episode_prefetch_enabled,
-            self.next_episode_prefetch_stream_limit,
+            upstream_client=upstream_client,
+            stream_rewrite_service=stream_rewrite_service,
+            download_queue_service=download_queue_service,
+            cache_manager=cache_manager,
+            enabled=self.next_episode_prefetch_enabled,
+            stream_limit=self.next_episode_prefetch_stream_limit,
+            target_completed_per_episode=self.prefetch_target_completed_per_episode,
+            skip_zero_seeders=self.prefetch_skip_zero_seeders,
         )
         jinja_manager = JinjaManager(self.template_dir)
         dashboard_service = DashboardService(cache_manager, self.public_base_url)
@@ -178,6 +184,8 @@ class DefaultContainer:
             self.download_max_total_seconds,
             self.download_progress_log_interval_seconds,
             hls_chunk_manager=hls_chunk_manager,
+            prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
+            next_episode_prefetch_service=next_episode_prefetch_service,
         )
         playback_controller = PlaybackController(
             torrserver_client,

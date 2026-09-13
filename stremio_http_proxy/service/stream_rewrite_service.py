@@ -1,5 +1,6 @@
 from urllib.parse import urlencode, urlparse
 import os
+import re
 
 from injector import inject
 
@@ -186,6 +187,12 @@ class StreamRewriteService:
                         if self._is_stream_allowed(s, allowed)
                     ]
 
+        # Prioritize cached streams at the very top, preserving relative order of other streams
+        rewritten_streams.sort(
+            key=lambda s: 1 if (isinstance(s.get("_meta"), dict) and s["_meta"].get("cached")) else 0,
+            reverse=True,
+        )
+
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams
         return updated_payload
@@ -318,9 +325,26 @@ class StreamRewriteService:
                     "title": self._extract_title(stream),
                     "poster": self._extract_poster(stream),
                     "index": self._extract_index(stream),
+                    "seeders": self._extract_seeders(stream),
                 }
             )
         return candidates
+
+    def _extract_seeders(self, stream: dict) -> int | None:
+        meta = stream.get("_meta")
+        if isinstance(meta, dict) and meta.get("seeders") is not None:
+            try:
+                return int(meta["seeders"])
+            except (ValueError, TypeError):
+                pass
+
+        for field in ("description", "title", "name"):
+            val = stream.get(field)
+            if isinstance(val, str):
+                match = re.search(r"👤\s*(\d+)", val)
+                if match:
+                    return int(match.group(1))
+        return None
 
     def _extract_torrent_link(self, stream: dict) -> str | None:
         candidates = [
