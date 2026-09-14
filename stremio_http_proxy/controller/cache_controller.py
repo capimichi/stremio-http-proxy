@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from injector import inject
 
+from stremio_http_proxy.helper.media_type_helper import detect_media_type
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
 from stremio_http_proxy.service.cache_service import CacheService
 from stremio_http_proxy.service.cache_token_service import CacheTokenService
@@ -35,7 +36,13 @@ class CacheController:
         if file_path is None:
             raise HTTPException(status_code=404, detail="Cached file not found")
 
-        return FileResponse(file_path)
+        media_type, ext = detect_media_type(file_path)
+        return FileResponse(
+            file_path,
+            media_type=media_type,
+            filename=f"video.{ext}",
+            content_disposition_type="inline",
+        )
 
     async def downloads(
         self,
