@@ -119,12 +119,17 @@ class StreamRewriteService:
                         index = self._extract_index(updated)
                         self._mark_cached_if_ready(updated, http_link, index, content_id)
                         is_cached = bool(isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cached"))
+                        effective_http_index = (
+                            updated["_meta"].get("cache_index")
+                            if isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cache_index") is not None
+                            else index
+                        )
                         updated["url"] = self._build_playback_url(
                             http_link,
                             title,
                             poster,
                             category,
-                            index,
+                            effective_http_index,
                             content_type,
                             content_id,
                             is_cached=is_cached,
@@ -138,12 +143,17 @@ class StreamRewriteService:
             index = self._extract_index(updated)
             self._mark_cached_if_ready(updated, torrent_link, index, content_id)
             is_cached = bool(isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cached"))
+            effective_index = (
+                updated["_meta"].get("cache_index")
+                if isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cache_index") is not None
+                else index
+            )
             updated["url"] = self._build_playback_url(
                 torrent_link,
                 title,
                 poster,
                 category,
-                index,
+                effective_index,
                 content_type,
                 content_id,
                 is_cached=is_cached,
@@ -271,8 +281,16 @@ class StreamRewriteService:
 
         cache_key = self.cache_manager.build_cache_key(torrent_link, index)
         is_ready = False
+        cache_index = None
         if cache_key is not None and self.cache_manager.is_ready(cache_key):
             is_ready = True
+            if hasattr(self.cache_manager, "parse_cache_key"):
+                _, cache_index = self.cache_manager.parse_cache_key(cache_key)
+        elif normalized and content_id and hasattr(self.cache_manager, "get_ready_entry_by_content"):
+            entry = self.cache_manager.get_ready_entry_by_content(normalized, content_id)
+            if entry is not None:
+                is_ready = True
+                cache_index = entry.cache_index
         elif normalized and content_id and self.cache_manager.is_content_ready(normalized, content_id):
             is_ready = True
 
@@ -284,6 +302,8 @@ class StreamRewriteService:
             meta = {}
         updated_meta = dict(meta)
         updated_meta["cached"] = True
+        if cache_index is not None:
+            updated_meta["cache_index"] = cache_index
         stream["_meta"] = updated_meta
 
         name = stream.get("name")

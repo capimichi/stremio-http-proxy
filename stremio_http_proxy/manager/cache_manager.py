@@ -61,7 +61,13 @@ class CacheManager:
         with self.db_manager.session() as session:
             record = session.get(CacheEntryRecord, cache_key)
         if record is None:
-            return CacheEntryModel(file_path=str(media_path), tmp_path=str(tmp_path))
+            return CacheEntryModel(
+                cache_key=cache_key,
+                infohash=infohash,
+                cache_index=index,
+                file_path=str(media_path),
+                tmp_path=str(tmp_path),
+            )
         return self._to_model(record)
 
     def get_min_cache_size(self) -> int:
@@ -450,6 +456,9 @@ class CacheManager:
 
     def _to_model(self, record: CacheEntryRecord) -> CacheEntryModel:
         return CacheEntryModel(
+            cache_key=record.cache_key,
+            infohash=record.infohash,
+            cache_index=record.cache_index,
             status=record.status,
             title=record.title,
             source_link=record.source_link,
@@ -528,12 +537,12 @@ class CacheManager:
         record.processing_expires_at = entry.processing_expires_at
         record.last_error = entry.last_error
 
-    def is_content_ready(self, infohash: str, content_id: str | None) -> bool:
+    def get_ready_entry_by_content(self, infohash: str, content_id: str | None) -> CacheEntryModel | None:
         if not content_id:
-            return False
+            return None
         normalized = normalize_infohash(infohash)
         if not normalized:
-            return False
+            return None
         with self.db_manager.session() as session:
             records = session.scalars(
                 select(CacheEntryRecord)
@@ -543,5 +552,8 @@ class CacheManager:
             ).all()
         for r in records:
             if Path(r.file_path).exists():
-                return True
-        return False
+                return self._to_model(r)
+        return None
+
+    def is_content_ready(self, infohash: str, content_id: str | None) -> bool:
+        return self.get_ready_entry_by_content(infohash, content_id) is not None

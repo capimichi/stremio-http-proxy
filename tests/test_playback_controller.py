@@ -155,6 +155,34 @@ def test_playback_controller_redirects_to_cache_when_ready(tmp_path):
     assert response.headers["location"] == "https://proxy.example.com/cache/abc/18?expires=1700000000&token=signed"
 
 
+def test_playback_controller_redirects_to_cache_using_content_id_fallback(tmp_path):
+    class FakeContentIdCacheService:
+        def get_cached_route(self, link: str, index: int | None = None, content_id: str | None = None) -> str | None:
+            if content_id == "tt3749900:1:2":
+                return "https://proxy.example.com/cache/dd10bc/9?expires=1700000000&token=signed"
+            return None
+
+    controller = PlaybackController(
+        FakeTorrServerClient(),
+        FakeContentIdCacheService(),
+        FakeDownloadQueueService(),
+        FakeNextEpisodePrefetchService(),
+        LoggerFactory(str(tmp_path)),
+    )
+
+    response = asyncio.run(
+        controller.play(
+            link="magnet:?xt=urn:btih:dd10bc",
+            index=8,
+            content_type="series",
+            content_id="tt3749900:1:2",
+        )
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "https://proxy.example.com/cache/dd10bc/9?expires=1700000000&token=signed"
+
+
 def test_playback_controller_redirects_to_signed_torrserver_url_when_cache_not_ready(tmp_path):
     controller = build_controller(tmp_path)
 

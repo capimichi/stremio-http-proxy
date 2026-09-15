@@ -4,6 +4,9 @@ from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 
 
 class CacheEntry(BaseModel):
+    cache_key: str | None = None
+    infohash: str | None = None
+    cache_index: int | None = None
     status: str = CacheEntryStatusEnum.MISSING
     title: str | None = None
     source_link: str | None = None

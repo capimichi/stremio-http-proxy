@@ -58,7 +58,7 @@ class PlaybackController:
         content_type: str | None = None,
         content_id: str | None = None,
     ) -> Response:
-        cached_route = self.cache_service.get_cached_route(link, index)
+        cached_route = self._get_cached_route(link, index, content_id=content_id)
         if cached_route is not None:
             return RedirectResponse(url=cached_route, status_code=307)
 
@@ -389,7 +389,7 @@ class PlaybackController:
         content_type: str | None = None,
         content_id: str | None = None,
     ) -> RedirectResponse:
-        cached_route = self.cache_service.get_cached_route(link, index)
+        cached_route = self._get_cached_route(link, index, content_id=content_id)
         if cached_route is not None:
             return RedirectResponse(url=cached_route, status_code=307)
 
@@ -412,6 +412,12 @@ class PlaybackController:
             url=self.torrserver_client.build_play_url(link, title, poster, category, index),
             status_code=307,
         )
+
+    def _get_cached_route(self, link: str, index: int | None = None, content_id: str | None = None) -> str | None:
+        try:
+            return self.cache_service.get_cached_route(link, index, content_id=content_id)
+        except TypeError:
+            return self.cache_service.get_cached_route(link, index)
 
     def _schedule_downloads(
         self,

@@ -54,3 +54,27 @@ def test_cache_service_returns_cached_file_path_and_touches_entry(tmp_path):
     assert file_path == ready_entry.file_path
     assert touched_entry.last_accessed_at is not None
     assert touched_entry.last_accessed_at >= ready_entry.last_accessed_at
+
+
+def test_cache_service_returns_cached_route_by_content_id_fallback(tmp_path):
+    manager = build_manager(tmp_path)
+    # File is downloaded at index 9 for episode tt3749900:1:2
+    cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 9)
+    media_path = manager.prepare_download_path(cache_key)
+    media_path.write_bytes(b"demo video")
+    manager.finalize_download(cache_key)
+    ready_entry = manager.mark_ready(cache_key, 10)
+    manager._write_entry(cache_key, ready_entry.model_copy(update={"content_id": "tt3749900:1:2"}))
+
+    service = CacheService(manager, "https://proxy.example.com", CacheTokenService("secret", 259200))
+
+    # Request with wrong index (e.g. 8) but matching content_id
+    route = service.get_cached_route(
+        "magnet:?xt=urn:btih:abcdef1234567890abcdef1234567890abcdef12",
+        index=8,
+        content_id="tt3749900:1:2",
+    )
+
+    assert route is not None
+    parsed = urlparse(route)
+    assert parsed.path == "/cache/abcdef1234567890abcdef1234567890abcdef12/9"
