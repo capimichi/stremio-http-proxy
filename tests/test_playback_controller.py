@@ -32,10 +32,13 @@ class FakeTorrServerClient:
 
 
 class FakeCacheService:
-    def __init__(self, ready=False):
+    def __init__(self, ready=False, ready_keys=None):
         self.ready = ready
+        self.ready_keys = ready_keys or set()
 
-    def get_cached_route(self, link: str, index: int | None = None) -> str | None:
+    def get_cached_route(self, link: str, index: int | None = None, content_id: str | None = None) -> str | None:
+        if (link, index) in self.ready_keys:
+            return f"https://proxy.example.com/cache/ready/{index}"
         if not self.ready:
             return None
         return "https://proxy.example.com/cache/abc/18?expires=1700000000&token=signed"
@@ -69,10 +72,10 @@ class DummyTask:
         self.callbacks.append(callback)
 
 
-def build_controller(tmp_path, ready=False, http_streams_proxy_enabled=True):
+def build_controller(tmp_path, ready=False, ready_keys=None, http_streams_proxy_enabled=True):
     return PlaybackController(
         FakeTorrServerClient(),
-        FakeCacheService(ready=ready),
+        FakeCacheService(ready=ready, ready_keys=ready_keys),
         FakeDownloadQueueService(),
         FakeNextEpisodePrefetchService(),
         LoggerFactory(str(tmp_path)),
@@ -517,5 +520,68 @@ def test_playback_controller_http_stream_redirects_and_prefetches_without_cachin
     # 4. Must trigger next episode prefetch for Gotham S01E02!
     assert len(controller.next_episode_prefetch_service.calls) == 1
     assert controller.next_episode_prefetch_service.calls[0] == ("series", "tt3749900:1:1", "tv")
+
+
+def test_playback_controller_enqueues_different_torrent_even_if_episode_cached_on_another_torrent(monkeypatch, tmp_path):
+    # Torrent A is already ready in cache
+    torrent_a = "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    torrent_b = "magnet:?xt=urn:btih:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    ready_keys = {(torrent_a, 4)}
+
+    controller = build_controller(tmp_path, ready_keys=ready_keys)
+    scheduled = []
+
+    def fake_create_task(coro):
+        scheduled.append(coro)
+        return DummyTask()
+
+    monkeypatch.setattr(asyncio, "create_task", fake_create_task)
+
+    # 1. User clicks Torrent B for episode Gotham S01E04 (tt3749900:1:4)
+    resp_b = asyncio.run(
+        controller.play(
+            link=torrent_b,
+            title="Gotham S01E04 1080p",
+            category="tv",
+            index=4,
+            content_type="series",
+            content_id="tt3749900:1:4",
+        )
+    )
+
+    # Torrent B is not ready, so user is redirected to TorrServer
+    assert resp_b.status_code == 307
+    assert "stream?link=" in resp_b.headers["location"]
+
+    # Background task MUST have been scheduled for Torrent B download
+    for task in scheduled:
+        asyncio.run(task)
+
+    assert len(controller.download_queue_service.calls) == 1
+    call_args, call_kwargs = controller.download_queue_service.calls[0]
+    assert call_args[0] == torrent_b
+    assert call_args[4] == 4
+    assert call_kwargs["content_id"] == "tt3749900:1:4"
+    assert call_kwargs["trigger"] == "playback"
+
+    # 2. User clicks Torrent A for the same episode (which IS ready in cache)
+    scheduled.clear()
+    resp_a = asyncio.run(
+        controller.play(
+            link=torrent_a,
+            title="Gotham S01E04 720p",
+            category="tv",
+            index=4,
+            content_type="series",
+            content_id="tt3749900:1:4",
+        )
+    )
+
+    # Torrent A is ready, so user is redirected directly to cached file
+    assert resp_a.status_code == 307
+    assert resp_a.headers["location"] == "https://proxy.example.com/cache/ready/4"
+
+    # No download should be enqueued for Torrent A
+    assert len(controller.download_queue_service.calls) == 1
 
 
