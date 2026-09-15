@@ -626,41 +626,51 @@ class CacheManager:
                 record.updated_at = now
                 self.logger.warning("Requeued expired prefetch job %s", record.id)
 
-            candidate = session.scalars(
+            candidates = session.scalars(
                 select(PrefetchEntry)
                 .where(
                     PrefetchEntry.status == "pending",
                     PrefetchEntry.scheduled_at <= now,
                 )
                 .order_by(PrefetchEntry.scheduled_at.asc())
-                .limit(1)
-            ).first()
-            if candidate is None:
-                return None
-
-            candidate.status = "processing"
-            candidate.claimed_at = now
-            candidate.claimed_by = worker_id
-            candidate.processing_expires_at = now + lease_seconds
-            candidate.updated_at = now
-            candidate.attempt += 1
-
-            return PrefetchJob(
-                id=candidate.id,
-                content_type=candidate.content_type,
-                content_id=candidate.content_id,
-                category=candidate.category,
-                status=candidate.status,
-                scheduled_at=candidate.scheduled_at,
-                created_at=candidate.created_at,
-                updated_at=candidate.updated_at,
-                claimed_by=candidate.claimed_by,
-                claimed_at=candidate.claimed_at,
-                processing_expires_at=candidate.processing_expires_at,
-                attempt=candidate.attempt,
-                max_attempts=candidate.max_attempts,
-                last_error=candidate.last_error,
-            )
+                .limit(5)
+            ).all()
+            for record in candidates:
+                claimed = session.execute(
+                    update(PrefetchEntry)
+                    .where(
+                        PrefetchEntry.id == record.id,
+                        PrefetchEntry.status == "pending",
+                    )
+                    .values(
+                        status="processing",
+                        claimed_at=now,
+                        claimed_by=worker_id,
+                        processing_expires_at=now + lease_seconds,
+                        updated_at=now,
+                        attempt=PrefetchEntry.attempt + 1,
+                    )
+                )
+                if claimed.rowcount != 1:
+                    continue
+                claimed_record = session.get(PrefetchEntry, record.id)
+                return PrefetchJob(
+                    id=claimed_record.id,
+                    content_type=claimed_record.content_type,
+                    content_id=claimed_record.content_id,
+                    category=claimed_record.category,
+                    status=claimed_record.status,
+                    scheduled_at=claimed_record.scheduled_at,
+                    created_at=claimed_record.created_at,
+                    updated_at=claimed_record.updated_at,
+                    claimed_by=claimed_record.claimed_by,
+                    claimed_at=claimed_record.claimed_at,
+                    processing_expires_at=claimed_record.processing_expires_at,
+                    attempt=claimed_record.attempt,
+                    max_attempts=claimed_record.max_attempts,
+                    last_error=claimed_record.last_error,
+                )
+            return None
 
     async def complete_prefetch_job(self, job_id: int) -> None:
         now = time.time()
