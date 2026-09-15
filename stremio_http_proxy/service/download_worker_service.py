@@ -2,6 +2,7 @@ import asyncio
 import socket
 import time
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin
 
 import httpx
@@ -33,12 +34,14 @@ class DownloadWorkerService:
         prefetch_min_progress_bytes: int = 1048576,
         next_episode_prefetch_service: NextEpisodePrefetchService | None = None,
         prefetch_poll_seconds: int = 15,
+        task_service: Any = None,
     ):
         self.torrserver_client = torrserver_client
         self.cache_manager = cache_manager
         self.hls_chunk_manager = hls_chunk_manager
         self.prefetch_min_progress_bytes = prefetch_min_progress_bytes
         self.next_episode_prefetch_service = next_episode_prefetch_service
+        self.task_service = task_service
         self.logger = logger_factory.get_logger("stremio_http_proxy.download_worker", "download_worker.log")
         self.progress_logger = logger_factory.get_logger("stremio_http_proxy.download_progress", "download_progress.log")
         self.worker_id = socket.gethostname()
@@ -59,7 +62,7 @@ class DownloadWorkerService:
     async def run_forever(self) -> None:
         await asyncio.gather(
             self.run_download_loop(),
-            self.run_prefetch_loop(),
+            self.run_task_loop(),
         )
 
     async def run_download_loop(self) -> None:
@@ -74,17 +77,27 @@ class DownloadWorkerService:
                 self.logger.exception("Unhandled exception in download worker loop")
                 await asyncio.sleep(self.poll_seconds)
 
-    async def run_prefetch_loop(self) -> None:
+    async def run_task_loop(self) -> None:
         while True:
             try:
-                processed = await self.process_next_prefetch_job()
+                processed = await self.process_next_task()
                 if not processed:
                     await asyncio.sleep(self.prefetch_poll_seconds)
             except asyncio.CancelledError:
                 break
             except Exception:
-                self.logger.exception("Unhandled exception in prefetch worker loop")
+                self.logger.exception("Unhandled exception in task worker loop")
                 await asyncio.sleep(self.prefetch_poll_seconds)
+
+    async def run_prefetch_loop(self) -> None:
+        await self.run_task_loop()
+
+    async def process_next_task(self) -> bool:
+        if self.task_service:
+            processed = await self.task_service.process_next_task(self.worker_id)
+            if processed:
+                return True
+        return await self.process_next_prefetch_job()
 
     async def process_next_prefetch_job(self) -> bool:
         if not self.next_episode_prefetch_service or not self.next_episode_prefetch_service.enabled:

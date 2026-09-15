@@ -28,6 +28,10 @@ from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisode
 from stremio_http_proxy.service.content_browser_service import ContentBrowserService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
+from stremio_http_proxy.service.task_service import TaskService
+from stremio_http_proxy.task.task_registry import TaskRegistry
+from stremio_http_proxy.task.fetch_media_task import FetchMediaTask
+from stremio_http_proxy.task.fetch_next_episode_task import FetchNextEpisodeTask
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 
 
@@ -173,6 +177,14 @@ class DefaultContainer:
             skip_zero_seeders=self.prefetch_skip_zero_seeders,
             delay_seconds=self.prefetch_delay_seconds,
         )
+        task_registry = TaskRegistry()
+        fetch_next_episode_task = FetchNextEpisodeTask(next_episode_prefetch_service)
+        fetch_media_task = FetchMediaTask(next_episode_prefetch_service)
+        task_registry.register(fetch_next_episode_task)
+        task_registry.register(fetch_media_task)
+        task_service = TaskService(db_manager, task_registry, logger_factory)
+        next_episode_prefetch_service.task_service = task_service
+
         jinja_manager = JinjaManager(self.template_dir)
         dashboard_service = DashboardService(cache_manager, self.public_base_url)
         download_worker_service = DownloadWorkerService(
@@ -190,6 +202,7 @@ class DefaultContainer:
             prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
             next_episode_prefetch_service=next_episode_prefetch_service,
             prefetch_poll_seconds=self.prefetch_poll_seconds,
+            task_service=task_service,
         )
         playback_controller = PlaybackController(
             torrserver_client,
@@ -215,6 +228,8 @@ class DefaultContainer:
         self.injector.binder.bind(CacheService, to=cache_service)
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
         self.injector.binder.bind(DashboardService, to=dashboard_service)
+        self.injector.binder.bind(TaskRegistry, to=task_registry)
+        self.injector.binder.bind(TaskService, to=task_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
         self.injector.binder.bind(PlaybackController, to=playback_controller)
         self.injector.binder.bind(WhitelistRepository, to=whitelist_repository)

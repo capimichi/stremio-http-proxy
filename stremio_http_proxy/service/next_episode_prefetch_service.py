@@ -1,5 +1,6 @@
-import httpx
+from typing import Any
 
+import httpx
 from injector import inject
 
 from stremio_http_proxy.client.upstream_client import UpstreamClient
@@ -21,6 +22,7 @@ class NextEpisodePrefetchService:
         target_completed_per_episode: int = 1,
         skip_zero_seeders: bool = True,
         delay_seconds: int = 120,
+        task_service: Any = None,
     ):
         self.upstream_client = upstream_client
         self.stream_rewrite_service = stream_rewrite_service
@@ -31,6 +33,7 @@ class NextEpisodePrefetchService:
         self.target_completed_per_episode = target_completed_per_episode
         self.skip_zero_seeders = skip_zero_seeders
         self.delay_seconds = delay_seconds
+        self.task_service = task_service
 
     def schedule_prefetch(
         self,
@@ -47,6 +50,17 @@ class NextEpisodePrefetchService:
             return False
         if delay_seconds is None:
             delay_seconds = self.delay_seconds
+        if self.task_service and hasattr(self.task_service, "enqueue_task"):
+            job_id = self.task_service.enqueue_task(
+                name="fetch_next_episode",
+                arguments={
+                    "content_type": content_type,
+                    "content_id": content_id,
+                    "category": category,
+                },
+                delay_seconds=delay_seconds,
+            )
+            return job_id is not None
         if self.cache_manager and hasattr(self.cache_manager, "schedule_prefetch_job"):
             return self.cache_manager.schedule_prefetch_job(
                 content_type=content_type,

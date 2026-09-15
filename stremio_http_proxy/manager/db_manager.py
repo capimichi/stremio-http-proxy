@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from stremio_http_proxy.entity.cache_entry import Base
 from stremio_http_proxy.entity.prefetch_entry import PrefetchEntry
+from stremio_http_proxy.entity.task_entry import TaskEntry
 
 
 class DbManager:
@@ -41,6 +42,7 @@ class DbManager:
         self._ensure_cache_entry_columns()
         self._ensure_whitelist_entry_columns()
         self._ensure_prefetch_job_columns()
+        self._ensure_task_entry_columns()
 
     def _ensure_cache_entry_columns(self) -> None:
         columns = {
@@ -106,4 +108,30 @@ class DbManager:
                 if column_name in existing:
                     continue
                 connection.execute(text(f"ALTER TABLE prefetch_jobs ADD COLUMN {column_name} {column_sql}"))
+
+    def _ensure_task_entry_columns(self) -> None:
+        columns = {
+            "claimed_by": "VARCHAR(128)",
+            "claimed_at": "FLOAT",
+            "processing_expires_at": "FLOAT",
+            "attempt": "INTEGER DEFAULT 0",
+            "max_attempts": "INTEGER DEFAULT 3",
+            "last_error": "TEXT",
+        }
+        with self.engine.begin() as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            }
+            if "task_entry" not in tables:
+                return
+            existing = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(task_entry)"))
+            }
+            for column_name, column_sql in columns.items():
+                if column_name in existing:
+                    continue
+                connection.execute(text(f"ALTER TABLE task_entry ADD COLUMN {column_name} {column_sql}"))
+
 
