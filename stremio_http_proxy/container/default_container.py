@@ -67,6 +67,7 @@ class DefaultContainer:
         self.torrserver_basic_auth_user = os.environ.get("TORRSERVER_BASIC_AUTH_USER")
         self.torrserver_basic_auth_password = os.environ.get("TORRSERVER_BASIC_AUTH_PASSWORD")
         self.public_base_url = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{self.api_port}")
+        self.cache_base_url = os.environ.get("CACHE_BASE_URL", "").strip() or self.public_base_url
         self.app_secret = os.environ.get("APP_SECRET")
         self.dashboard_basic_auth_user = os.environ.get("DASHBOARD_BASIC_AUTH_USER")
         self.dashboard_basic_auth_password = os.environ.get("DASHBOARD_BASIC_AUTH_PASSWORD")
@@ -142,7 +143,13 @@ class DefaultContainer:
             self.dashboard_basic_auth_password,
         )
         cache_token_service = CacheTokenService(self.app_secret, self.cache_token_ttl_seconds)
-        cache_service = CacheService(cache_manager, self.public_base_url, cache_token_service, self.cache_enabled)
+        cache_service = CacheService(
+            cache_manager,
+            self.public_base_url,
+            cache_token_service,
+            self.cache_enabled,
+            cache_base_url=self.cache_base_url,
+        )
         torrent_health_service = TorrentHealthService(torrserver_client)
         whitelist_repository = WhitelistRepository(db_manager)
         tmdb_client = TMDBClient(self.tmdb_api_key)

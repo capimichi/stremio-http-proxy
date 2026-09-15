@@ -78,3 +78,28 @@ def test_cache_service_returns_cached_route_by_content_id_fallback(tmp_path):
     assert route is not None
     parsed = urlparse(route)
     assert parsed.path == "/cache/abcdef1234567890abcdef1234567890abcdef12/9"
+
+
+def test_cache_service_uses_cache_base_url_when_provided(tmp_path):
+    manager = build_manager(tmp_path)
+    cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 2)
+    media_path = manager.prepare_download_path(cache_key)
+    media_path.write_bytes(b"demo")
+    manager.finalize_download(cache_key)
+    manager.mark_ready(cache_key, 4)
+
+    service = CacheService(
+        manager,
+        "https://proxy.example.com",
+        CacheTokenService("secret", 259200),
+        cache_base_url="http://192.168.1.100:8691",
+    )
+
+    route = service.get_cached_route("magnet:?xt=urn:btih:abcdef1234567890abcdef1234567890abcdef12", 2)
+    parsed = urlparse(route)
+
+    assert parsed.scheme == "http"
+    assert parsed.netloc == "192.168.1.100:8691"
+    assert parsed.path == "/cache/abcdef1234567890abcdef1234567890abcdef12/2"
+    assert set(parse_qs(parsed.query)) == {"expires", "token"}
+

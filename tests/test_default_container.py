@@ -38,3 +38,28 @@ def test_default_container_loads_prefetch_and_download_env_vars(monkeypatch, tmp
     assert default_container.download_prefetch_min_progress_bytes == 1048576
     assert default_container.prefetch_target_completed_per_episode == 1
     assert default_container.prefetch_skip_zero_seeders is True
+
+
+def test_default_container_loads_cache_base_url(monkeypatch):
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://proxy.example.com")
+    monkeypatch.setenv("CACHE_BASE_URL", "http://192.168.1.100:8691")
+
+    container = DefaultContainer()
+    assert container.public_base_url == "https://proxy.example.com"
+    assert container.cache_base_url == "http://192.168.1.100:8691"
+
+    # Default fallback when CACHE_BASE_URL is not set
+    DefaultContainer.instance = None
+    monkeypatch.delenv("CACHE_BASE_URL", raising=False)
+    default_container = DefaultContainer()
+    assert default_container.cache_base_url == "https://proxy.example.com"
+
+    # Default fallback when CACHE_BASE_URL is empty
+    DefaultContainer.instance = None
+    monkeypatch.setenv("CACHE_BASE_URL", "  ")
+    empty_container = DefaultContainer()
+    assert empty_container.cache_base_url == "https://proxy.example.com"
+

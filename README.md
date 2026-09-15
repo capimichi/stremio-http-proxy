@@ -35,6 +35,7 @@ Environment:
 ```bash
 UPSTREAM_BASE_URL=https://example.com
 PUBLIC_BASE_URL=http://localhost:8691
+CACHE_BASE_URL=http://localhost:8691
 APP_SECRET=
 CACHE_TOKEN_TTL_SECONDS=259200
 TORRSERVER_BASE_URL=http://localhost:8090

@@ -16,9 +16,11 @@ class CacheService:
         public_base_url: str,
         cache_token_service: CacheTokenService,
         cache_enabled: bool = True,
+        cache_base_url: str | None = None,
     ):
         self.cache_manager = cache_manager
         self.public_base_url = public_base_url.rstrip("/")
+        self.cache_base_url = (cache_base_url or public_base_url).rstrip("/")
         self.cache_token_service = cache_token_service
         self.cache_enabled = cache_enabled
 
@@ -26,7 +28,7 @@ class CacheService:
         expires = self.cache_token_service.build_expires_at()
         token = self.cache_token_service.build_token(infohash, cache_index, expires)
         params = urlencode({"expires": str(expires), "token": token})
-        return f"{self.public_base_url}/cache/{infohash}/{cache_index}?{params}"
+        return f"{self.cache_base_url}/cache/{infohash}/{cache_index}?{params}"
 
     def get_cached_route(
         self,
