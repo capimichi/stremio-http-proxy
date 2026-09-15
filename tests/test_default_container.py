@@ -88,3 +88,14 @@ def test_default_container_loads_torrserver_internal_url(monkeypatch):
     assert empty_container.torrserver_internal_url == "https://torrserver.example.com"
 
 
+def test_default_container_registers_optimize_media_task(monkeypatch):
+    from stremio_http_proxy.task.task_registry import TaskRegistry
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    container = DefaultContainer()
+    registry = container.get(TaskRegistry)
+    assert registry.has("optimize_media")
+
+
+

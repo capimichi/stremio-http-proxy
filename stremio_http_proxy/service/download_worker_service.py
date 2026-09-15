@@ -290,7 +290,7 @@ class DownloadWorkerService:
             )
 
         size_bytes = self.cache_manager.finalize_download(job.cache_key)
-        self.cache_manager.mark_ready(job.cache_key, size_bytes)
+        self._on_download_completed(job.cache_key, size_bytes)
         self.logger.info("Worker %s completed job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
 
     async def _download_hls(self, job: DownloadJob, url: str) -> None:
@@ -447,7 +447,7 @@ class DownloadWorkerService:
         )
 
         size_bytes = self.cache_manager.finalize_download(job.cache_key)
-        self.cache_manager.mark_ready(job.cache_key, size_bytes)
+        self._on_download_completed(job.cache_key, size_bytes)
         self.logger.info("Worker %s completed HLS job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
 
         asyncio.create_task(self._delayed_chunks_cleanup(job.cache_key, delay_seconds=1800))
@@ -562,8 +562,20 @@ class DownloadWorkerService:
         )
 
         size_bytes = self.cache_manager.finalize_download(job.cache_key)
-        self.cache_manager.mark_ready(job.cache_key, size_bytes)
+        self._on_download_completed(job.cache_key, size_bytes)
         self.logger.info("Worker %s completed job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
+
+    def _on_download_completed(self, cache_key: str, size_bytes: int) -> None:
+        self.cache_manager.mark_ready(cache_key, size_bytes)
+        if self.task_service is not None:
+            try:
+                self.task_service.enqueue_task(
+                    name="optimize_media",
+                    arguments={"cache_key": cache_key},
+                    deduplicate=True,
+                )
+            except Exception as e:
+                self.logger.warning("Failed to enqueue optimize_media task for %s: %s", cache_key, e)
 
     def _retry_delay(self, attempt: int) -> int:
         schedule = {1: 30, 2: 300, 3: 1800}

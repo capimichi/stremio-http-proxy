@@ -32,6 +32,7 @@ from stremio_http_proxy.service.task_service import TaskService
 from stremio_http_proxy.task.task_registry import TaskRegistry
 from stremio_http_proxy.task.fetch_media_task import FetchMediaTask
 from stremio_http_proxy.task.fetch_next_episode_task import FetchNextEpisodeTask
+from stremio_http_proxy.task.optimize_media_task import OptimizeMediaTask
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 
 
@@ -191,8 +192,10 @@ class DefaultContainer:
         task_registry = TaskRegistry()
         fetch_next_episode_task = FetchNextEpisodeTask(next_episode_prefetch_service)
         fetch_media_task = FetchMediaTask(next_episode_prefetch_service)
+        optimize_media_task = OptimizeMediaTask(cache_manager, logger_factory)
         task_registry.register(fetch_next_episode_task)
         task_registry.register(fetch_media_task)
+        task_registry.register(optimize_media_task)
         task_service = TaskService(db_manager, task_registry, logger_factory)
         next_episode_prefetch_service.task_service = task_service
 

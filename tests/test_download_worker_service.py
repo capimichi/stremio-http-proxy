@@ -479,4 +479,49 @@ def test_download_worker_processes_prefetch_jobs(tmp_path):
     assert retry is True
 
 
+def test_download_worker_enqueues_optimize_media_on_completion(tmp_path, respx_mock):
+    from unittest.mock import MagicMock
+    url = "https://example.com/video.mp4"
+    payload = b"X" * 1024
+    respx_mock.get(url).respond(200, content=payload, headers={"content-length": str(len(payload))})
+
+    job = DownloadJob(
+        job_id="job-http-opt-1",
+        cache_key="hash123:0",
+        link=url,
+        enqueued_at=0,
+        available_at=0,
+    )
+    cache_manager = FakeCacheManager(tmp_path)
+    cache_manager.claimed_job = job
+    torrserver_client = FakeTorrServerClient()
+
+    fake_task_service = MagicMock()
+
+    service = DownloadWorkerService(
+        torrserver_client,
+        cache_manager,
+        LoggerFactory(str(tmp_path)),
+        poll_seconds=1,
+        connect_timeout_seconds=10,
+        no_progress_timeout_seconds=30,
+        min_progress_bytes=10,
+        min_progress_window_seconds=120,
+        max_total_seconds=60,
+        progress_log_interval_seconds=10,
+        task_service=fake_task_service,
+    )
+
+    processed = asyncio.run(service.process_next_job())
+
+    assert processed is True
+    assert fake_task_service.enqueue_task.called
+    fake_task_service.enqueue_task.assert_called_with(
+        name="optimize_media",
+        arguments={"cache_key": "hash123:0"},
+        deduplicate=True,
+    )
+
+
+
 
