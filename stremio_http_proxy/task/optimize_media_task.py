@@ -58,6 +58,10 @@ class OptimizeMediaTask(AbstractTask):
 
         if success and temp_mkv_path.exists() and temp_mkv_path.stat().st_size > 0:
             temp_mkv_path.replace(media_path)
+            try:
+                media_path.chmod(0o666)
+            except Exception:
+                pass
             new_size = media_path.stat().st_size
             self.cache_manager.mark_ready(cache_key, new_size)
             self.logger.info("Media %s successfully optimized to MKV (size: %s bytes)", cache_key, new_size)
