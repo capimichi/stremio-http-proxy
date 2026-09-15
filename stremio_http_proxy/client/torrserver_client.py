@@ -13,8 +13,10 @@ class TorrServerClient:
         basic_auth_user: str | None = None,
         basic_auth_password: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        internal_base_url: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
+        self.internal_base_url = (internal_base_url or base_url).rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.auth = httpx.BasicAuth(basic_auth_user, basic_auth_password or "") if basic_auth_user else None
         self.transport = transport
@@ -23,7 +25,7 @@ class TorrServerClient:
         payload = {"action": "add", "link": link, "save_to_db": False}
         try:
             async with httpx.AsyncClient(
-                base_url=self.base_url,
+                base_url=self.internal_base_url,
                 timeout=timeout or self.timeout_seconds,
                 auth=self.auth,
                 transport=self.transport,
@@ -49,7 +51,7 @@ class TorrServerClient:
         }
         payload.update(self._metadata(title, poster, category))
         async with httpx.AsyncClient(
-            base_url=self.base_url,
+            base_url=self.internal_base_url,
             timeout=self.timeout_seconds,
             auth=self.auth,
             transport=self.transport,
@@ -74,7 +76,7 @@ class TorrServerClient:
         if index is not None:
             params["index"] = str(index)
         async with httpx.AsyncClient(
-            base_url=self.base_url,
+            base_url=self.internal_base_url,
             timeout=self.timeout_seconds,
             auth=self.auth,
             transport=self.transport,
@@ -82,8 +84,29 @@ class TorrServerClient:
             response = await client.get("/stream", params=params)
             response.raise_for_status()
 
+    def build_download_url(
+        self,
+        link: str,
+        title: str | None = None,
+        poster: str | None = None,
+        category: str | None = None,
+        index: int | None = None,
+    ) -> str:
+        return self._build_stream_url(self.internal_base_url, link, title, poster, category, index)
+
     def build_play_url(
         self,
+        link: str,
+        title: str | None = None,
+        poster: str | None = None,
+        category: str | None = None,
+        index: int | None = None,
+    ) -> str:
+        return self._build_stream_url(self.base_url, link, title, poster, category, index)
+
+    def _build_stream_url(
+        self,
+        base_url: str,
         link: str,
         title: str | None = None,
         poster: str | None = None,
@@ -97,7 +120,7 @@ class TorrServerClient:
         params.update(self._metadata(title, poster, category))
         if index is not None:
             params["index"] = str(index)
-        return f"{self.base_url}/stream?{urlencode(params)}"
+        return f"{base_url}/stream?{urlencode(params)}"
 
     def _metadata(
         self,

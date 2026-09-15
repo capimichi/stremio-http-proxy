@@ -63,3 +63,28 @@ def test_default_container_loads_cache_base_url(monkeypatch):
     empty_container = DefaultContainer()
     assert empty_container.cache_base_url == "https://proxy.example.com"
 
+
+def test_default_container_loads_torrserver_internal_url(monkeypatch):
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    monkeypatch.setenv("TORRSERVER_BASE_URL", "https://torrserver.example.com")
+    monkeypatch.setenv("TORRSERVER_INTERNAL_URL", "http://torrserver:8090")
+
+    container = DefaultContainer()
+    assert container.torrserver_base_url == "https://torrserver.example.com"
+    assert container.torrserver_internal_url == "http://torrserver:8090"
+
+    # Default fallback when TORRSERVER_INTERNAL_URL is not set
+    DefaultContainer.instance = None
+    monkeypatch.delenv("TORRSERVER_INTERNAL_URL", raising=False)
+    default_container = DefaultContainer()
+    assert default_container.torrserver_internal_url == "https://torrserver.example.com"
+
+    # Default fallback when TORRSERVER_INTERNAL_URL is empty
+    DefaultContainer.instance = None
+    monkeypatch.setenv("TORRSERVER_INTERNAL_URL", "   ")
+    empty_container = DefaultContainer()
+    assert empty_container.torrserver_internal_url == "https://torrserver.example.com"
+
+

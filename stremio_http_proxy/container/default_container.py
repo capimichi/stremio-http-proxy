@@ -64,6 +64,9 @@ class DefaultContainer:
         self.api_port = int(os.environ.get("API_PORT", "8691"))
         self.upstream_base_url = os.environ.get("UPSTREAM_BASE_URL", "https://example.com")
         self.torrserver_base_url = os.environ.get("TORRSERVER_BASE_URL", "http://localhost:8090")
+        self.torrserver_internal_url = (
+            os.environ.get("TORRSERVER_INTERNAL_URL", "").strip() or self.torrserver_base_url
+        )
         self.torrserver_basic_auth_user = os.environ.get("TORRSERVER_BASIC_AUTH_USER")
         self.torrserver_basic_auth_password = os.environ.get("TORRSERVER_BASIC_AUTH_PASSWORD")
         self.public_base_url = os.environ.get("PUBLIC_BASE_URL", f"http://localhost:{self.api_port}")
@@ -125,6 +128,7 @@ class DefaultContainer:
             self.request_timeout_seconds,
             self.torrserver_basic_auth_user,
             self.torrserver_basic_auth_password,
+            internal_base_url=self.torrserver_internal_url,
         )
         db_manager = DbManager(self.sqlite_path)
         cache_manager = CacheManager(

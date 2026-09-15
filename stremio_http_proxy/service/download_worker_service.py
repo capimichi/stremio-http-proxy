@@ -214,7 +214,8 @@ class DownloadWorkerService:
                 await self._download_http_stream(job, job.link)
         else:
             await self.torrserver_client.add_torrent(job.link, job.title, job.poster, job.category)
-            download_url = self.torrserver_client.build_play_url(job.link, job.title, job.poster, job.category, job.index)
+            build_url = getattr(self.torrserver_client, "build_download_url", self.torrserver_client.build_play_url)
+            download_url = build_url(job.link, job.title, job.poster, job.category, job.index)
             await self._download_http_stream(job, download_url)
 
     def _is_hls_stream(self, url: str) -> bool:

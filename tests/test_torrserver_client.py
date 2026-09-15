@@ -107,3 +107,37 @@ def test_add_torrent_uses_basic_auth_when_configured():
 
     expected = "Basic " + base64.b64encode(b"demo:secret").decode()
     assert captured["authorization"] == expected
+
+
+def test_torrserver_client_uses_internal_base_url_for_api_and_download_url():
+    captured_requests = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(str(request.url))
+        return httpx.Response(200, json={}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient(
+        "https://torrserver.example.com",
+        20,
+        transport=transport,
+        internal_base_url="http://torrserver:8090",
+    )
+
+    # Public play URL uses base_url
+    play_url = client.build_play_url("magnet:?xt=urn:btih:abc", title="Demo", index=1)
+    assert play_url.startswith("https://torrserver.example.com/stream?")
+
+    # Internal download URL uses internal_base_url
+    download_url = client.build_download_url("magnet:?xt=urn:btih:abc", title="Demo", index=1)
+    assert download_url.startswith("http://torrserver:8090/stream?")
+
+    # API calls use internal_base_url
+    asyncio.run(client.add_torrent("magnet:?xt=urn:btih:abc"))
+    asyncio.run(client.preload("magnet:?xt=urn:btih:abc", index=1))
+    asyncio.run(client.add_and_get_status("magnet:?xt=urn:btih:abc"))
+
+    assert captured_requests[0].startswith("http://torrserver:8090/torrents")
+    assert captured_requests[1].startswith("http://torrserver:8090/stream")
+    assert captured_requests[2].startswith("http://torrserver:8090/torrents")
+
