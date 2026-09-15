@@ -396,3 +396,87 @@ def test_download_worker_uses_prefetch_min_progress_bytes(tmp_path):
     assert service._required_min_progress_bytes(prefetch_job) == 1048576
 
 
+def test_download_worker_processes_prefetch_jobs(tmp_path):
+    from unittest.mock import AsyncMock
+    from stremio_http_proxy.model.prefetch_job import PrefetchJob
+
+    class FakePrefetchCacheManager(FakeCacheManager):
+        def __init__(self):
+            super().__init__()
+            self.claimed_prefetch = None
+            self.completed = []
+            self.failed_prefetch = []
+
+        async def claim_next_prefetch_job(self, worker_id: str, lease_seconds: int = 180):
+            job, self.claimed_prefetch = self.claimed_prefetch, None
+            return job
+
+        async def complete_prefetch_job(self, job_id: int):
+            self.completed.append(job_id)
+
+        async def fail_prefetch_job(self, job_id: int, error: str, retry: bool = False, retry_delay_seconds: int = 60):
+            self.failed_prefetch.append((job_id, error, retry, retry_delay_seconds))
+
+    cache_mgr = FakePrefetchCacheManager()
+    prefetch_service = AsyncMock()
+    prefetch_service.enabled = True
+    prefetch_service.enqueue_next_episode = AsyncMock(return_value=True)
+
+    service = DownloadWorkerService(
+        FakeTorrServerClient(),
+        cache_mgr,
+        LoggerFactory(str(tmp_path)),
+        poll_seconds=1,
+        connect_timeout_seconds=10,
+        no_progress_timeout_seconds=90,
+        min_progress_bytes=1024,
+        min_progress_window_seconds=600,
+        max_total_seconds=60,
+        progress_log_interval_seconds=1,
+        next_episode_prefetch_service=prefetch_service,
+    )
+
+    # 1. Success case
+    job1 = PrefetchJob(
+        id=42,
+        content_type="series",
+        content_id="tt3749900:1:2",
+        category="tv",
+        scheduled_at=0,
+        created_at=0,
+        updated_at=0,
+        attempt=1,
+        max_attempts=3,
+    )
+    cache_mgr.claimed_prefetch = job1
+
+    processed = asyncio.run(service.process_next_prefetch_job())
+    assert processed is True
+    assert prefetch_service.enqueue_next_episode.called
+    prefetch_service.enqueue_next_episode.assert_called_with("series", "tt3749900:1:2", "tv")
+    assert cache_mgr.completed == [42]
+
+    # 2. Failure with retry case
+    prefetch_service.enqueue_next_episode = AsyncMock(return_value=False)
+    job2 = PrefetchJob(
+        id=43,
+        content_type="series",
+        content_id="tt3749900:1:3",
+        category="tv",
+        scheduled_at=0,
+        created_at=0,
+        updated_at=0,
+        attempt=1,
+        max_attempts=3,
+    )
+    cache_mgr.claimed_prefetch = job2
+
+    processed = asyncio.run(service.process_next_prefetch_job())
+    assert processed is True
+    assert len(cache_mgr.failed_prefetch) == 1
+    job_id, err, retry, delay = cache_mgr.failed_prefetch[0]
+    assert job_id == 43
+    assert retry is True
+
+
+

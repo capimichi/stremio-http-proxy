@@ -32,6 +32,7 @@ class DownloadWorkerService:
         hls_chunk_manager: HlsChunkManager | None = None,
         prefetch_min_progress_bytes: int = 1048576,
         next_episode_prefetch_service: NextEpisodePrefetchService | None = None,
+        prefetch_poll_seconds: int = 15,
     ):
         self.torrserver_client = torrserver_client
         self.cache_manager = cache_manager
@@ -42,6 +43,7 @@ class DownloadWorkerService:
         self.progress_logger = logger_factory.get_logger("stremio_http_proxy.download_progress", "download_progress.log")
         self.worker_id = socket.gethostname()
         self.poll_seconds = poll_seconds
+        self.prefetch_poll_seconds = prefetch_poll_seconds
         self.connect_timeout_seconds = connect_timeout_seconds
         self.no_progress_timeout_seconds = no_progress_timeout_seconds
         self.min_progress_bytes = min_progress_bytes
@@ -55,10 +57,76 @@ class DownloadWorkerService:
         return self.min_progress_bytes
 
     async def run_forever(self) -> None:
+        await asyncio.gather(
+            self.run_download_loop(),
+            self.run_prefetch_loop(),
+        )
+
+    async def run_download_loop(self) -> None:
         while True:
-            processed = await self.process_next_job()
-            if not processed:
+            try:
+                processed = await self.process_next_job()
+                if not processed:
+                    await asyncio.sleep(self.poll_seconds)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                self.logger.exception("Unhandled exception in download worker loop")
                 await asyncio.sleep(self.poll_seconds)
+
+    async def run_prefetch_loop(self) -> None:
+        while True:
+            try:
+                processed = await self.process_next_prefetch_job()
+                if not processed:
+                    await asyncio.sleep(self.prefetch_poll_seconds)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                self.logger.exception("Unhandled exception in prefetch worker loop")
+                await asyncio.sleep(self.prefetch_poll_seconds)
+
+    async def process_next_prefetch_job(self) -> bool:
+        if not self.next_episode_prefetch_service or not self.next_episode_prefetch_service.enabled:
+            return False
+        if not hasattr(self.cache_manager, "claim_next_prefetch_job"):
+            return False
+
+        job = await self.cache_manager.claim_next_prefetch_job(self.worker_id)
+        if job is None:
+            return False
+
+        self.logger.info("Worker %s picked prefetch job %s for %s:%s", self.worker_id, job.id, job.content_type, job.content_id)
+        try:
+            success = await self.next_episode_prefetch_service.enqueue_next_episode(
+                job.content_type,
+                job.content_id,
+                job.category,
+            )
+            if success:
+                self.logger.info("Worker %s completed prefetch job %s", self.worker_id, job.id)
+                await self.cache_manager.complete_prefetch_job(job.id)
+            else:
+                self.logger.warning("Worker %s found no candidate streams for prefetch job %s", self.worker_id, job.id)
+                can_retry = job.attempt < job.max_attempts
+                await self.cache_manager.fail_prefetch_job(
+                    job.id,
+                    error="No candidate streams found",
+                    retry=can_retry,
+                    retry_delay_seconds=60 * job.attempt,
+                )
+            return True
+        except Exception as exc:
+            error = str(exc)
+            self.logger.exception("Worker %s failed prefetch job %s: %s", self.worker_id, job.id, error)
+            can_retry = job.attempt < job.max_attempts
+            await self.cache_manager.fail_prefetch_job(
+                job.id,
+                error=error,
+                retry=can_retry,
+                retry_delay_seconds=60 * job.attempt,
+            )
+            return True
 
     async def process_next_job(self) -> bool:
         job = await self.cache_manager.claim_next_download(self.worker_id)

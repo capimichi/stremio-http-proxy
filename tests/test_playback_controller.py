@@ -54,6 +54,9 @@ class FakeNextEpisodePrefetchService:
     def __init__(self):
         self.calls = []
 
+    def schedule_prefetch(self, *args) -> None:
+        self.calls.append(args)
+
     async def enqueue_next_episode(self, *args) -> None:
         self.calls.append(args)
 

@@ -20,6 +20,7 @@ class NextEpisodePrefetchService:
         stream_limit: int = 3,
         target_completed_per_episode: int = 1,
         skip_zero_seeders: bool = True,
+        delay_seconds: int = 120,
     ):
         self.upstream_client = upstream_client
         self.stream_rewrite_service = stream_rewrite_service
@@ -29,24 +30,49 @@ class NextEpisodePrefetchService:
         self.stream_limit = stream_limit
         self.target_completed_per_episode = target_completed_per_episode
         self.skip_zero_seeders = skip_zero_seeders
+        self.delay_seconds = delay_seconds
+
+    def schedule_prefetch(
+        self,
+        content_type: str | None,
+        content_id: str | None,
+        category: str | None = None,
+        delay_seconds: int | None = None,
+    ) -> bool:
+        if not self.enabled:
+            return False
+        if content_type != "series" or not content_id:
+            return False
+        if not self._build_next_content_ids(content_id):
+            return False
+        if delay_seconds is None:
+            delay_seconds = self.delay_seconds
+        if self.cache_manager and hasattr(self.cache_manager, "schedule_prefetch_job"):
+            return self.cache_manager.schedule_prefetch_job(
+                content_type=content_type,
+                content_id=content_id,
+                category=category,
+                delay_seconds=delay_seconds,
+            )
+        return False
 
     async def enqueue_next_episode(
         self,
         content_type: str | None,
         content_id: str | None,
         category: str | None,
-    ) -> None:
+    ) -> bool:
         if not self.enabled:
-            return
+            return False
         next_candidates = self._build_next_content_ids(content_id)
         if not content_type or not next_candidates:
-            return
+            return False
 
         for next_content_id in next_candidates:
             if self.cache_manager and hasattr(self.cache_manager, "count_active_or_ready_for_content"):
                 active_or_ready = self.cache_manager.count_active_or_ready_for_content(next_content_id)
                 if active_or_ready >= self.target_completed_per_episode:
-                    return
+                    return True
 
             try:
                 stream_payload = await self.upstream_client.get_json(f"/stream/{content_type}/{next_content_id}.json")
@@ -58,7 +84,9 @@ class NextEpisodePrefetchService:
             )
             # If candidate enqueued or episode has streams, we found the right episode — don't fallback to next season
             if enqueued or stream_payload.get("streams"):
-                return
+                return True
+
+        return False
 
     async def enqueue_candidate_for_content(
         self,

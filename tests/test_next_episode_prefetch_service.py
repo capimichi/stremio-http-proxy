@@ -199,3 +199,41 @@ def test_prefetch_skips_if_target_completed_already_reached():
     asyncio.run(service.enqueue_next_episode("series", "tt123:1:1", "tv"))
 
     assert len(queue.calls) == 0
+
+
+def test_schedule_prefetch_validates_and_delegates():
+    class FakeSchedulingCacheManager:
+        def __init__(self):
+            self.scheduled = []
+
+        def schedule_prefetch_job(self, content_type, content_id, category, delay_seconds):
+            self.scheduled.append((content_type, content_id, category, delay_seconds))
+            return True
+
+    cache_mgr = FakeSchedulingCacheManager()
+    queue = FakeDownloadQueueService()
+    service = NextEpisodePrefetchService(
+        SeederUpstreamClient(),
+        StreamRewriteService("http://localhost:8691", FakeCacheManager()),
+        queue,
+        cache_manager=cache_mgr,
+        enabled=True,
+        delay_seconds=120,
+    )
+
+    # 1. Non-series is rejected
+    assert service.schedule_prefetch("movie", "tt12345", "movie") is False
+    assert len(cache_mgr.scheduled) == 0
+
+    # 2. Non-episode ID is rejected
+    assert service.schedule_prefetch("series", "tt12345", "tv") is False
+    assert len(cache_mgr.scheduled) == 0
+
+    # 3. Valid series episode is scheduled
+    assert service.schedule_prefetch("series", "tt123:1:1", "tv") is True
+    assert cache_mgr.scheduled == [("series", "tt123:1:1", "tv", 120)]
+
+    # 4. Custom delay is respected
+    assert service.schedule_prefetch("series", "tt123:1:2", "tv", delay_seconds=300) is True
+    assert cache_mgr.scheduled[1] == ("series", "tt123:1:2", "tv", 300)
+

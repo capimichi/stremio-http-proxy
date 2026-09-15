@@ -7,11 +7,13 @@ from sqlalchemy import func, or_, select, update
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.entity.cache_entry import CacheEntry as CacheEntryRecord
+from stremio_http_proxy.entity.prefetch_entry import PrefetchEntry
 from stremio_http_proxy.helper.hash_helper import extract_infohash, hash_url, normalize_infohash
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
 from stremio_http_proxy.model.download_job import DownloadJob
+from stremio_http_proxy.model.prefetch_job import PrefetchJob
 
 
 class CacheManager:
@@ -557,3 +559,133 @@ class CacheManager:
 
     def is_content_ready(self, infohash: str, content_id: str | None) -> bool:
         return self.get_ready_entry_by_content(infohash, content_id) is not None
+
+    def schedule_prefetch_job(
+        self,
+        content_type: str,
+        content_id: str,
+        category: str | None = None,
+        delay_seconds: int = 120,
+    ) -> bool:
+        now = time.time()
+        scheduled_at = now + max(0, delay_seconds)
+        with self.db_manager.session() as session:
+            record = session.scalars(
+                select(PrefetchEntry).where(
+                    PrefetchEntry.content_type == content_type,
+                    PrefetchEntry.content_id == content_id,
+                )
+            ).first()
+            if record is not None:
+                if record.status in ("pending", "processing"):
+                    return False
+                record.status = "pending"
+                record.scheduled_at = scheduled_at
+                record.updated_at = now
+                record.claimed_by = None
+                record.claimed_at = None
+                record.processing_expires_at = None
+                record.attempt = 0
+                record.last_error = None
+                if category:
+                    record.category = category
+                self.logger.info("Rescheduled prefetch job %s for %s:%s at %s", record.id, content_type, content_id, scheduled_at)
+                return True
+
+            new_entry = PrefetchEntry(
+                content_type=content_type,
+                content_id=content_id,
+                category=category,
+                status="pending",
+                scheduled_at=scheduled_at,
+                created_at=now,
+                updated_at=now,
+                attempt=0,
+                max_attempts=3,
+            )
+            session.add(new_entry)
+            self.logger.info("Scheduled prefetch job for %s:%s at %s", content_type, content_id, scheduled_at)
+            return True
+
+    async def claim_next_prefetch_job(self, worker_id: str, lease_seconds: int = 180) -> PrefetchJob | None:
+        now = time.time()
+        with self.db_manager.session() as session:
+            expired_records = session.scalars(
+                select(PrefetchEntry).where(
+                    PrefetchEntry.status == "processing",
+                    PrefetchEntry.processing_expires_at.is_not(None),
+                    PrefetchEntry.processing_expires_at <= now,
+                )
+            ).all()
+            for record in expired_records:
+                record.status = "pending"
+                record.claimed_by = None
+                record.claimed_at = None
+                record.processing_expires_at = None
+                record.scheduled_at = now
+                record.updated_at = now
+                self.logger.warning("Requeued expired prefetch job %s", record.id)
+
+            candidate = session.scalars(
+                select(PrefetchEntry)
+                .where(
+                    PrefetchEntry.status == "pending",
+                    PrefetchEntry.scheduled_at <= now,
+                )
+                .order_by(PrefetchEntry.scheduled_at.asc())
+                .limit(1)
+            ).first()
+            if candidate is None:
+                return None
+
+            candidate.status = "processing"
+            candidate.claimed_at = now
+            candidate.claimed_by = worker_id
+            candidate.processing_expires_at = now + lease_seconds
+            candidate.updated_at = now
+            candidate.attempt += 1
+
+            return PrefetchJob(
+                id=candidate.id,
+                content_type=candidate.content_type,
+                content_id=candidate.content_id,
+                category=candidate.category,
+                status=candidate.status,
+                scheduled_at=candidate.scheduled_at,
+                created_at=candidate.created_at,
+                updated_at=candidate.updated_at,
+                claimed_by=candidate.claimed_by,
+                claimed_at=candidate.claimed_at,
+                processing_expires_at=candidate.processing_expires_at,
+                attempt=candidate.attempt,
+                max_attempts=candidate.max_attempts,
+                last_error=candidate.last_error,
+            )
+
+    async def complete_prefetch_job(self, job_id: int) -> None:
+        now = time.time()
+        with self.db_manager.session() as session:
+            record = session.get(PrefetchEntry, job_id)
+            if record:
+                record.status = "completed"
+                record.claimed_by = None
+                record.claimed_at = None
+                record.processing_expires_at = None
+                record.updated_at = now
+
+    async def fail_prefetch_job(self, job_id: int, error: str, retry: bool = False, retry_delay_seconds: int = 60) -> None:
+        now = time.time()
+        with self.db_manager.session() as session:
+            record = session.get(PrefetchEntry, job_id)
+            if record:
+                record.last_error = error
+                record.updated_at = now
+                record.claimed_by = None
+                record.claimed_at = None
+                record.processing_expires_at = None
+                if retry:
+                    record.status = "pending"
+                    record.scheduled_at = now + retry_delay_seconds
+                else:
+                    record.status = "failed"
+

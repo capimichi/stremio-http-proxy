@@ -60,6 +60,7 @@ class PlaybackController:
     ) -> Response:
         cached_route = self._get_cached_route(link, index, content_id=content_id)
         if cached_route is not None:
+            self._schedule_prefetch(content_type, content_id, category)
             return RedirectResponse(url=cached_route, status_code=307)
 
         if link.startswith(("http://", "https://")):
@@ -78,6 +79,7 @@ class PlaybackController:
                     self.cache_service.cache_manager.mark_failed(cache_key, error, attempt=1)
                 return Response(content=f"Stream unreachable: {error}", status_code=502, media_type="text/plain")
 
+            self._schedule_prefetch(content_type, content_id, category)
             self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
 
             if cleaned is not None:
@@ -391,10 +393,12 @@ class PlaybackController:
     ) -> RedirectResponse:
         cached_route = self._get_cached_route(link, index, content_id=content_id)
         if cached_route is not None:
+            self._schedule_prefetch(content_type, content_id, category)
             return RedirectResponse(url=cached_route, status_code=307)
 
         # Non-torrent direct HTTP / HLS streams
         if link.startswith(("http://", "https://")):
+            self._schedule_prefetch(content_type, content_id, category)
             self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
             return RedirectResponse(url=link, status_code=307)
 
@@ -405,6 +409,7 @@ class PlaybackController:
             else:
                 index = 1
 
+        self._schedule_prefetch(content_type, content_id, category)
         self._schedule_initialization(link, title, poster, category, index)
         self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
 
@@ -412,6 +417,19 @@ class PlaybackController:
             url=self.torrserver_client.build_play_url(link, title, poster, category, index),
             status_code=307,
         )
+
+    def _schedule_prefetch(
+        self,
+        content_type: str | None,
+        content_id: str | None,
+        category: str | None,
+    ) -> None:
+        if not content_type or not content_id:
+            return
+        if hasattr(self.next_episode_prefetch_service, "schedule_prefetch"):
+            self.next_episode_prefetch_service.schedule_prefetch(content_type, content_id, category)
+        elif hasattr(self.next_episode_prefetch_service, "enqueue_next_episode"):
+            asyncio.create_task(self.next_episode_prefetch_service.enqueue_next_episode(content_type, content_id, category))
 
     def _get_cached_route(self, link: str, index: int | None = None, content_id: str | None = None) -> str | None:
         try:
@@ -498,7 +516,6 @@ class PlaybackController:
                     content_type=content_type,
                     content_id=content_id,
                 )
-            await self.next_episode_prefetch_service.enqueue_next_episode(content_type, content_id, category)
         except Exception:
             self.logger.exception("Unable to enqueue cache download work")
 

@@ -88,6 +88,8 @@ class DefaultContainer:
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.prefetch_target_completed_per_episode = int(os.environ.get("PREFETCH_TARGET_COMPLETED_PER_EPISODE", "1"))
         self.prefetch_skip_zero_seeders = os.environ.get("PREFETCH_SKIP_ZERO_SEEDERS", "true").lower() == "true"
+        self.prefetch_delay_seconds = int(os.environ.get("PREFETCH_DELAY_SECONDS", "120"))
+        self.prefetch_poll_seconds = int(os.environ.get("PREFETCH_POLL_SECONDS", "15"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
@@ -169,6 +171,7 @@ class DefaultContainer:
             stream_limit=self.next_episode_prefetch_stream_limit,
             target_completed_per_episode=self.prefetch_target_completed_per_episode,
             skip_zero_seeders=self.prefetch_skip_zero_seeders,
+            delay_seconds=self.prefetch_delay_seconds,
         )
         jinja_manager = JinjaManager(self.template_dir)
         dashboard_service = DashboardService(cache_manager, self.public_base_url)
@@ -186,6 +189,7 @@ class DefaultContainer:
             hls_chunk_manager=hls_chunk_manager,
             prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
             next_episode_prefetch_service=next_episode_prefetch_service,
+            prefetch_poll_seconds=self.prefetch_poll_seconds,
         )
         playback_controller = PlaybackController(
             torrserver_client,
