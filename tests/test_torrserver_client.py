@@ -230,3 +230,83 @@ def test_resolve_file_index_multilingual_pack_with_season_folder():
     assert idx_s2e2 == 24
 
 
+def test_resolve_file_index_corrects_non_video_whitelist_index():
+    # Like Gotham dd10bc0... where index 24 is a .srt and index 25 is the real .avi video
+    files = [
+        {"id": 21, "path": "Gotham.S01-05/Gotham.1x05.Viper.avi"},
+        {"id": 24, "path": "Gotham.S01-05/Gotham.1x05.Viper.srt"},
+        {"id": 25, "path": "Gotham.S01-05/Gotham.1x06.Lo.Spirito.Del.Capro.avi"},
+        {"id": 26, "path": "Gotham.S01-05/Gotham.1x06.Lo.Spirito.Del.Capro.srt"},
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"file_stats": files}, request=request)
+        return httpx.Response(404, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
+
+    # Provided index is 24 (which is .srt). It must detect it is not a video and resolve to 25!
+    corrected_idx = asyncio.run(
+        client.resolve_file_index(
+            "magnet:?xt=urn:btih:abc",
+            index=24,
+            content_id="tt3749900:1:6",
+            content_type="series",
+        )
+    )
+    assert corrected_idx == 25
+
+
+def test_resolve_file_index_keeps_valid_video_index():
+    files = [
+        {"id": 6, "path": "Gotham.S01E06.Lo.Spirito.mkv"},
+        {"id": 7, "path": "Gotham.S01E06.srt"},
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"file_stats": files}, request=request)
+        return httpx.Response(404, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
+
+    # Provided index 6 is .mkv (video whitelist) -> kept directly
+    idx = asyncio.run(
+        client.resolve_file_index(
+            "magnet:?xt=urn:btih:abc",
+            index=6,
+            content_id="tt3749900:1:6",
+            content_type="series",
+        )
+    )
+    assert idx == 6
+
+
+def test_resolve_file_index_timeout_falls_back_to_provided_index():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        # Returns status without file_stats (e.g. Torrent getting info)
+        if request.method == "POST":
+            return httpx.Response(200, json={"stat_string": "Torrent getting info"}, request=request)
+        return httpx.Response(404, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
+
+    # When metadata is not available, times out and returns provided index without blocking
+    idx = asyncio.run(
+        client.resolve_file_index(
+            "magnet:?xt=urn:btih:abc",
+            index=12,
+            content_id="tt3749900:1:6",
+            content_type="series",
+            max_attempts=1,
+            poll_interval=0.01,
+        )
+    )
+    assert idx == 12
+
+
+

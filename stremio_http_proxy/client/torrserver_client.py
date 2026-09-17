@@ -1,10 +1,27 @@
 import asyncio
+import logging
 import os
 import re
 from urllib.parse import urlencode
 
 import httpx
 from injector import inject
+
+VIDEO_EXTENSIONS = {
+    ".mkv",
+    ".mp4",
+    ".avi",
+    ".m4v",
+    ".mov",
+    ".mpg",
+    ".mpeg",
+    ".ts",
+    ".webm",
+    ".flv",
+    ".vob",
+    ".wmv",
+    ".m2ts",
+}
 
 
 class TorrServerClient:
@@ -23,6 +40,7 @@ class TorrServerClient:
         self.timeout_seconds = timeout_seconds
         self.auth = httpx.BasicAuth(basic_auth_user, basic_auth_password or "") if basic_auth_user else None
         self.transport = transport
+        self.logger = logging.getLogger(__name__)
 
     async def add_and_get_status(self, link: str, timeout: float | None = None) -> dict | None:
         payload = {"action": "add", "link": link, "save_to_db": False}
@@ -128,23 +146,21 @@ class TorrServerClient:
     async def resolve_file_index(
         self,
         link: str,
+        index: int | None = None,
         content_id: str | None = None,
         content_type: str | None = None,
         title: str | None = None,
         poster: str | None = None,
         category: str | None = None,
-        max_attempts: int = 6,
-        poll_interval: float = 0.5,
+        max_attempts: int = 5,
+        poll_interval: float = 0.4,
     ) -> int:
-        try:
-            await self.add_torrent(link, title, poster, category)
-        except Exception:
-            pass
+        provided_index = index if (index is not None and index > 0) else None
 
         file_stats = None
         for _ in range(max_attempts):
             try:
-                res = await self.add_and_get_status(link)
+                res = await self.add_and_get_status(link, timeout=1.5)
                 if res and "file_stats" in res:
                     file_stats = res["file_stats"]
                     if file_stats:
@@ -153,16 +169,33 @@ class TorrServerClient:
                 pass
             await asyncio.sleep(poll_interval)
 
+        # Se il torrent non fornisce metadati entro il timeout, "mucchio":
+        # usiamo l'indice fornito se presente, altrimenti 1
         if not file_stats:
-            return 1
+            return provided_index or 1
 
-        video_extensions = {".mkv", ".mp4", ".avi", ".m4v", ".mov", ".mpg", ".mpeg", ".ts", ".webm", ".flv"}
+        # 1. Verifica whitelist: se l'indice fornito punta a un'estensione video valida, lo accettiamo
+        if provided_index is not None:
+            matching_file = next((f for f in file_stats if int(f.get("id", 0)) == provided_index), None)
+            if matching_file is not None:
+                path = matching_file.get("path", "")
+                ext = os.path.splitext(path.lower())[1]
+                if ext in VIDEO_EXTENSIONS:
+                    return provided_index
+                self.logger.warning(
+                    "Provided index %s for torrent %s is not a valid video file (%s); resolving correct video file...",
+                    provided_index,
+                    link,
+                    path,
+                )
+
+        # 2. Filtra solo file con estensioni video (whitelist)
         video_files = [
             f for f in file_stats
-            if os.path.splitext(f.get("path", "").lower())[1] in video_extensions
+            if os.path.splitext(f.get("path", "").lower())[1] in VIDEO_EXTENSIONS
         ]
         if not video_files:
-            return 1
+            return provided_index or 1
 
         if len(video_files) == 1:
             return int(video_files[0].get("id", 1))

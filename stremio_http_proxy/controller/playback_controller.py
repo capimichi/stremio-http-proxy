@@ -402,8 +402,18 @@ class PlaybackController:
             self._schedule_downloads(link, title, poster, category, index, content_type, content_id)
             return RedirectResponse(url=link, status_code=307)
 
-        if index is None or index <= 0:
-            if hasattr(self.torrserver_client, "resolve_file_index"):
+        if hasattr(self.torrserver_client, "resolve_file_index"):
+            try:
+                index = await self.torrserver_client.resolve_file_index(
+                    link,
+                    index=index,
+                    content_id=content_id,
+                    content_type=content_type,
+                    title=title,
+                    poster=poster,
+                    category=category,
+                )
+            except TypeError:
                 index = await self.torrserver_client.resolve_file_index(
                     link,
                     content_id=content_id,
@@ -412,8 +422,8 @@ class PlaybackController:
                     poster=poster,
                     category=category,
                 )
-            else:
-                index = 1
+        elif index is None or index <= 0:
+            index = 1
 
         self._schedule_prefetch(content_type, content_id, category)
         self._schedule_initialization(link, title, poster, category, index)

@@ -215,17 +215,32 @@ class DownloadWorkerService:
         else:
             await self.torrserver_client.add_torrent(job.link, job.title, job.poster, job.category)
             file_index = job.index
-            if (file_index is None or file_index <= 0) and hasattr(self.torrserver_client, "resolve_file_index"):
-                file_index = await self.torrserver_client.resolve_file_index(
-                    job.link,
-                    content_id=job.content_id,
-                    content_type=job.content_type,
-                    title=job.title,
-                    poster=job.poster,
-                    category=job.category,
-                )
-                if file_index:
-                    job.index = file_index
+            if hasattr(self.torrserver_client, "resolve_file_index"):
+                try:
+                    resolved_index = await self.torrserver_client.resolve_file_index(
+                        job.link,
+                        index=file_index,
+                        content_id=job.content_id,
+                        content_type=job.content_type,
+                        title=job.title,
+                        poster=job.poster,
+                        category=job.category,
+                    )
+                except TypeError:
+                    resolved_index = await self.torrserver_client.resolve_file_index(
+                        job.link,
+                        content_id=job.content_id,
+                        content_type=job.content_type,
+                        title=job.title,
+                        poster=job.poster,
+                        category=job.category,
+                    )
+                if resolved_index:
+                    file_index = resolved_index
+                    job.index = resolved_index
+            elif file_index is None or file_index <= 0:
+                file_index = 1
+                job.index = 1
             build_url = getattr(self.torrserver_client, "build_download_url", self.torrserver_client.build_play_url)
             download_url = build_url(job.link, job.title, job.poster, job.category, file_index)
             await self._download_http_stream(job, download_url)

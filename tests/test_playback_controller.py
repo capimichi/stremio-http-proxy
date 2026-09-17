@@ -26,6 +26,8 @@ class FakeTorrServerClient(TorrServerClient):
                 {"id": 1, "path": "Show S01E01.mkv"},
                 {"id": 2, "path": "Show S01E02.mkv"},
                 {"id": 3, "path": "Show S01E03.srt"},
+                {"id": 4, "path": "Gotham S01E04.mkv"},
+                {"id": 18, "path": "Movie.1080p.mkv"},
             ]
         }
 
