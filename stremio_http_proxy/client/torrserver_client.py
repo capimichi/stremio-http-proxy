@@ -1,3 +1,6 @@
+import asyncio
+import os
+import re
 from urllib.parse import urlencode
 
 import httpx
@@ -73,7 +76,7 @@ class TorrServerClient:
             "preload": "true",
         }
         params.update(self._metadata(title, poster, category))
-        if index is not None:
+        if index is not None and index > 0:
             params["index"] = str(index)
         async with httpx.AsyncClient(
             base_url=self.internal_base_url,
@@ -118,9 +121,92 @@ class TorrServerClient:
             "play": "true",
         }
         params.update(self._metadata(title, poster, category))
-        if index is not None:
+        if index is not None and index > 0:
             params["index"] = str(index)
         return f"{base_url}/stream?{urlencode(params)}"
+
+    async def resolve_file_index(
+        self,
+        link: str,
+        content_id: str | None = None,
+        content_type: str | None = None,
+        title: str | None = None,
+        poster: str | None = None,
+        category: str | None = None,
+        max_attempts: int = 6,
+        poll_interval: float = 0.5,
+    ) -> int:
+        try:
+            await self.add_torrent(link, title, poster, category)
+        except Exception:
+            pass
+
+        file_stats = None
+        for _ in range(max_attempts):
+            try:
+                res = await self.add_and_get_status(link)
+                if res and "file_stats" in res:
+                    file_stats = res["file_stats"]
+                    if file_stats:
+                        break
+            except Exception:
+                pass
+            await asyncio.sleep(poll_interval)
+
+        if not file_stats:
+            return 1
+
+        video_extensions = {".mkv", ".mp4", ".avi", ".m4v", ".mov", ".mpg", ".mpeg", ".ts", ".webm", ".flv"}
+        video_files = [
+            f for f in file_stats
+            if os.path.splitext(f.get("path", "").lower())[1] in video_extensions
+        ]
+        if not video_files:
+            return 1
+
+        if len(video_files) == 1:
+            return int(video_files[0].get("id", 1))
+
+        season = None
+        episode = None
+        if content_id and (content_type == "series" or ":" in content_id):
+            parts = content_id.split(":")
+            if len(parts) >= 3:
+                try:
+                    season = int(parts[1])
+                    episode = int(parts[2])
+                except (ValueError, IndexError):
+                    pass
+
+        if season is not None and episode is not None:
+            pattern1 = re.compile(rf"[sS]0*{season}[^a-zA-Z0-9]*[eE]0*{episode}(?![0-9])")
+            pattern2 = re.compile(rf"\b0*{season}[xX]0*{episode}(?![0-9])")
+            pattern3 = re.compile(rf"\b(?:[eE]p?(?:isode)?[^a-zA-Z0-9]*|#\s*)0*{episode}(?![0-9])", re.IGNORECASE)
+            pattern4 = re.compile(rf"\b0*{episode}(?![0-9])")
+            season_pattern = re.compile(rf"\b[sS]eason[^0-9]*0*{season}\b|\b[sS]0*{season}\b", re.IGNORECASE)
+
+            # 1. Match S01E02 or 1x02 on filename
+            for f in video_files:
+                path = f.get("path", "")
+                filename = path.split("/")[-1]
+                if pattern1.search(filename) or pattern2.search(filename):
+                    return int(f.get("id", 1))
+
+            # 2. Match Season 1/02.mkv or Season 1/Episode 2.mkv
+            for f in video_files:
+                path = f.get("path", "")
+                filename = path.split("/")[-1]
+                if season_pattern.search(path):
+                    if pattern3.search(filename) or pattern4.search(filename):
+                        return int(f.get("id", 1))
+
+            # 3. Match S01E02 on entire path
+            for f in video_files:
+                path = f.get("path", "")
+                if pattern1.search(path) or pattern2.search(path):
+                    return int(f.get("id", 1))
+
+        return int(video_files[0].get("id", 1))
 
     def _metadata(
         self,

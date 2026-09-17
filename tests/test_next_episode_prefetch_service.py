@@ -237,3 +237,45 @@ def test_schedule_prefetch_validates_and_delegates():
     assert service.schedule_prefetch("series", "tt123:1:2", "tv", delay_seconds=300) is True
     assert cache_mgr.scheduled[1] == ("series", "tt123:1:2", "tv", 300)
 
+
+def test_prefetch_preserves_exact_upstream_order_and_allows_zero_seeders():
+    class UpstreamWithMixedSeeders:
+        async def get_json(self, path: str, query_params=None) -> dict:
+            return {
+                "streams": [
+                    {
+                        "title": "Italian Low Seeders",
+                        "description": "📄 file1.mkv\n💾 1GB\n🌍 🇮🇹 | 👤 2 | ⏰",
+                        "infoHash": "a" * 40,
+                    },
+                    {
+                        "title": "English High Seeders",
+                        "description": "📄 file2.mkv\n💾 1GB\n🌍  | 👤 50 | ⏰",
+                        "infoHash": "b" * 40,
+                    },
+                    {
+                        "title": "Italian Zero Seeders",
+                        "description": "📄 file3.mkv\n💾 1GB\n🌍 🇮🇹 | 👤 0 | ⏰",
+                        "infoHash": "c" * 40,
+                    },
+                ]
+            }
+
+    queue = FakeDownloadQueueService()
+    cache_mgr = FakeDetailedCacheManager()
+    service = NextEpisodePrefetchService(
+        UpstreamWithMixedSeeders(),
+        StreamRewriteService("http://localhost:8691", FakeCacheManager()),
+        queue,
+        cache_manager=cache_mgr,
+        enabled=True,
+        target_completed_per_episode=1,
+    )
+
+    asyncio.run(service.enqueue_next_episode("series", "tt123:1:1", "tv"))
+
+    # Must preserve upstream order and select stream 0 ("a" * 40) even though stream 1 has 50 seeders!
+    assert len(queue.calls) == 1
+    assert queue.calls[0]["link"] == "a" * 40
+    assert queue.calls[0]["title"].startswith("Italian Low Seeders")
+

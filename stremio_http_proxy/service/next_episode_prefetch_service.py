@@ -20,7 +20,7 @@ class NextEpisodePrefetchService:
         enabled: bool = True,
         stream_limit: int = 3,
         target_completed_per_episode: int = 1,
-        skip_zero_seeders: bool = True,
+        skip_zero_seeders: bool = False,
         delay_seconds: int = 120,
         task_service: Any = None,
     ):
@@ -134,12 +134,6 @@ class NextEpisodePrefetchService:
         # Filter out 0-seeder streams if skip_zero_seeders is True
         if self.skip_zero_seeders:
             candidates = [c for c in candidates if c.get("seeders") != 0]
-
-        # Prioritize candidates with higher seeders (unknown seeders treated as lower than positive)
-        candidates.sort(
-            key=lambda c: (1 if c.get("seeders") is not None else 0, c.get("seeders") or 0),
-            reverse=True,
-        )
 
         enqueued_count = 0
         for candidate in candidates:

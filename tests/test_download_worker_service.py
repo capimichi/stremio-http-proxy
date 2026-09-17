@@ -523,5 +523,63 @@ def test_download_worker_enqueues_optimize_media_on_completion(tmp_path, respx_m
     )
 
 
+def test_download_worker_resolves_index_if_missing_or_zero(tmp_path):
+    class ResolvingTorrServerClient(FakeTorrServerClient):
+        def __init__(self):
+            self.resolved_calls = []
+            self.build_download_calls = []
+
+        async def resolve_file_index(self, link, content_id=None, content_type=None, title=None, poster=None, category=None):
+            self.resolved_calls.append((link, content_id, content_type))
+            return 6
+
+        def build_download_url(self, link, title=None, poster=None, category=None, index=None):
+            self.build_download_calls.append((link, index))
+            return "http://localhost:8090/stream?link=torrent&play=true&index=6"
+
+    client = ResolvingTorrServerClient()
+    cache_manager = FakeCacheManager(tmp_path)
+    job = DownloadJob(
+        job_id="job123",
+        cache_key="hash123:0",
+        link="magnet:?xt=urn:btih:hash123",
+        index=0,
+        content_id="tt3749900:1:6",
+        content_type="series",
+        enqueued_at=0,
+        available_at=0,
+    )
+
+    service = DownloadWorkerService(
+        client,
+        cache_manager,
+        LoggerFactory(str(tmp_path)),
+        poll_seconds=1,
+        connect_timeout_seconds=10,
+        no_progress_timeout_seconds=30,
+        min_progress_bytes=10,
+        min_progress_window_seconds=120,
+        max_total_seconds=60,
+        progress_log_interval_seconds=10,
+    )
+
+    # Mock _download_http_stream to avoid actual network calls
+    async def fake_download(job, url):
+        return None
+
+    service._download_http_stream = fake_download
+
+    asyncio.run(service._download(job))
+
+    # Must have resolved file index
+    assert len(client.resolved_calls) == 1
+    assert client.resolved_calls[0] == ("magnet:?xt=urn:btih:hash123", "tt3749900:1:6", "series")
+    # Must have updated job.index to 6
+    assert job.index == 6
+    # Must have passed index=6 to build_download_url
+    assert len(client.build_download_calls) == 1
+    assert client.build_download_calls[0][1] == 6
+
+
 
 

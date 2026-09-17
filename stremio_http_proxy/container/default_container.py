@@ -96,7 +96,7 @@ class DefaultContainer:
         self.next_episode_prefetch_enabled = os.environ.get("NEXT_EPISODE_PREFETCH_ENABLED", "true").lower() == "true"
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.prefetch_target_completed_per_episode = int(os.environ.get("PREFETCH_TARGET_COMPLETED_PER_EPISODE", "1"))
-        self.prefetch_skip_zero_seeders = os.environ.get("PREFETCH_SKIP_ZERO_SEEDERS", "true").lower() == "true"
+        self.prefetch_skip_zero_seeders = os.environ.get("PREFETCH_SKIP_ZERO_SEEDERS", "false").lower() == "true"
         self.prefetch_delay_seconds = int(os.environ.get("PREFETCH_DELAY_SECONDS", "120"))
         self.prefetch_poll_seconds = int(os.environ.get("PREFETCH_POLL_SECONDS", "15"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")

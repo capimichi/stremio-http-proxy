@@ -1,12 +1,14 @@
 import asyncio
 from urllib.parse import parse_qs, urlparse
 
+from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 
 
-class FakeTorrServerClient:
+class FakeTorrServerClient(TorrServerClient):
     def __init__(self):
+        super().__init__("http://localhost:8090", 10)
         self.added = []
         self.preloaded = []
 

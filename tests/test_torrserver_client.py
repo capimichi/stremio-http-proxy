@@ -141,3 +141,64 @@ def test_torrserver_client_uses_internal_base_url_for_api_and_download_url():
     assert captured_requests[1].startswith("http://torrserver:8090/stream")
     assert captured_requests[2].startswith("http://torrserver:8090/torrents")
 
+
+def test_build_stream_url_ignores_zero_or_negative_index():
+    client = TorrServerClient("http://localhost:8090", 20)
+
+    url_zero = client.build_play_url("magnet:?xt=urn:btih:abc", index=0)
+    assert "index=" not in url_zero
+
+    url_positive = client.build_play_url("magnet:?xt=urn:btih:abc", index=5)
+    assert "index=5" in url_positive
+
+
+def test_resolve_file_index_matches_series_episode():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(
+                200,
+                json={
+                    "file_stats": [
+                        {"id": 1, "path": "Season 1/Gotham.S01E01.mkv"},
+                        {"id": 6, "path": "Season 1/Gotham.S01E06.Lo.Spirito.mkv"},
+                        {"id": 7, "path": "Season 1/Gotham.S01E06.srt"},
+                    ]
+                },
+                request=request,
+            )
+        return httpx.Response(404, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
+
+    idx = asyncio.run(
+        client.resolve_file_index(
+            "magnet:?xt=urn:btih:abc",
+            content_id="tt3749900:1:6",
+            content_type="series",
+        )
+    )
+    assert idx == 6
+
+
+def test_resolve_file_index_single_video_file():
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(
+                200,
+                json={
+                    "file_stats": [
+                        {"id": 1, "path": "SingleMovie.mkv"},
+                        {"id": 2, "path": "Subtitles.srt"},
+                    ]
+                },
+                request=request,
+            )
+        return httpx.Response(404, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
+
+    idx = asyncio.run(client.resolve_file_index("magnet:?xt=urn:btih:abc"))
+    assert idx == 1
+

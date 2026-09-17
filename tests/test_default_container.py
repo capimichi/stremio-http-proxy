@@ -37,7 +37,7 @@ def test_default_container_loads_prefetch_and_download_env_vars(monkeypatch, tmp
     assert default_container.download_no_progress_timeout_seconds == 90
     assert default_container.download_prefetch_min_progress_bytes == 1048576
     assert default_container.prefetch_target_completed_per_episode == 1
-    assert default_container.prefetch_skip_zero_seeders is True
+    assert default_container.prefetch_skip_zero_seeders is False
 
 
 def test_default_container_loads_cache_base_url(monkeypatch):
