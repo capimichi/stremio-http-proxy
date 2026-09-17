@@ -178,12 +178,15 @@ class TorrServerClient:
                 except (ValueError, IndexError):
                     pass
 
-        if season is not None and episode is not None:
             pattern1 = re.compile(rf"[sS]0*{season}[^a-zA-Z0-9]*[eE]0*{episode}(?![0-9])")
             pattern2 = re.compile(rf"\b0*{season}[xX]0*{episode}(?![0-9])")
             pattern3 = re.compile(rf"\b(?:[eE]p?(?:isode)?[^a-zA-Z0-9]*|#\s*)0*{episode}(?![0-9])", re.IGNORECASE)
+            pattern_ep_start = re.compile(rf"^0*{episode}(?![0-9])")
             pattern4 = re.compile(rf"\b0*{episode}(?![0-9])")
-            season_pattern = re.compile(rf"\b[sS]eason[^0-9]*0*{season}\b|\b[sS]0*{season}\b", re.IGNORECASE)
+            season_folder_pattern = re.compile(
+                rf"\b(?:season|stagion[ei]|saison|staffel|temporada|series)[\s._]*0*{season}(?!\s*[-~–—/]\s*[sS]?\d+)\b|\b[sS]0*{season}(?!\s*[-~–—/]\s*[sS]?\d+)\b",
+                re.IGNORECASE,
+            )
 
             # 1. Match S01E02 or 1x02 on filename
             for f in video_files:
@@ -192,12 +195,21 @@ class TorrServerClient:
                 if pattern1.search(filename) or pattern2.search(filename):
                     return int(f.get("id", 1))
 
-            # 2. Match Season 1/02.mkv or Season 1/Episode 2.mkv
+            # 2. Match season folder in path + episode in filename
             for f in video_files:
                 path = f.get("path", "")
                 filename = path.split("/")[-1]
-                if season_pattern.search(path):
-                    if pattern3.search(filename) or pattern4.search(filename):
+                dir_parts = path.split("/")[:-1]
+                if any(season_folder_pattern.search(d) for d in dir_parts):
+                    if pattern3.search(filename) or pattern_ep_start.search(filename):
+                        return int(f.get("id", 1))
+
+            for f in video_files:
+                path = f.get("path", "")
+                filename = path.split("/")[-1]
+                dir_parts = path.split("/")[:-1]
+                if any(season_folder_pattern.search(d) for d in dir_parts):
+                    if pattern4.search(filename):
                         return int(f.get("id", 1))
 
             # 3. Match S01E02 on entire path

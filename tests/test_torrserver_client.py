@@ -202,3 +202,31 @@ def test_resolve_file_index_single_video_file():
     idx = asyncio.run(client.resolve_file_index("magnet:?xt=urn:btih:abc"))
     assert idx == 1
 
+
+def test_resolve_file_index_multilingual_pack_with_season_folder():
+    files = [
+        {"id": 1, "path": "Gotham - Stagioni 1-5 (2014-2019) - ITA/Stagione 1/01 - Le Regole Di Gotham.mkv"},
+        {"id": 6, "path": "Gotham - Stagioni 1-5 (2014-2019) - ITA/Stagione 1/06 - Lo Spirito Del Capro.mkv"},
+        {"id": 23, "path": "Gotham - Stagioni 1-5 (2014-2019) - ITA/Stagione 2/01 - L'Ascesa Dei Cattivi.mkv"},
+        {"id": 24, "path": "Gotham - Stagioni 1-5 (2014-2019) - ITA/Stagione 2/02 - Un Nuovo Giorno.mkv"},
+    ]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            return httpx.Response(200, json={"file_stats": files}, request=request)
+        return httpx.Response(404, request=request)
+
+    transport = httpx.MockTransport(handler)
+    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
+
+    idx_s1e6 = asyncio.run(
+        client.resolve_file_index("magnet:?xt=urn:btih:abc", content_id="tt3749900:1:6", content_type="series")
+    )
+    assert idx_s1e6 == 6
+
+    idx_s2e2 = asyncio.run(
+        client.resolve_file_index("magnet:?xt=urn:btih:abc", content_id="tt3749900:2:2", content_type="series")
+    )
+    assert idx_s2e2 == 24
+
+
