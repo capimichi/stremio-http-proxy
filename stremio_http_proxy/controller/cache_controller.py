@@ -20,7 +20,7 @@ class CacheController:
         self._register_routes()
 
     def _register_routes(self) -> None:
-        self.router.add_api_route("/cache/{infohash}/{index}", self.serve, methods=["GET"])
+        self.router.add_api_route("/cache/{infohash}/{index}", self.serve, methods=["GET", "HEAD"])
 
         security = self.basic_auth_service.security
         def require_auth(credentials=Depends(security)) -> None:
