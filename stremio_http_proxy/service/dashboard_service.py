@@ -1,18 +1,92 @@
+import re
 import time
+from typing import Any
 from urllib.parse import urlencode
 
 from injector import inject
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.model.cache_entry import CacheEntry
 from stremio_http_proxy.model.download_status import DownloadStatus, DownloadStatusResponse
+from stremio_http_proxy.repository.media_repository import MediaRepository
 
 
 class DashboardService:
     @inject
-    def __init__(self, cache_manager: CacheManager, public_base_url: str):
+    def __init__(
+        self,
+        cache_manager: CacheManager,
+        public_base_url: str,
+        media_repository: MediaRepository | None = None,
+    ):
         self.cache_manager = cache_manager
         self.public_base_url = public_base_url.rstrip("/")
+        self.media_repository = media_repository
+
+    def _resolve_media_info(self, entry: CacheEntry) -> dict[str, Any]:
+        content_id = entry.content_id or entry.media_item_id
+        title = entry.title
+        media_title = None
+        season = None
+        episode = None
+        episode_title = None
+        content_type = entry.content_type
+        media_id = None
+
+        if content_id:
+            clean_id = content_id
+            if clean_id.startswith("series:"):
+                clean_id = clean_id[len("series:"):]
+                content_type = "series"
+            elif clean_id.startswith("movie:"):
+                clean_id = clean_id[len("movie:"):]
+                content_type = "movie"
+
+            parts = clean_id.split(":")
+            if len(parts) >= 3:
+                media_id = parts[0]
+                try:
+                    season = int(parts[1])
+                    episode = int(parts[2])
+                except ValueError:
+                    pass
+                content_type = "series"
+            elif len(parts) == 1:
+                media_id = parts[0]
+
+        if season is None and title:
+            match = re.search(r"(?i)\bS(\d{1,2})[EX](\d{1,3})\b", title)
+            if match:
+                try:
+                    season = int(match.group(1))
+                    episode = int(match.group(2))
+                    content_type = "series"
+                except ValueError:
+                    pass
+
+        if media_id and self.media_repository:
+            try:
+                media = self.media_repository.get_media(media_id)
+                if media:
+                    media_title = media.title
+                    if not content_type:
+                        content_type = media.type
+                if season is not None and episode is not None:
+                    item = self.media_repository.get_media_item_by_season_episode(media_id, season, episode)
+                    if item and item.title and item.title != f"Episodio {episode}":
+                        episode_title = item.title
+            except Exception:
+                pass
+
+        return {
+            "media_title": media_title,
+            "season": season,
+            "episode": episode,
+            "episode_title": episode_title,
+            "content_type": content_type,
+            "media_id": media_id,
+        }
 
     def get_index_context(self) -> dict[str, object]:
         return {}
@@ -46,6 +120,7 @@ class DashboardService:
                 return "N/A"
             return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
 
+        media_info = self._resolve_media_info(entry)
         return {
             "entry": entry,
             "play_url": play_url,
@@ -53,6 +128,12 @@ class DashboardService:
             "index": index,
             "created_at_str": fmt_ts(entry.created_at),
             "completed_at_str": fmt_ts(entry.completed_at),
+            "media_title": media_info["media_title"],
+            "season": media_info["season"],
+            "episode": media_info["episode"],
+            "episode_title": media_info["episode_title"],
+            "content_type": media_info["content_type"],
+            "media_id": media_info["media_id"],
         }, 200
 
     def get_download_status(
@@ -80,6 +161,7 @@ class DashboardService:
                 CacheEntryStatusEnum.QUEUED,
             }:
                 infohash, index = self.cache_manager.parse_cache_key(cache_key)
+                media_info = self._resolve_media_info(entry)
                 active_items.append(
                     DownloadStatus(
                         cache_key=cache_key,
@@ -96,16 +178,33 @@ class DashboardService:
                         attempt=entry.attempt,
                         last_error=entry.last_error,
                         last_progress_at=entry.last_progress_at,
+                        media_title=media_info["media_title"],
+                        season=media_info["season"],
+                        episode=media_info["episode"],
+                        episode_title=media_info["episode_title"],
+                        content_type=media_info["content_type"],
+                        media_id=media_info["media_id"],
                     )
                 )
 
         entries = all_entries
         if search:
             search_lower = search.lower()
-            entries = [
-                (k, e) for k, e in entries
-                if e.title and search_lower in e.title.lower()
-            ]
+            filtered = []
+            for k, e in entries:
+                info = self._resolve_media_info(e)
+                matches = False
+                if e.title and search_lower in e.title.lower():
+                    matches = True
+                elif info["media_title"] and search_lower in info["media_title"].lower():
+                    matches = True
+                elif info["episode_title"] and search_lower in info["episode_title"].lower():
+                    matches = True
+                elif e.infohash and search_lower in e.infohash.lower():
+                    matches = True
+                if matches:
+                    filtered.append((k, e))
+            entries = filtered
         if status:
             if status == "active":
                 entries = [
@@ -128,6 +227,7 @@ class DashboardService:
         downloads = []
         for cache_key, entry in entries[start:end]:
             infohash, index = self.cache_manager.parse_cache_key(cache_key)
+            media_info = self._resolve_media_info(entry)
             downloads.append(
                 DownloadStatus(
                     cache_key=cache_key,
@@ -144,6 +244,12 @@ class DashboardService:
                     attempt=entry.attempt,
                     last_error=entry.last_error,
                     last_progress_at=entry.last_progress_at,
+                    media_title=media_info["media_title"],
+                    season=media_info["season"],
+                    episode=media_info["episode"],
+                    episode_title=media_info["episode_title"],
+                    content_type=media_info["content_type"],
+                    media_id=media_info["media_id"],
                 )
             )
 

@@ -73,16 +73,46 @@ function renderTable(payload) {
   }
 
   tbody.innerHTML = items.map((d) => {
-    const title = d.title || d.cache_key;
+    const rawTitle = d.title || d.cache_key;
     const size = d.status === "ready"
       ? formatBytes(d.downloaded_bytes)
       : (d.expected_bytes ? `${formatBytes(d.downloaded_bytes)} / ${formatBytes(d.expected_bytes)}` : formatBytes(d.downloaded_bytes));
     const shortHash = d.infohash.length > 14 ? d.infohash.slice(0, 14) + "…" : d.infohash;
     const pct = Math.max(0, Math.min(d.progress_percent ?? 0, 100));
 
+    let titleHtml = "";
+    if (d.media_title) {
+      let epBadge = "";
+      if (d.season != null && d.episode != null) {
+        epBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">S${d.season}E${d.episode}</span>`;
+      }
+      const browseLink = d.media_id ? `<a href="/dashboard/browser/${d.content_type || 'series'}/${d.media_id}" class="hover:text-indigo-300 transition-colors">${d.media_title}</a>` : d.media_title;
+      titleHtml = `
+        <div class="flex flex-col min-w-0 max-w-xs sm:max-w-sm">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-semibold text-white text-xs truncate" title="${d.media_title}">${browseLink}</span>
+            ${epBadge}
+          </div>
+          ${d.episode_title ? `<span class="text-[11px] text-slate-300 truncate" title="${d.episode_title}">${d.episode_title}</span>` : ""}
+          <span class="text-[10px] text-slate-500 font-mono truncate" title="${rawTitle}">${rawTitle}</span>
+        </div>
+      `;
+    } else if (d.season != null && d.episode != null) {
+      titleHtml = `
+        <div class="flex flex-col min-w-0 max-w-xs sm:max-w-sm">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">S${d.season}E${d.episode}</span>
+            <span class="font-semibold text-white text-xs truncate" title="${rawTitle}">${rawTitle}</span>
+          </div>
+        </div>
+      `;
+    } else {
+      titleHtml = `<span class="text-xs font-semibold text-slate-200 max-w-xs sm:max-w-sm truncate block" title="${rawTitle}">${rawTitle}</span>`;
+    }
+
     return `<tr class="hover:bg-slate-800/40 transition-colors">
-      <td class="px-5 py-3 text-xs font-semibold text-slate-200 max-w-xs truncate" title="${title}">
-        ${title}
+      <td class="px-5 py-3">
+        ${titleHtml}
       </td>
       <td class="px-5 py-3 text-slate-400 whitespace-nowrap font-mono text-xs">${size}</td>
       <td class="px-5 py-3 whitespace-nowrap">${statusBadgeHtml(d.status)}</td>

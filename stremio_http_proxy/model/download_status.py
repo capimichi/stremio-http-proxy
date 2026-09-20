@@ -16,6 +16,12 @@ class DownloadStatus(BaseModel):
     attempt: int = 0
     last_error: str | None = None
     last_progress_at: float | None = None
+    media_title: str | None = None
+    season: int | None = None
+    episode: int | None = None
+    episode_title: str | None = None
+    media_id: str | None = None
+    content_type: str | None = None
 
 
 class DownloadStatusResponse(BaseModel):

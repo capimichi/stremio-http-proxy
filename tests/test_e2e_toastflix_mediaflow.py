@@ -4,7 +4,6 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-import stremio_http_proxy.entity.whitelist_entry  # noqa: F401
 from stremio_http_proxy.client.mediaflow_client import MediaflowClient
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.controller.cache_controller import CacheController

@@ -208,7 +208,7 @@
             <th class="px-5 py-3">Descrizione</th>
             <th class="px-5 py-3">Infohash</th>
             <th class="px-5 py-3">Seeders</th>
-            <th class="px-5 py-3 text-right">Azioni & Whitelist</th>
+            <th class="px-5 py-3 text-right">Azione</th>
           </tr>
         </thead>
         <tbody id="streams-tbody" class="divide-y divide-slate-800/60 bg-slate-900/40">
@@ -264,6 +264,7 @@ function setPosterImage(src) {
     if (posterSkeleton) posterSkeleton.classList.add('hidden');
   }
 }
+
 const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
 const cacheSeasonBtn = document.getElementById('cache-season-btn');
 const cacheSeasonLabel = document.getElementById('cache-season-label');
@@ -279,7 +280,6 @@ const batchToastMessage = document.getElementById('batch-toast-message');
 
 const PLACEHOLDER_EPISODE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 180'%3E%3Crect fill='%231e293b' width='320' height='180'/%3E%3Cpath d='M160 70 L140 100 L180 100 Z' fill='%23475569'/%3E%3Ctext x='50%25' y='75%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='12'%3EEpisodio%3C/text%3E%3C/svg%3E";
 
-let currentWhitelist = [];
 let metadataStore = null;
 let currentSeason = null;
 let currentEpisode = null;
@@ -596,7 +596,6 @@ async function loadStreams(season, episode) {
   try {
     const resp = await fetch('/api/browser/content?' + params.toString());
     const data = await resp.json();
-    currentWhitelist = data.whitelist || [];
 
     const meta = data.meta;
     if (meta) {
@@ -622,14 +621,6 @@ async function loadStreams(season, episode) {
         const cached = s.meta?.cached ? '🔥' : '';
         const playUrl = s.url || '#';
 
-        const episodeScope = mediaType === 'series' ? episode : null;
-        const seasonScope = mediaType === 'series' ? season : null;
-
-        const whitelistedEpisode = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === episodeScope);
-        const whitelistedSeason = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === null);
-        const whitelistedAll = currentWhitelist.some(w => w.infohash === infohash && w.season === null && w.episode === null);
-        const anyWhitelisted = whitelistedEpisode || whitelistedSeason || whitelistedAll;
-
         tr.innerHTML = `
           <td class="px-5 py-3 text-slate-200 font-semibold max-w-xs truncate" title="${(s.title || s.name || '').replace(/"/g, '&quot;')}">
             <span class="mr-1">${cached}</span> ${s.name || s.title || 'Stream'}
@@ -645,75 +636,11 @@ async function loadStreams(season, episode) {
                 <i class="fa-solid fa-play text-[10px]"></i>
                 <span>Play</span>
               </a>
-
-              <div class="relative wl-dropdown-container">
-                <button class="wl-toggle inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-2.5 py-1 text-xs font-medium ${anyWhitelisted ? 'text-emerald-400 border-emerald-500/40' : 'text-slate-300'}" title="Aggiungi a Whitelist">
-                  <i class="fa-solid fa-bookmark text-[10px]"></i>
-                  <span>${anyWhitelisted ? 'Whitelisted' : 'Whitelist'}</span>
-                </button>
-                <div class="wl-menu hidden absolute right-0 top-full mt-1.5 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1.5 min-w-[200px] text-xs">
-                  <button class="wl-item flex items-center gap-2 w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800" data-scope="all" data-infohash="${infohash}">
-                    ${whitelistedAll ? '<i class="fa-solid fa-check text-emerald-400 w-4"></i>' : '<span class="w-4"></span>'}
-                    Intero Media
-                  </button>
-                  ${mediaType === 'series' ? `
-                    <button class="wl-item flex items-center gap-2 w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800" data-scope="season" data-infohash="${infohash}">
-                      ${whitelistedSeason ? '<i class="fa-solid fa-check text-emerald-400 w-4"></i>' : '<span class="w-4"></span>'}
-                      Intera Stagione
-                    </button>
-                    <button class="wl-item flex items-center gap-2 w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800" data-scope="episode" data-infohash="${infohash}">
-                      ${whitelistedEpisode ? '<i class="fa-solid fa-check text-emerald-400 w-4"></i>' : '<span class="w-4"></span>'}
-                      Singolo Episodio
-                    </button>
-                  ` : ''}
-                </div>
-              </div>
             </div>
           </td>
         `;
         tbody.appendChild(tr);
       }
-
-      document.querySelectorAll('.wl-toggle').forEach(btn => {
-        btn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          const menu = this.closest('.wl-dropdown-container').querySelector('.wl-menu');
-          menu.classList.toggle('hidden');
-        });
-      });
-
-      document.querySelectorAll('.wl-item').forEach(btn => {
-        btn.addEventListener('click', async function() {
-          const container = this.closest('.wl-dropdown-container');
-          const infohash = this.dataset.infohash;
-          const scope = this.dataset.scope;
-          const currentSeason = mediaType === 'series' ? parseInt(detailSeason.value) : null;
-          const currentEpisode = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
-
-          let seasonVal, episodeVal;
-          if (scope === 'all') {
-            seasonVal = null;
-            episodeVal = null;
-          } else if (scope === 'season') {
-            seasonVal = currentSeason;
-            episodeVal = null;
-          } else {
-            seasonVal = currentSeason;
-            episodeVal = currentEpisode;
-          }
-
-          const title = detailTitle.textContent;
-
-          await fetch('/api/whitelist', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ infohash, imdb_id: imdbId, media_title: title, season: seasonVal, episode: episodeVal }),
-          });
-          container.querySelector('.wl-menu').classList.add('hidden');
-          showToast(`✅ Regola di whitelist salvata per questo flusso!`);
-          await loadStreams(currentSeason, currentEpisode);
-        });
-      });
     }
 
     streamsSection.classList.remove('hidden');

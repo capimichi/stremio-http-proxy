@@ -151,3 +151,64 @@ def test_dashboard_service_filters_by_active_status(tmp_path):
     assert len(payload.downloads) == 1
     assert payload.downloads[0].cache_key == key_downloading
 
+
+def test_dashboard_service_resolves_media_and_episode_info(tmp_path):
+    from stremio_http_proxy.repository.media_repository import MediaRepository
+
+    db_manager = DbManager(str(tmp_path / "cache.sqlite"))
+    media_repo = MediaRepository(db_manager)
+    media_repo.upsert_media("tt0903747", "series", "Breaking Bad", "2008")
+    media_repo.upsert_media_item("tt0903747:1:2", "tt0903747", 1, 2, "Cat's in the Bag...")
+
+    cache_manager = CacheManager(
+        str(tmp_path / "cache"),
+        db_manager,
+        7,
+        20,
+        LoggerFactory(str(tmp_path / "logs")),
+    )
+
+    key1 = cache_manager.build_cache_key_from_parts("1" * 40, 0)
+    entry1 = cache_manager.get_entry(key1).model_copy(
+        update={
+            "status": CacheEntryStatusEnum.DOWNLOADING,
+            "title": "Breaking.Bad.S01E02.720p.HDTV",
+            "content_id": "tt0903747:1:2",
+            "content_type": "series",
+        }
+    )
+    cache_manager._write_entry(key1, entry1)
+
+    # Entry 2: without MediaRepository entry, but title has S02E05
+    key2 = cache_manager.build_cache_key_from_parts("2" * 40, 0)
+    entry2 = cache_manager.get_entry(key2).model_copy(
+        update={
+            "status": CacheEntryStatusEnum.READY,
+            "title": "Mr.Robot.S02E05.1080p.WEB-DL",
+        }
+    )
+    cache_manager._write_entry(key2, entry2)
+
+    service = DashboardService(cache_manager, "https://proxy.example.com", media_repository=media_repo)
+    status_resp = service.get_download_status()
+
+    item1 = next(d for d in status_resp.downloads if d.cache_key == key1)
+    assert item1.media_title == "Breaking Bad"
+    assert item1.season == 1
+    assert item1.episode == 2
+    assert item1.episode_title == "Cat's in the Bag..."
+    assert item1.media_id == "tt0903747"
+
+    item2 = next(d for d in status_resp.downloads if d.cache_key == key2)
+    assert item2.season == 2
+    assert item2.episode == 5
+
+    # Test cache entry context
+    ctx, code = service.get_cache_entry_context("1" * 40, 0)
+    assert code == 200
+    assert ctx["media_title"] == "Breaking Bad"
+    assert ctx["season"] == 1
+    assert ctx["episode"] == 2
+    assert ctx["episode_title"] == "Cat's in the Bag..."
+
+

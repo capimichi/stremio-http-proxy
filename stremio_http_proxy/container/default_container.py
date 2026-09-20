@@ -16,16 +16,13 @@ from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
 
 import stremio_http_proxy.entity.playback_history  # noqa: F401 — ensure table creation
-import stremio_http_proxy.entity.whitelist_entry  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.media  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.media_item  # noqa: F401 — ensure table creation
 from stremio_http_proxy.controller.hub_controller import HubController
 from stremio_http_proxy.repository.media_repository import MediaRepository
 from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
-from stremio_http_proxy.repository.whitelist_repository import WhitelistRepository
 from stremio_http_proxy.service.hub_service import HubService
 from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
-from stremio_http_proxy.service.whitelist_service import WhitelistService
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.task.enrich_media_metadata_task import EnrichMediaMetadataTask
 
@@ -113,7 +110,6 @@ class DefaultContainer:
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
         self.tmdb_api_key = os.environ.get("TMDB_API_KEY")
-        self.whitelist_enabled = os.environ.get("WHITELIST_ENABLED", "true").lower() == "true"
         self.mediaflow_base_url = os.environ.get("MEDIAFLOW_BASE_URL", "").rstrip("/")
         self.mediaflow_api_password = os.environ.get("MEDIAFLOW_API_PASSWORD")
         self.mediaflow_enabled = (
@@ -166,7 +162,6 @@ class DefaultContainer:
             cache_base_url=self.cache_base_url,
         )
         torrent_health_service = TorrentHealthService(torrserver_client)
-        whitelist_repository = WhitelistRepository(db_manager)
         tmdb_client = TMDBClient(self.tmdb_api_key)
         mediaflow_client = MediaflowClient(
             self.mediaflow_base_url,
@@ -181,11 +176,9 @@ class DefaultContainer:
             torrent_health_service,
             self.torrserver_health_check_enabled,
             self.torrserver_health_check_timeout_seconds,
-            whitelist_repository if self.whitelist_enabled else None,
             mediaflow_client=mediaflow_client,
             http_streams_proxy_enabled=self.http_streams_proxy_enabled,
         )
-        whitelist_service = WhitelistService(whitelist_repository)
         content_browser_service = ContentBrowserService(upstream_client, tmdb_client, stream_rewrite_service)
         download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts, self.cache_enabled)
         next_episode_prefetch_service = NextEpisodePrefetchService(
@@ -220,7 +213,7 @@ class DefaultContainer:
         media_metadata_service.task_service = task_service
 
         jinja_manager = JinjaManager(self.template_dir)
-        dashboard_service = DashboardService(cache_manager, self.public_base_url)
+        dashboard_service = DashboardService(cache_manager, self.public_base_url, media_repository=media_repository)
         download_worker_service = DownloadWorkerService(
             torrserver_client,
             cache_manager,
@@ -283,9 +276,7 @@ class DefaultContainer:
         self.injector.binder.bind(PlaybackController, to=playback_controller)
         self.injector.binder.bind(HubService, to=hub_service)
         self.injector.binder.bind(HubController, to=hub_controller)
-        self.injector.binder.bind(WhitelistRepository, to=whitelist_repository)
         self.injector.binder.bind(TMDBClient, to=tmdb_client)
-        self.injector.binder.bind(WhitelistService, to=whitelist_service)
         self.injector.binder.bind(ContentBrowserService, to=content_browser_service)
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
         self.injector.binder.bind(JinjaManager, to=jinja_manager)

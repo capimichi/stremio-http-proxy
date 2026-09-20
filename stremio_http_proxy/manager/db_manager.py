@@ -45,7 +45,6 @@ class DbManager:
         Base.metadata.create_all(self.engine)
         self._ensure_cache_entry_columns()
         self._ensure_playback_history_columns()
-        self._ensure_whitelist_entry_columns()
         self._ensure_prefetch_job_columns()
         self._ensure_task_entry_columns()
 
@@ -89,20 +88,6 @@ class DbManager:
                 if column_name in existing:
                     continue
                 connection.execute(text(f"ALTER TABLE playback_history ADD COLUMN {column_name} {column_sql}"))
-
-    def _ensure_whitelist_entry_columns(self) -> None:
-        columns = {
-            "media_title": "VARCHAR(255)",
-        }
-        with self.engine.begin() as connection:
-            existing = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(whitelist_entries)"))
-            }
-            for column_name, column_sql in columns.items():
-                if column_name in existing:
-                    continue
-                connection.execute(text(f"ALTER TABLE whitelist_entries ADD COLUMN {column_name} {column_sql}"))
 
     def _ensure_prefetch_job_columns(self) -> None:
         columns = {

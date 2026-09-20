@@ -7,7 +7,6 @@ from injector import inject
 from stremio_http_proxy.client.mediaflow_client import MediaflowClient
 from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.manager.cache_manager import CacheManager
-from stremio_http_proxy.repository.whitelist_repository import WhitelistRepository
 from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
 
 
@@ -24,7 +23,6 @@ class StreamRewriteService:
         torrent_health_service: TorrentHealthService | None = None,
         torrserver_health_check_enabled: bool = False,
         torrserver_health_check_timeout: int = 15,
-        whitelist_repository: WhitelistRepository | None = None,
         mediaflow_client: MediaflowClient | None = None,
         http_streams_proxy_enabled: bool = True,
     ):
@@ -34,7 +32,6 @@ class StreamRewriteService:
         self.torrent_health_service = torrent_health_service
         self.torrserver_health_check_enabled = torrserver_health_check_enabled
         self.torrserver_health_check_timeout = torrserver_health_check_timeout
-        self.whitelist_repository = whitelist_repository
         self.mediaflow_client = mediaflow_client
         self.http_streams_proxy_enabled = http_streams_proxy_enabled
 
@@ -187,16 +184,6 @@ class StreamRewriteService:
                             updated_meta["seeders"] = seeders
                             entry["_meta"] = updated_meta
 
-        if self.whitelist_repository is not None:
-            imdb_id, season, episode = self._parse_content_id(content_id)
-            if imdb_id:
-                allowed = self.whitelist_repository.get_allowed_infohashes(imdb_id, season, episode)
-                if allowed:
-                    rewritten_streams = [
-                        s for s in rewritten_streams
-                        if self._is_stream_allowed(s, allowed)
-                    ]
-
         # Prioritize cached streams at the very top, preserving relative order of other streams
         rewritten_streams.sort(
             key=lambda s: 1 if (isinstance(s.get("_meta"), dict) and s["_meta"].get("cached")) else 0,
@@ -206,12 +193,6 @@ class StreamRewriteService:
         updated_payload = dict(payload)
         updated_payload["streams"] = rewritten_streams
         return updated_payload
-
-    def _is_stream_allowed(self, stream: dict, allowed_infohashes: set[str]) -> bool:
-        infohash = self._extract_infohash_from_stream(stream)
-        if infohash is not None:
-            return infohash in allowed_infohashes
-        return True
 
     def _needs_mediaflow_proxy(self, stream: dict) -> bool:
         bh = stream.get("behaviorHints")

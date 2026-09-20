@@ -5,7 +5,6 @@ from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.service.cache_service import CacheService
 from stremio_http_proxy.service.cache_token_service import CacheTokenService
 from stremio_http_proxy.manager.cache_manager import CacheManager
-import stremio_http_proxy.entity.whitelist_entry  # noqa: F401
 
 
 def build_manager(tmp_path):

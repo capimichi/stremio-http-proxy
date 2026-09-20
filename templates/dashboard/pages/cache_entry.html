@@ -1,7 +1,7 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "cache_items" %}
-{% block title %}{{ entry.title or 'Dettaglio Cache' }} - Stremio Media Hub{% endblock %}
-{% block page_title %}{{ entry.title or 'Dettaglio Cache Entry' }}{% endblock %}
+{% block title %}{{ media_title or entry.title or 'Dettaglio Cache' }} - Stremio Media Hub{% endblock %}
+{% block page_title %}{{ media_title or entry.title or 'Dettaglio Cache Entry' }}{% endblock %}
 
 {% macro format_bytes(value) %}
 {% if value is not none and value >= 1073741824 %}
@@ -36,6 +36,40 @@ N/A
     <i class="fa-solid fa-arrow-left text-[10px]"></i>
     <span>Torna a tutti gli elementi in cache</span>
   </a>
+
+  {% if media_title or season is not none %}
+  <!-- Media Info Header Card -->
+  <div class="rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950/30 border border-slate-800 p-5 sm:p-6 shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div class="space-y-1">
+      <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+          {{ 'Serie TV' if content_type == 'series' or season is not none else 'Film' }}
+        </span>
+        {% if season is not none and episode is not none %}
+        <span class="px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-200 border border-slate-700 font-mono">
+          S{{ season }}E{{ episode }}
+        </span>
+        {% endif %}
+      </div>
+      <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">
+        {{ media_title or entry.title }}
+      </h2>
+      {% if episode_title %}
+      <p class="text-sm text-slate-300 font-medium">{{ episode_title }}</p>
+      {% endif %}
+      {% if entry.title and media_title and entry.title != media_title %}
+      <p class="text-xs text-slate-500 font-mono break-all pt-1">{{ entry.title }}</p>
+      {% endif %}
+    </div>
+
+    {% if media_id %}
+    <a href="/dashboard/browser/{{ content_type or ('series' if season is not none else 'movie') }}/{{ media_id }}" class="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors shrink-0">
+      <i class="fa-solid fa-compass text-indigo-400"></i>
+      <span>Vedi nella Scheda Titolo</span>
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
     <!-- Main Info (2 cols) -->
