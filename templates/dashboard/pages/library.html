@@ -41,7 +41,6 @@
       <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
         <button
           type="button"
-          onclick="setFilterType('all')"
           id="filter-type-all"
           class="library-filter-tab px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow-sm"
         >
@@ -49,7 +48,6 @@
         </button>
         <button
           type="button"
-          onclick="setFilterType('series')"
           id="filter-type-series"
           class="library-filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all"
         >
@@ -57,7 +55,6 @@
         </button>
         <button
           type="button"
-          onclick="setFilterType('movie')"
           id="filter-type-movie"
           class="library-filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all"
         >
@@ -73,7 +70,6 @@
         <input
           type="text"
           id="library-search-input"
-          oninput="handleSearchInput(event)"
           placeholder="Filtra per titolo o anno..."
           class="w-full rounded-xl bg-slate-950 border border-slate-700/80 pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
         >
@@ -84,7 +80,6 @@
         <input
           type="checkbox"
           id="filter-cached-only"
-          onchange="toggleCachedOnly(event)"
           class="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
         >
         <span>Solo con file in cache</span>
@@ -133,5 +128,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/library.js?v=2"></script>
+<script type="module" src="/static/js/pages/library_page.js?v=1"></script>
 {% endblock %}
