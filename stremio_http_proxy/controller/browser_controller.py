@@ -1,8 +1,10 @@
+from typing import Any
 from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from injector import inject
 
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
+from stremio_http_proxy.repository.media_repository import MediaRepository
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
 from stremio_http_proxy.service.content_browser_service import ContentBrowserService
 from stremio_http_proxy.service.whitelist_service import WhitelistService
@@ -16,7 +18,7 @@ class BrowserController:
         whitelist_service: WhitelistService,
         basic_auth_service: BasicAuthService,
         jinja_manager: JinjaManager,
-        media_repository: Any = None,
+        media_repository: MediaRepository | None = None,
     ):
         self.content_browser_service = content_browser_service
         self.whitelist_service = whitelist_service

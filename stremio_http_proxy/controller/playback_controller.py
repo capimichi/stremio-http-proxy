@@ -16,6 +16,7 @@ from stremio_http_proxy.service.cache_service import CacheService
 from stremio_http_proxy.helper.hash_helper import extract_infohash
 from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
+from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 
 
@@ -32,7 +33,7 @@ class PlaybackController:
         hls_chunk_manager: HlsChunkManager | None = None,
         http_streams_proxy_enabled: bool = True,
         playback_history_repository: PlaybackHistoryRepository | None = None,
-        media_metadata_service: Any = None,
+        media_metadata_service: MediaMetadataService | None = None,
     ):
         self.logger = logger_factory.get_logger("stremio_http_proxy.api", "api.log")
         self.torrserver_client = torrserver_client
