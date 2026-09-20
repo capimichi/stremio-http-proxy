@@ -4,15 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Stremio HTTP Proxy</title>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   <main class="layout">
     <section class="hero panel">
-      <div>
-        <p class="eyebrow">Dashboard</p>
-        <h1>Stremio HTTP Proxy</h1>
-        <p class="subtitle">Manifest e stato della cache con focus sui download in corso.</p>
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <img src="/static/logo.png" alt="Logo" style="width: 44px; height: 44px; object-fit: contain; border-radius: 10px; background: rgba(15, 23, 42, 0.6); padding: 2px; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h1>Stremio HTTP Proxy</h1>
+          <p class="subtitle">Manifest e stato della cache con focus sui download in corso.</p>
+        </div>
       </div>
       <a id="manifest-url" class="manifest-link" href="#">Caricamento manifest...</a>
     </section>
