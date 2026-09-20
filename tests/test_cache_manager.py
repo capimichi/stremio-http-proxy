@@ -64,7 +64,7 @@ def test_count_and_candidate_attempted(tmp_path):
     assert manager.count_ready_for_content(content_id) == 0
 
     entry1 = manager.get_entry(key1).model_copy(
-        update={"status": CacheEntryStatusEnum.QUEUED, "content_id": content_id}
+        update={"status": CacheEntryStatusEnum.QUEUED, "media_item_id": content_id}
     )
     manager._write_entry(key1, entry1)
     assert manager.is_candidate_attempted(key1)
@@ -77,7 +77,7 @@ def test_count_and_candidate_attempted(tmp_path):
     assert manager.count_ready_for_content(content_id) == 1
 
     entry2 = manager.get_entry(key2).model_copy(
-        update={"status": CacheEntryStatusEnum.DOWNLOADING, "content_id": content_id}
+        update={"status": CacheEntryStatusEnum.DOWNLOADING, "media_item_id": content_id}
     )
     manager._write_entry(key2, entry2)
     assert manager.count_active_or_ready_for_content(content_id) == 2
@@ -93,13 +93,13 @@ def test_get_entries_for_content_prefix(tmp_path):
     key3 = "3333333333333333333333333333333333333333:0"
 
     entry1 = manager.get_entry(key1).model_copy(
-        update={"status": CacheEntryStatusEnum.READY, "content_id": "tt12345:1:1"}
+        update={"status": CacheEntryStatusEnum.READY, "media_item_id": "tt12345:1:1"}
     )
     entry2 = manager.get_entry(key2).model_copy(
-        update={"status": CacheEntryStatusEnum.DOWNLOADING, "content_id": "tt12345:1:2"}
+        update={"status": CacheEntryStatusEnum.DOWNLOADING, "media_item_id": "tt12345:1:2"}
     )
     entry3 = manager.get_entry(key3).model_copy(
-        update={"status": CacheEntryStatusEnum.READY, "content_id": "tt12345:2:1"}
+        update={"status": CacheEntryStatusEnum.READY, "media_item_id": "tt12345:2:1"}
     )
     manager._write_entry(key1, entry1)
     manager._write_entry(key2, entry2)
@@ -113,6 +113,18 @@ def test_get_entries_for_content_prefix(tmp_path):
     results_s2 = manager.get_entries_for_content_prefix("tt12345:2:")
     assert len(results_s2) == 1
     assert results_s2[0][0] == key3
+
+
+def test_write_entry_fallback_on_invalid_media_item_id(tmp_path):
+    manager = build_manager(tmp_path)
+    key = "4444444444444444444444444444444444444444:0"
+    entry = manager.get_entry(key).model_copy(
+        update={"status": CacheEntryStatusEnum.QUEUED, "media_item_id": "nonexistent_id"}
+    )
+    # Should not raise even if foreign key fails (in SQLite foreign keys are verified or simulated)
+    manager._write_entry(key, entry)
+    saved = manager.get_entry(key)
+    assert saved.status == CacheEntryStatusEnum.QUEUED
 
 
 

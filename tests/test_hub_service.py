@@ -131,9 +131,11 @@ def test_hub_service_cache_episode(playback_history_repo):
 
 def test_hub_service_library(db_manager, playback_history_repo):
     from stremio_http_proxy.repository.media_repository import MediaRepository
+    from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
     media_repo = MediaRepository(db_manager)
+    media_item_repo = MediaItemRepository(db_manager)
     media_repo.upsert_media("tt0903747", "series", "Breaking Bad", "2008")
-    media_repo.upsert_media_item("tt0903747:1:1", "tt0903747", 1, 1, "Pilot")
+    media_item_repo.upsert_media_item("tt0903747:1:1", "tt0903747", 1, 1, "Pilot")
 
     mock_cache_manager = MagicMock()
     mock_cache_manager.get_entries_for_content.return_value = []
@@ -141,7 +143,7 @@ def test_hub_service_library(db_manager, playback_history_repo):
         playback_history_repository=playback_history_repo,
         cache_manager=mock_cache_manager,
         next_episode_prefetch_service=MagicMock(),
-        media_repository=media_repo,
+        media_repository=media_repo, media_item_repository=media_item_repo,
     )
 
     lib = service.get_library()

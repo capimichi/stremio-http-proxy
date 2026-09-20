@@ -10,6 +10,7 @@ from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.model.cache_entry import CacheEntry
 from stremio_http_proxy.model.download_status import DownloadStatus, DownloadStatusResponse
 from stremio_http_proxy.repository.media_repository import MediaRepository
+from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
 
 
 class DashboardService:
@@ -19,10 +20,12 @@ class DashboardService:
         cache_manager: CacheManager,
         public_base_url: str,
         media_repository: MediaRepository | None = None,
+        media_item_repository: MediaItemRepository | None = None,
     ):
         self.cache_manager = cache_manager
         self.public_base_url = public_base_url.rstrip("/")
         self.media_repository = media_repository
+        self.media_item_repository = media_item_repository
 
     def _resolve_media_info(self, entry: CacheEntry) -> dict[str, Any]:
         content_id = entry.content_id or entry.media_item_id
@@ -68,12 +71,13 @@ class DashboardService:
         if media_id and self.media_repository:
             try:
                 media = self.media_repository.get_media(media_id)
+                print('DEBUG GET_MEDIA', media_id, media)
                 if media:
                     media_title = media.title
                     if not content_type:
                         content_type = media.type
                 if season is not None and episode is not None:
-                    item = self.media_repository.get_media_item_by_season_episode(media_id, season, episode)
+                    item = self.media_item_repository.get_media_item_by_season_episode(media_id, season, episode) if self.media_item_repository else None
                     if item and item.title and item.title != f"Episodio {episode}":
                         episode_title = item.title
             except Exception:

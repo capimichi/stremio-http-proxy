@@ -8,6 +8,8 @@ from stremio_http_proxy.entity.media import Media
 from stremio_http_proxy.entity.media_item import MediaItem
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.repository.media_repository import MediaRepository
+from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
+from stremio_http_proxy.helper.content_id_helper import parse_content_id
 
 
 class MediaMetadataService:
@@ -15,52 +17,16 @@ class MediaMetadataService:
     def __init__(
         self,
         media_repository: MediaRepository,
+        media_item_repository: MediaItemRepository,
         tmdb_client: TMDBClient,
         logger_factory: LoggerFactory,
         task_service: Any = None,
     ):
         self.media_repository = media_repository
+        self.media_item_repository = media_item_repository
         self.tmdb_client = tmdb_client
         self.task_service = task_service
         self.logger = logger_factory.get_logger("stremio_http_proxy.media_metadata", "media_metadata.log")
-
-    def parse_content_id(
-        self, content_id: str | None, content_type: str | None = None
-    ) -> tuple[str, str, int | None, int | None, str]:
-        """
-        Parses content_id into:
-        (media_id, item_id, season, episode, media_type)
-        """
-        if not content_id:
-            return "", "", None, None, content_type or "movie"
-
-        if ":" in content_id:
-            parts = content_id.split(":")
-            media_id = parts[0]
-            season = None
-            episode = None
-            if len(parts) >= 3:
-                try:
-                    season = int(parts[1])
-                    episode = int(parts[2])
-                except (ValueError, TypeError):
-                    pass
-            elif len(parts) == 2:
-                try:
-                    episode = int(parts[1])
-                except (ValueError, TypeError):
-                    pass
-
-            if season is not None and episode is not None:
-                item_id = f"{media_id}:{season}:{episode}"
-            else:
-                item_id = content_id
-            determined_type = content_type or "series"
-            return media_id, item_id, season, episode, determined_type
-
-        # Single ID (e.g. movie tt0088763)
-        determined_type = content_type or "movie"
-        return content_id, content_id, None, None, determined_type
 
     def clean_raw_title(self, raw_title: str | None) -> str:
         """
@@ -82,7 +48,7 @@ class MediaMetadataService:
         fallback_poster: str | None = None,
         schedule_enrichment: bool = True,
     ) -> tuple[Media, MediaItem]:
-        media_id, item_id, season, episode, media_type = self.parse_content_id(content_id, content_type)
+        media_id, item_id, season, episode, media_type = parse_content_id(content_id, content_type)
 
         # Check existing media
         existing_media = self.media_repository.get_media(media_id)
@@ -100,7 +66,7 @@ class MediaMetadataService:
             should_enrich = not existing_media.poster or existing_media.title == "Senza titolo"
 
         # Ensure MediaItem exists
-        item = self.media_repository.upsert_media_item(
+        item = self.media_item_repository.upsert_media_item(
             item_id=item_id,
             media_id=media_id,
             season=season,
@@ -162,7 +128,7 @@ class MediaMetadataService:
                 ep_title = vid.get("title")
                 if s is not None and ep is not None and ep_title:
                     item_id = f"{media_id}:{s}:{ep}"
-                    self.media_repository.upsert_media_item(
+                    self.media_item_repository.upsert_media_item(
                         item_id=item_id,
                         media_id=media_id,
                         season=s,

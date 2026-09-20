@@ -43,7 +43,7 @@ async def test_e2e_toastflix_mediaflow_flow(tmp_path, monkeypatch):
     cache_dir = tmp_path / "cache"
     log_dir = tmp_path / "logs"
 
-    db_manager = DbManager(f"sqlite:///{db_file}")
+    db_manager = DbManager(db_url=f"sqlite:///{db_file}")
     logger_factory = LoggerFactory(str(log_dir))
 
     cache_manager = CacheManager(

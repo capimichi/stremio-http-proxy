@@ -59,65 +59,6 @@ class MediaRepository:
             session.refresh(media)
             return media
 
-    def get_media_item(self, item_id: str) -> MediaItem | None:
-        with self.db_manager.session() as session:
-            return session.get(MediaItem, item_id)
-
-    def get_media_item_by_season_episode(
-        self, media_id: str, season: int | None, episode: int | None
-    ) -> MediaItem | None:
-        with self.db_manager.session() as session:
-            query = select(MediaItem).where(
-                MediaItem.media_id == media_id,
-                MediaItem.season == season,
-                MediaItem.episode == episode,
-            )
-            return session.scalars(query).first()
-
-    def upsert_media_item(
-        self,
-        item_id: str,
-        media_id: str,
-        season: int | None = None,
-        episode: int | None = None,
-        title: str | None = None,
-    ) -> MediaItem:
-        now = time.time()
-        with self.db_manager.session() as session:
-            item = session.get(MediaItem, item_id)
-            if item is None:
-                # Also check by (media_id, season, episode) to prevent duplicate key constraint
-                if season is not None and episode is not None:
-                    existing = session.scalars(
-                        select(MediaItem).where(
-                            MediaItem.media_id == media_id,
-                            MediaItem.season == season,
-                            MediaItem.episode == episode,
-                        )
-                    ).first()
-                    if existing is not None:
-                        item = existing
-
-            if item is None:
-                item = MediaItem(
-                    id=item_id,
-                    media_id=media_id,
-                    season=season,
-                    episode=episode,
-                    title=title,
-                    created_at=now,
-                    last_accessed_at=now,
-                )
-                session.add(item)
-            else:
-                if title:
-                    item.title = title
-                item.last_accessed_at = now
-
-            session.flush()
-            session.refresh(item)
-            return item
-
     def list_media(
         self,
         media_type: str | None = None,
@@ -137,15 +78,6 @@ class MediaRepository:
             if media_type:
                 query = query.where(Media.type == media_type)
             return session.scalar(query) or 0
-
-    def get_items_for_media(self, media_id: str) -> list[MediaItem]:
-        with self.db_manager.session() as session:
-            query = (
-                select(MediaItem)
-                .where(MediaItem.media_id == media_id)
-                .order_by(MediaItem.season, MediaItem.episode)
-            )
-            return list(session.scalars(query))
 
     def delete_media(self, media_id: str) -> bool:
         with self.db_manager.session() as session:

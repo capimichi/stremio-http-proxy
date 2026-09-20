@@ -63,7 +63,7 @@ def test_cache_service_returns_cached_route_by_content_id_fallback(tmp_path):
     media_path.write_bytes(b"demo video")
     manager.finalize_download(cache_key)
     ready_entry = manager.mark_ready(cache_key, 10)
-    manager._write_entry(cache_key, ready_entry.model_copy(update={"content_id": "tt3749900:1:2"}))
+    manager._write_entry(cache_key, ready_entry.model_copy(update={"media_item_id": "tt3749900:1:2"}))
 
     service = CacheService(manager, "https://proxy.example.com", CacheTokenService("secret", 259200))
 

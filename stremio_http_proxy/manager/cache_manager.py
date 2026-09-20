@@ -275,7 +275,7 @@ class CacheManager:
                 "trigger": job.trigger,
                 "content_type": job.content_type,
                 "content_id": job.content_id,
-                "media_item_id": job.content_id,
+                "media_item_id": job.media_item_id,
                 "available_at": job.available_at,
                 "claimed_at": None,
                 "claimed_by": None,
@@ -407,12 +407,30 @@ class CacheManager:
 
     def _write_entry(self, cache_key: str, entry: CacheEntryModel) -> None:
         infohash, index = self.parse_cache_key(cache_key)
-        with self.db_manager.session() as session:
-            record = session.get(CacheEntryRecord, cache_key)
-            if record is None:
-                record = CacheEntryRecord(cache_key=cache_key, infohash=infohash, cache_index=index)
-                session.add(record)
-            self._update_record(record, entry)
+        try:
+            with self.db_manager.session() as session:
+                record = session.get(CacheEntryRecord, cache_key)
+                if record is None:
+                    record = CacheEntryRecord(cache_key=cache_key, infohash=infohash, cache_index=index)
+                    session.add(record)
+                self._update_record(record, entry)
+        except Exception as e:
+            if entry.media_item_id is not None:
+                self.logger.warning(
+                    "Failed to save cache entry %s with media_item_id %s, retrying without media_item_id: %s",
+                    cache_key,
+                    entry.media_item_id,
+                    e,
+                )
+                with self.db_manager.session() as session:
+                    record = session.get(CacheEntryRecord, cache_key)
+                    if record is None:
+                        record = CacheEntryRecord(cache_key=cache_key, infohash=infohash, cache_index=index)
+                        session.add(record)
+                    entry_without_item = entry.model_copy(update={"media_item_id": None})
+                    self._update_record(record, entry_without_item)
+            else:
+                raise
 
     def _media_path(self, infohash: str, index: int) -> Path:
         return self.base_dir / infohash / f"{index}.media"
@@ -555,7 +573,7 @@ class CacheManager:
         record.max_attempts = entry.max_attempts
         record.trigger = entry.trigger
         record.content_type = entry.content_type
-        record.media_item_id = entry.media_item_id or entry.content_id
+        record.media_item_id = entry.media_item_id
         record.available_at = entry.available_at
         record.claimed_at = entry.claimed_at
         record.claimed_by = entry.claimed_by

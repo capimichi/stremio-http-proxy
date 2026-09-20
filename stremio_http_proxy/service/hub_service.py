@@ -5,6 +5,7 @@ from injector import inject
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.repository.media_repository import MediaRepository
+from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
 from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
 from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
@@ -20,6 +21,7 @@ class HubService:
         next_episode_prefetch_service: NextEpisodePrefetchService,
         task_service: TaskService | None = None,
         media_repository: MediaRepository | None = None,
+        media_item_repository: MediaItemRepository | None = None,
         media_metadata_service: MediaMetadataService | None = None,
     ):
         self.playback_history_repository = playback_history_repository
@@ -27,6 +29,7 @@ class HubService:
         self.prefetch_service = next_episode_prefetch_service
         self.task_service = task_service
         self.media_repository = media_repository
+        self.media_item_repository = media_item_repository
         self.media_metadata_service = media_metadata_service
 
     def get_recent_media(self, limit: int = 10) -> list[dict[str, Any]]:
@@ -113,9 +116,9 @@ class HubService:
             media_item = None
             if self.media_repository:
                 if getattr(record, "media_item_id", None):
-                    media_item = self.media_repository.get_media_item(record.media_item_id)
+                    if self.media_item_repository: media_item = self.media_item_repository.get_media_item(record.media_item_id)
                 if not media_item and record.content_id:
-                    media_item = self.media_repository.get_media_item(record.content_id)
+                    if self.media_item_repository: media_item = self.media_item_repository.get_by_content_id(record.content_id)
                 if media_item:
                     media = self.media_repository.get_media(media_item.media_id)
                 elif imdb_id:
@@ -305,7 +308,7 @@ class HubService:
         items = []
 
         for m in all_media:
-            media_items = self.media_repository.get_items_for_media(m.id)
+            media_items = self.media_item_repository.get_items_for_media(m.id) if self.media_item_repository else []
             cached_episodes = 0
             ready_streams = 0
             downloading_streams = 0

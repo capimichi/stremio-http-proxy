@@ -154,11 +154,13 @@ def test_dashboard_service_filters_by_active_status(tmp_path):
 
 def test_dashboard_service_resolves_media_and_episode_info(tmp_path):
     from stremio_http_proxy.repository.media_repository import MediaRepository
+    from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
 
     db_manager = DbManager(str(tmp_path / "cache.sqlite"))
     media_repo = MediaRepository(db_manager)
+    media_item_repo = MediaItemRepository(db_manager)
     media_repo.upsert_media("tt0903747", "series", "Breaking Bad", "2008")
-    media_repo.upsert_media_item("tt0903747:1:2", "tt0903747", 1, 2, "Cat's in the Bag...")
+    media_item_repo.upsert_media_item("tt0903747:1:2", "tt0903747", 1, 2, "Cat's in the Bag...")
 
     cache_manager = CacheManager(
         str(tmp_path / "cache"),
@@ -173,7 +175,7 @@ def test_dashboard_service_resolves_media_and_episode_info(tmp_path):
         update={
             "status": CacheEntryStatusEnum.DOWNLOADING,
             "title": "Breaking.Bad.S01E02.720p.HDTV",
-            "content_id": "tt0903747:1:2",
+            "media_item_id": "tt0903747:1:2",
             "content_type": "series",
         }
     )
@@ -189,7 +191,7 @@ def test_dashboard_service_resolves_media_and_episode_info(tmp_path):
     )
     cache_manager._write_entry(key2, entry2)
 
-    service = DashboardService(cache_manager, "https://proxy.example.com", media_repository=media_repo)
+    service = DashboardService(cache_manager, "https://proxy.example.com", media_repository=media_repo, media_item_repository=media_item_repo)
     status_resp = service.get_download_status()
 
     item1 = next(d for d in status_resp.downloads if d.cache_key == key1)
