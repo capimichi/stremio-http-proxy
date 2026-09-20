@@ -27,6 +27,7 @@ class DashboardController:
         self.router.add_api_route("/dashboard/index", self.dashboard_index, methods=["GET"], include_in_schema=False, dependencies=dependencies)
         self.router.add_api_route("/dashboard/library", self.library_page, methods=["GET"], include_in_schema=False, dependencies=dependencies)
         self.router.add_api_route("/dashboard/cache-items", self.cache_items, methods=["GET"], include_in_schema=False, dependencies=dependencies)
+        self.router.add_api_route("/dashboard/tasks", self.tasks_page, methods=["GET"], include_in_schema=False, dependencies=dependencies)
         self.router.add_api_route("/dashboard/cache-entry/{infohash}/{index}", self.cache_entry, methods=["GET"], include_in_schema=False, dependencies=dependencies)
 
     async def redirect_to_dashboard(self) -> RedirectResponse:
@@ -44,8 +45,13 @@ class DashboardController:
         context = self.dashboard_service.get_cache_items_context()
         return HTMLResponse(self.jinja_manager.render("dashboard/pages/cache_items.html", **context))
 
+    async def tasks_page(self) -> HTMLResponse:
+        context = self.dashboard_service.get_tasks_context()
+        return HTMLResponse(self.jinja_manager.render("dashboard/pages/tasks.html", **context))
+
     async def cache_entry(self, infohash: str, index: int) -> Response:
         context, status = self.dashboard_service.get_cache_entry_context(infohash, index)
         if context is None:
             return HTMLResponse("<h1>404 - Not Found</h1>", status_code=404)
         return HTMLResponse(self.jinja_manager.render("dashboard/pages/cache_entry.html", **context))
+

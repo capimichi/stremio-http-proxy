@@ -32,6 +32,10 @@ class FakeDashboardService:
         self.calls.append("get_cache_items_context")
         return self.context_to_return
 
+    def get_tasks_context(self) -> dict:
+        self.calls.append("get_tasks_context")
+        return self.context_to_return
+
     def get_cache_entry_context(self, infohash: str, index: int) -> tuple[dict | None, int]:
         self.calls.append(("get_cache_entry_context", infohash, index))
         return self.context_entry_to_return
@@ -211,3 +215,15 @@ def test_dashboard_library_route():
     response = client.get("/dashboard/library")
     assert response.status_code == 200
     assert jinja.last_template == "dashboard/pages/library.html"
+
+
+def test_dashboard_tasks_route():
+    app = FastAPI()
+    jinja = FakeJinjaManager()
+    app.include_router(DashboardController(FakeDashboardService(), BasicAuthService(), jinja).router)
+    client = TestClient(app)
+
+    response = client.get("/dashboard/tasks")
+    assert response.status_code == 200
+    assert jinja.last_template == "dashboard/pages/tasks.html"
+

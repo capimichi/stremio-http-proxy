@@ -1,0 +1,131 @@
+{% extends "dashboard/components/base.html" %}
+{% set active_page = "tasks" %}
+{% block title %}Task & Job Asincroni - Stremio Media Hub{% endblock %}
+{% block page_title %}Job & Task in Background{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto">
+
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-4 shadow-lg flex items-center gap-3.5">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-lg shrink-0">
+        <i class="fa-solid fa-list-check"></i>
+      </div>
+      <div>
+        <span class="text-[11px] font-medium text-slate-400 block">Task Totali</span>
+        <span id="task-metric-total" class="text-lg font-bold text-white font-mono">-</span>
+      </div>
+    </div>
+
+    <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-4 shadow-lg flex items-center gap-3.5">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 text-lg shrink-0">
+        <i class="fa-solid fa-clock"></i>
+      </div>
+      <div>
+        <span class="text-[11px] font-medium text-slate-400 block">In Attesa / Pianificati</span>
+        <span id="task-metric-pending" class="text-lg font-bold text-amber-400 font-mono">-</span>
+      </div>
+    </div>
+
+    <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-4 shadow-lg flex items-center gap-3.5">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/20 text-lg shrink-0">
+        <i class="fa-solid fa-arrows-rotate animate-spin"></i>
+      </div>
+      <div>
+        <span class="text-[11px] font-medium text-slate-400 block">In Esecuzione</span>
+        <span id="task-metric-processing" class="text-lg font-bold text-sky-400 font-mono">-</span>
+      </div>
+    </div>
+
+    <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-4 shadow-lg flex items-center gap-3.5">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-lg shrink-0">
+        <i class="fa-solid fa-circle-check"></i>
+      </div>
+      <div>
+        <span class="text-[11px] font-medium text-slate-400 block">Completati con Successo</span>
+        <span id="task-metric-completed" class="text-lg font-bold text-emerald-400 font-mono">-</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tasks Table Panel -->
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden">
+    <!-- Header with Search & Filters -->
+    <div class="p-5 sm:p-6 border-b border-slate-800 space-y-4">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <!-- Search bar -->
+        <div class="relative flex-1 w-full max-w-md">
+          <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+          </span>
+          <input
+            type="text"
+            id="task-search-input"
+            placeholder="Cerca task per nome, titolo o ID..."
+            class="w-full rounded-xl bg-slate-950 border border-slate-700/80 pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+          >
+        </div>
+
+        <!-- Live Refresh Indicator -->
+        <div class="flex items-center gap-3 self-end sm:self-center">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 font-medium">
+            <span class="relative flex h-2 w-2">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+            </span>
+            <span>Polling live (2.5s)</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Status Filter Tabs -->
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-800/80 overflow-x-auto text-xs">
+        <button class="task-status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-indigo-600 text-white" data-status="">
+          Tutti i Task
+        </button>
+        <button class="task-status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-slate-800 text-slate-400 hover:text-white" data-status="pending">
+          In Attesa / Pianificati
+        </button>
+        <button class="task-status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-slate-800 text-slate-400 hover:text-white" data-status="processing">
+          In Esecuzione
+        </button>
+        <button class="task-status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-slate-800 text-slate-400 hover:text-white" data-status="completed">
+          Completati
+        </button>
+        <button class="task-status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-slate-800 text-slate-400 hover:text-white" data-status="failed">
+          Falliti / Errori
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="px-5 py-3">ID / Operazione</th>
+            <th class="px-5 py-3">Target Media / Argomenti</th>
+            <th class="px-5 py-3">Stato</th>
+            <th class="px-5 py-3">Pianificazione / Esecuzione</th>
+            <th class="px-5 py-3">Worker / Lease</th>
+            <th class="px-5 py-3 text-right">Tentativi & Dettagli</th>
+          </tr>
+        </thead>
+        <tbody id="tasks-full-table-body" class="divide-y divide-slate-800/60 bg-slate-900/40">
+          <tr>
+            <td colspan="6" class="px-5 py-8 text-center text-slate-500">
+              Caricamento elenco job e task in corso...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/pages/tasks_page.js?v=1"></script>
+{% endblock %}

@@ -94,6 +94,10 @@ class DashboardService:
     def get_cache_items_context(self) -> dict[str, object]:
         return {}
 
+    def get_tasks_context(self) -> dict[str, object]:
+        return {}
+
+
     def get_cache_entry_context(self, infohash: str, index: int) -> tuple[dict | None, int]:
         cache_key = self.cache_manager.build_cache_key_from_parts(infohash, index)
         entry = self.cache_manager.get_entry(cache_key)
