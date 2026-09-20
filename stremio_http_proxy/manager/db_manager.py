@@ -6,6 +6,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from stremio_http_proxy.entity.cache_entry import Base
+from stremio_http_proxy.entity.media import Media
+from stremio_http_proxy.entity.media_item import MediaItem
 from stremio_http_proxy.entity.playback_history import PlaybackHistory
 from stremio_http_proxy.entity.prefetch_entry import PrefetchEntry
 from stremio_http_proxy.entity.task_entry import TaskEntry
@@ -42,6 +44,7 @@ class DbManager:
             connection.execute(text("PRAGMA busy_timeout=5000"))
         Base.metadata.create_all(self.engine)
         self._ensure_cache_entry_columns()
+        self._ensure_playback_history_columns()
         self._ensure_whitelist_entry_columns()
         self._ensure_prefetch_job_columns()
         self._ensure_task_entry_columns()
@@ -61,6 +64,7 @@ class DbManager:
             "claimed_at": "FLOAT",
             "claimed_by": "VARCHAR(128)",
             "processing_expires_at": "FLOAT",
+            "media_item_id": "VARCHAR(128)",
         }
         with self.engine.begin() as connection:
             existing = {
@@ -71,6 +75,20 @@ class DbManager:
                 if column_name in existing:
                     continue
                 connection.execute(text(f"ALTER TABLE cache_entries ADD COLUMN {column_name} {column_sql}"))
+
+    def _ensure_playback_history_columns(self) -> None:
+        columns = {
+            "media_item_id": "VARCHAR(128)",
+        }
+        with self.engine.begin() as connection:
+            existing = {
+                row[1]
+                for row in connection.execute(text("PRAGMA table_info(playback_history)"))
+            }
+            for column_name, column_sql in columns.items():
+                if column_name in existing:
+                    continue
+                connection.execute(text(f"ALTER TABLE playback_history ADD COLUMN {column_name} {column_sql}"))
 
     def _ensure_whitelist_entry_columns(self) -> None:
         columns = {

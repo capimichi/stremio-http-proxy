@@ -200,3 +200,14 @@ def test_cache_route_rejects_invalid_token():
     response = client.get("/cache/abc/1?expires=1700000000&token=wrong")
 
     assert response.status_code == 403
+
+
+def test_dashboard_library_route():
+    app = FastAPI()
+    jinja = FakeJinjaManager()
+    app.include_router(DashboardController(FakeDashboardService(), BasicAuthService(), jinja).router)
+    client = TestClient(app)
+
+    response = client.get("/dashboard/library")
+    assert response.status_code == 200
+    assert jinja.last_template == "dashboard/pages/library.html"

@@ -17,12 +17,17 @@ from stremio_http_proxy.manager.jinja_manager import JinjaManager
 
 import stremio_http_proxy.entity.playback_history  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.whitelist_entry  # noqa: F401 — ensure table creation
+import stremio_http_proxy.entity.media  # noqa: F401 — ensure table creation
+import stremio_http_proxy.entity.media_item  # noqa: F401 — ensure table creation
 from stremio_http_proxy.controller.hub_controller import HubController
+from stremio_http_proxy.repository.media_repository import MediaRepository
 from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
 from stremio_http_proxy.repository.whitelist_repository import WhitelistRepository
 from stremio_http_proxy.service.hub_service import HubService
+from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
 from stremio_http_proxy.service.whitelist_service import WhitelistService
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
+from stremio_http_proxy.task.enrich_media_metadata_task import EnrichMediaMetadataTask
 
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
@@ -194,15 +199,25 @@ class DefaultContainer:
             skip_zero_seeders=self.prefetch_skip_zero_seeders,
             delay_seconds=self.prefetch_delay_seconds,
         )
+        media_repository = MediaRepository(db_manager)
+        media_metadata_service = MediaMetadataService(
+            media_repository=media_repository,
+            tmdb_client=tmdb_client,
+            logger_factory=logger_factory,
+        )
+
         task_registry = TaskRegistry()
         fetch_next_episode_task = FetchNextEpisodeTask(next_episode_prefetch_service)
         fetch_media_task = FetchMediaTask(next_episode_prefetch_service)
         optimize_media_task = OptimizeMediaTask(cache_manager, logger_factory)
+        enrich_media_metadata_task = EnrichMediaMetadataTask(media_metadata_service)
         task_registry.register(fetch_next_episode_task)
         task_registry.register(fetch_media_task)
         task_registry.register(optimize_media_task)
+        task_registry.register(enrich_media_metadata_task)
         task_service = TaskService(db_manager, task_registry, logger_factory)
         next_episode_prefetch_service.task_service = task_service
+        media_metadata_service.task_service = task_service
 
         jinja_manager = JinjaManager(self.template_dir)
         dashboard_service = DashboardService(cache_manager, self.public_base_url)
@@ -233,12 +248,15 @@ class DefaultContainer:
             hls_chunk_manager=hls_chunk_manager,
             http_streams_proxy_enabled=self.http_streams_proxy_enabled,
             playback_history_repository=playback_history_repository,
+            media_metadata_service=media_metadata_service,
         )
         hub_service = HubService(
             playback_history_repository=playback_history_repository,
             cache_manager=cache_manager,
             next_episode_prefetch_service=next_episode_prefetch_service,
             task_service=task_service,
+            media_repository=media_repository,
+            media_metadata_service=media_metadata_service,
         )
         hub_controller = HubController(hub_service, basic_auth_service)
         serve_command = ServeCommand(self.api_host, self.api_port)
@@ -260,6 +278,8 @@ class DefaultContainer:
         self.injector.binder.bind(TaskService, to=task_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
         self.injector.binder.bind(PlaybackHistoryRepository, to=playback_history_repository)
+        self.injector.binder.bind(MediaRepository, to=media_repository)
+        self.injector.binder.bind(MediaMetadataService, to=media_metadata_service)
         self.injector.binder.bind(PlaybackController, to=playback_controller)
         self.injector.binder.bind(HubService, to=hub_service)
         self.injector.binder.bind(HubController, to=hub_controller)

@@ -44,3 +44,4 @@ class CacheEntry(Base):
     claimed_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     processing_expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_item_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

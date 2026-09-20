@@ -81,8 +81,10 @@ class TMDBClient:
 
             meta = {
                 "name": detail.get("title") or detail.get("name"),
+                "year": (detail.get("release_date") or detail.get("first_air_date") or "")[:4],
                 "poster": f"https://image.tmdb.org/t/p/w500{detail['poster_path']}" if detail.get("poster_path") else None,
                 "background": f"https://image.tmdb.org/t/p/w1280{detail['backdrop_path']}" if detail.get("backdrop_path") else None,
+                "overview": detail.get("overview"),
                 "videos": [],
             }
 

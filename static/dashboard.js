@@ -192,10 +192,15 @@ function renderHeroNowPlaying(item) {
   if (emptyEl) emptyEl.classList.add("hidden");
   if (contentEl) contentEl.classList.remove("hidden");
 
+  const placeholderSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 220'%3E%3Crect fill='%231e293b' width='150' height='220'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='12'%3ENo Poster%3C/text%3E%3C/svg%3E";
+
   // Poster
   const posterImg = document.getElementById("hero-poster");
   if (posterImg) {
-    posterImg.src = item.poster || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='220'><rect fill='%231e293b' width='150' height='220'/></svg>";
+    posterImg.onerror = function() {
+      this.src = placeholderSvg;
+    };
+    posterImg.src = item.poster || placeholderSvg;
   }
 
   // Media Badge (Serie / Film)
@@ -213,7 +218,7 @@ function renderHeroNowPlaying(item) {
   // Title & Subtitle
   const titleEl = document.getElementById("hero-title");
   if (titleEl) {
-    titleEl.textContent = item.title;
+    titleEl.textContent = item.clean_title || item.show_title || item.title;
   }
 
   const subtitleEl = document.getElementById("hero-subtitle");
@@ -221,7 +226,7 @@ function renderHeroNowPlaying(item) {
     if (item.season !== null && item.episode !== null) {
       subtitleEl.textContent = `Stagione ${item.season} • Episodio ${item.episode}`;
     } else {
-      subtitleEl.textContent = item.content_type === "movie" ? "Film" : "Serie TV";
+      subtitleEl.textContent = item.subtitle || (item.content_type === "movie" ? "Film" : "Serie TV");
     }
   }
 
@@ -302,10 +307,13 @@ function renderRecentMediaGrid(items) {
     return;
   }
 
+  const placeholderSvg = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 220'%3E%3Crect fill='%231e293b' width='150' height='220'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='12'%3ENo Poster%3C/text%3E%3C/svg%3E";
+
   container.innerHTML = items.map((item) => {
     const isSeries = item.content_type === "series" || item.season !== null;
-    const epBadge = isSeries && item.season !== null && item.episode !== null ? `S${item.season}:E${item.episode}` : (isSeries ? "Serie" : "Film");
-    const poster = item.poster || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='220'><rect fill='%231e293b' width='150' height='220'/></svg>";
+    const epBadge = isSeries && item.season !== null && item.episode !== null ? `S${item.season} E${item.episode}` : (isSeries ? "Serie" : "Film");
+    const poster = item.poster || placeholderSvg;
+    const displayTitle = item.clean_title || item.title;
     
     // Status dot color
     let statusDot = `<span class="h-2 w-2 rounded-full bg-slate-500"></span>`;
@@ -321,7 +329,7 @@ function renderRecentMediaGrid(items) {
       <a href="/dashboard/browser/${item.content_type}/${item.imdb_id}" class="group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-2 transition-all hover:scale-[1.02] flex flex-col justify-between shadow-md">
         <!-- Poster container -->
         <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-800">
-          <img src="${poster}" alt="${item.title}" class="w-full h-full object-cover group-hover:opacity-90 transition-opacity" loading="lazy">
+          <img src="${poster}" alt="${displayTitle}" class="w-full h-full object-cover group-hover:opacity-90 transition-opacity" loading="lazy" onerror="this.src='${placeholderSvg}'">
           
           <!-- Top Badges -->
           <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[10px] font-bold text-slate-200">
@@ -336,12 +344,13 @@ function renderRecentMediaGrid(items) {
 
         <!-- Info -->
         <div class="mt-2 px-1">
-          <p class="text-xs font-semibold text-white truncate group-hover:text-indigo-400 transition-colors" title="${item.title}">
-            ${item.title}
+          <p class="text-xs font-semibold text-white truncate group-hover:text-indigo-400 transition-colors" title="${displayTitle}">
+            ${displayTitle}
           </p>
-          <p class="text-[10px] text-slate-500 mt-0.5">
-            ${timeAgo(item.played_at)}
-          </p>
+          <div class="flex items-center justify-between text-[10px] text-slate-400 mt-0.5">
+            <span>${item.subtitle || (item.episode_label || (isSeries ? "Serie" : "Film"))}</span>
+            <span class="text-slate-500">${timeAgo(item.played_at)}</span>
+          </div>
         </div>
       </a>`;
   }).join("");

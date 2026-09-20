@@ -21,3 +21,4 @@ class PlaybackHistory(Base):
     infohash: Mapped[str | None] = mapped_column(String(40), nullable=True)
     file_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     played_at: Mapped[float] = mapped_column(Float, nullable=False)
+    media_item_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

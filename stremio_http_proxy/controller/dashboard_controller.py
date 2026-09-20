@@ -25,6 +25,7 @@ class DashboardController:
         dependencies = [Depends(require_auth)]
         self.router.add_api_route("/", self.redirect_to_dashboard, methods=["GET"], include_in_schema=False, dependencies=dependencies)
         self.router.add_api_route("/dashboard/index", self.dashboard_index, methods=["GET"], include_in_schema=False, dependencies=dependencies)
+        self.router.add_api_route("/dashboard/library", self.library_page, methods=["GET"], include_in_schema=False, dependencies=dependencies)
         self.router.add_api_route("/dashboard/cache-items", self.cache_items, methods=["GET"], include_in_schema=False, dependencies=dependencies)
         self.router.add_api_route("/dashboard/cache-entry/{infohash}/{index}", self.cache_entry, methods=["GET"], include_in_schema=False, dependencies=dependencies)
 
@@ -34,6 +35,10 @@ class DashboardController:
     async def dashboard_index(self) -> HTMLResponse:
         context = self.dashboard_service.get_index_context()
         return HTMLResponse(self.jinja_manager.render("dashboard/pages/index.html", **context))
+
+    async def library_page(self) -> HTMLResponse:
+        context = self.dashboard_service.get_index_context()
+        return HTMLResponse(self.jinja_manager.render("dashboard/pages/library.html", **context))
 
     async def cache_items(self) -> HTMLResponse:
         context = self.dashboard_service.get_cache_items_context()

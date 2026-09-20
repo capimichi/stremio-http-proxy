@@ -16,11 +16,13 @@ class BrowserController:
         whitelist_service: WhitelistService,
         basic_auth_service: BasicAuthService,
         jinja_manager: JinjaManager,
+        media_repository: Any = None,
     ):
         self.content_browser_service = content_browser_service
         self.whitelist_service = whitelist_service
         self.basic_auth_service = basic_auth_service
         self.jinja_manager = jinja_manager
+        self.media_repository = media_repository
         self.router = APIRouter(tags=["Browser"])
         self._register_routes()
 
@@ -55,4 +57,19 @@ class BrowserController:
         data = await self.content_browser_service.browse_content(type, id, season, episode)
         whitelist = self.whitelist_service.get_whitelist_for_content(id)
         data["whitelist"] = whitelist
+        if self.media_repository:
+            try:
+                meta = data.get("meta", {})
+                if meta and meta.get("name"):
+                    self.media_repository.upsert_media(
+                        media_id=id,
+                        media_type=type,
+                        title=meta.get("name"),
+                        year=meta.get("year"),
+                        poster=meta.get("poster"),
+                        backdrop=meta.get("background"),
+                        overview=meta.get("overview"),
+                    )
+            except Exception:
+                pass
         return data

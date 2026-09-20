@@ -1,0 +1,137 @@
+{% extends "dashboard/components/base.html" %}
+{% set active_page = "library" %}
+{% block title %}Libreria Personale - Stremio Media Hub{% endblock %}
+{% block page_title %}Libreria Personale{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto">
+
+  <!-- Header Banner -->
+  <div class="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            <i class="fa-solid fa-film text-[10px]"></i> Catalogo Interno
+          </span>
+          <span id="library-total-badge" class="px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-slate-800 text-slate-300 border border-slate-700">
+            0 titoli
+          </span>
+        </div>
+        <h2 class="text-xl sm:text-2xl font-bold text-white tracking-tight">I Tuoi Titoli</h2>
+        <p class="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+          Tutti i film e le serie TV che hai riprodotto o aperto in ricerca. Gestisci i contenuti permanenti e verifica la disponibilità dei flussi in cache locale.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2 self-stretch sm:self-auto">
+        <a href="/dashboard/browser" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02]">
+          <i class="fa-solid fa-plus text-[10px]"></i>
+          <span>Cerca Nuovi Titoli</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters & Search Toolbar -->
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-4 shadow-xl">
+    <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      
+      <!-- Type Filter Tabs -->
+      <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+        <button
+          type="button"
+          onclick="setFilterType('all')"
+          id="filter-type-all"
+          class="library-filter-tab px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all bg-indigo-600 text-white shadow-sm"
+        >
+          Tutti
+        </button>
+        <button
+          type="button"
+          onclick="setFilterType('series')"
+          id="filter-type-series"
+          class="library-filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all"
+        >
+          Serie TV
+        </button>
+        <button
+          type="button"
+          onclick="setFilterType('movie')"
+          id="filter-type-movie"
+          class="library-filter-tab px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all"
+        >
+          Film
+        </button>
+      </div>
+
+      <!-- Search in library -->
+      <div class="flex-1 max-w-md relative">
+        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+          <i class="fa-solid fa-magnifying-glass text-xs"></i>
+        </span>
+        <input
+          type="text"
+          id="library-search-input"
+          oninput="handleSearchInput(event)"
+          placeholder="Filtra per titolo o anno..."
+          class="w-full rounded-xl bg-slate-950 border border-slate-700/80 pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+        >
+      </div>
+
+      <!-- Toggle "Solo con cache" -->
+      <label class="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-300 select-none bg-slate-950 px-3.5 py-2 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors shrink-0">
+        <input
+          type="checkbox"
+          id="filter-cached-only"
+          onchange="toggleCachedOnly(event)"
+          class="rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+        >
+        <span>Solo con file in cache</span>
+      </label>
+
+    </div>
+  </div>
+
+  <!-- Library Grid Section -->
+  <div class="relative min-h-[300px]">
+    
+    <!-- Loading skeleton -->
+    <div id="library-loading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      {% for i in range(12) %}
+      <div class="animate-pulse rounded-xl bg-slate-900 border border-slate-800 p-2 space-y-2">
+        <div class="aspect-[2/3] bg-slate-800 rounded-lg"></div>
+        <div class="h-3 bg-slate-800 rounded w-3/4"></div>
+        <div class="h-2.5 bg-slate-800 rounded w-1/2"></div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Real Grid -->
+    <div id="library-grid" class="hidden grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"></div>
+
+    <!-- Empty State -->
+    <div id="library-empty" class="hidden rounded-2xl bg-slate-900/50 border border-slate-800/80 p-12 text-center">
+      <div class="flex flex-col items-center justify-center max-w-md mx-auto">
+        <div class="h-16 w-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl mb-4 shadow-lg shadow-indigo-500/5">
+          <i class="fa-solid fa-film"></i>
+        </div>
+        <h3 class="text-base font-bold text-white mb-1" id="empty-title">Nessun titolo trovato</h3>
+        <p class="text-xs text-slate-400 mb-6 leading-relaxed" id="empty-subtext">
+          I titoli vengono aggiunti automaticamente qui quando riproduci uno stream su Stremio o quando consulti una serie/film nella sezione di ricerca.
+        </p>
+        <a href="/dashboard/browser" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02]">
+          <i class="fa-solid fa-magnifying-glass text-[10px]"></i>
+          <span>Esplora catalogo per aggiungere titoli</span>
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/library.js"></script>
+{% endblock %}

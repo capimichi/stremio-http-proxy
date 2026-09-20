@@ -127,3 +127,30 @@ def test_hub_service_cache_episode(playback_history_repo):
     assert res["success"] is True
     assert res["content_id"] == "tt999:2:4"
     mock_task_service.enqueue_task.assert_called_once()
+
+
+def test_hub_service_library(db_manager, playback_history_repo):
+    from stremio_http_proxy.repository.media_repository import MediaRepository
+    media_repo = MediaRepository(db_manager)
+    media_repo.upsert_media("tt0903747", "series", "Breaking Bad", "2008")
+    media_repo.upsert_media_item("tt0903747:1:1", "tt0903747", 1, 1, "Pilot")
+
+    mock_cache_manager = MagicMock()
+    mock_cache_manager.get_entries_for_content.return_value = []
+    service = HubService(
+        playback_history_repository=playback_history_repo,
+        cache_manager=mock_cache_manager,
+        next_episode_prefetch_service=MagicMock(),
+        media_repository=media_repo,
+    )
+
+    lib = service.get_library()
+    assert lib["total"] == 1
+    assert lib["items"][0]["title"] == "Breaking Bad"
+    assert lib["items"][0]["total_episodes_count"] == 1
+
+    # Delete media
+    del_res = service.delete_media("tt0903747")
+    assert del_res["success"] is True
+    lib_after = service.get_library()
+    assert lib_after["total"] == 0

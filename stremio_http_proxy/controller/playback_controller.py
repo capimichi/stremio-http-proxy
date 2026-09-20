@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+from typing import Any
 import urllib.parse
 
 import httpx
@@ -31,6 +32,7 @@ class PlaybackController:
         hls_chunk_manager: HlsChunkManager | None = None,
         http_streams_proxy_enabled: bool = True,
         playback_history_repository: PlaybackHistoryRepository | None = None,
+        media_metadata_service: Any = None,
     ):
         self.logger = logger_factory.get_logger("stremio_http_proxy.api", "api.log")
         self.torrserver_client = torrserver_client
@@ -38,6 +40,7 @@ class PlaybackController:
         self.download_queue_service = download_queue_service
         self.next_episode_prefetch_service = next_episode_prefetch_service
         self.playback_history_repository = playback_history_repository
+        self.media_metadata_service = media_metadata_service
         self.http_streams_proxy_enabled = http_streams_proxy_enabled
 
         if hls_chunk_manager is not None:
@@ -459,6 +462,21 @@ class PlaybackController:
             return
         try:
             infohash = extract_infohash(link)
+            media_item_id = None
+            if self.media_metadata_service:
+                try:
+                    media, item = self.media_metadata_service.ensure_media_and_item(
+                        content_id=content_id,
+                        content_type=content_type,
+                        fallback_title=title,
+                        fallback_poster=poster,
+                    )
+                    media_item_id = item.id
+                    if media.poster:
+                        poster = media.poster
+                except Exception as ex:
+                    self.logger.warning("Error resolving media metadata for playback: %s", ex)
+
             self.playback_history_repository.record_playback(
                 content_id=content_id,
                 content_type=content_type,
@@ -468,6 +486,7 @@ class PlaybackController:
                 source_link=link,
                 infohash=infohash,
                 file_index=index,
+                media_item_id=media_item_id,
             )
         except Exception as e:
             self.logger.warning("Failed to record playback history: %s", e)

@@ -268,6 +268,7 @@ class CacheManager:
                 "trigger": job.trigger,
                 "content_type": job.content_type,
                 "content_id": job.content_id,
+                "media_item_id": job.content_id,
                 "available_at": job.available_at,
                 "claimed_at": None,
                 "claimed_by": None,
@@ -502,6 +503,7 @@ class CacheManager:
             claimed_by=record.claimed_by,
             processing_expires_at=record.processing_expires_at,
             last_error=record.last_error,
+            media_item_id=getattr(record, "media_item_id", None),
         )
 
     def _to_job(self, record: CacheEntryRecord) -> DownloadJob:
@@ -552,6 +554,8 @@ class CacheManager:
         record.claimed_by = entry.claimed_by
         record.processing_expires_at = entry.processing_expires_at
         record.last_error = entry.last_error
+        if hasattr(record, "media_item_id") and entry.media_item_id is not None:
+            record.media_item_id = entry.media_item_id
 
     def get_ready_entry_by_content(self, infohash: str, content_id: str | None) -> CacheEntryModel | None:
         if not content_id:

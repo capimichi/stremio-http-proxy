@@ -43,6 +43,8 @@ class HubController:
         auth = [Depends(require_auth)]
 
         self.router.add_api_route("/api/hub/recent", self.get_recent_media, methods=["GET"], dependencies=auth)
+        self.router.add_api_route("/api/hub/library", self.get_library, methods=["GET"], dependencies=auth)
+        self.router.add_api_route("/api/hub/library/{media_id:path}", self.delete_library_media, methods=["DELETE"], dependencies=auth)
         self.router.add_api_route("/api/hub/media-streams/{content_id:path}", self.get_media_streams, methods=["GET"], dependencies=auth)
         self.router.add_api_route("/api/browser/cache-season", self.cache_season, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/browser/cache-episode", self.cache_episode, methods=["POST"], dependencies=auth)
@@ -51,6 +53,23 @@ class HubController:
     async def get_recent_media(self, limit: int = Query(default=10, ge=1, le=50)) -> dict[str, Any]:
         items = self.hub_service.get_recent_media(limit=limit)
         return {"items": items, "count": len(items)}
+
+    async def get_library(
+        self,
+        type: str | None = Query(default=None),
+        cached_only: bool = Query(default=False),
+        limit: int = Query(default=100, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
+    ) -> dict[str, Any]:
+        return self.hub_service.get_library(
+            media_type=type,
+            cached_only=cached_only,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def delete_library_media(self, media_id: str) -> dict[str, Any]:
+        return self.hub_service.delete_media(media_id)
 
     async def get_media_streams(self, content_id: str) -> dict[str, Any]:
         streams = self.hub_service.get_media_streams(content_id)

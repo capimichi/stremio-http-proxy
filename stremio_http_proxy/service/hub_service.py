@@ -4,7 +4,9 @@ from injector import inject
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.manager.cache_manager import CacheManager
+from stremio_http_proxy.repository.media_repository import MediaRepository
 from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
+from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 from stremio_http_proxy.service.task_service import TaskService
 
@@ -17,11 +19,15 @@ class HubService:
         cache_manager: CacheManager,
         next_episode_prefetch_service: NextEpisodePrefetchService,
         task_service: TaskService | None = None,
+        media_repository: MediaRepository | None = None,
+        media_metadata_service: MediaMetadataService | None = None,
     ):
         self.playback_history_repository = playback_history_repository
         self.cache_manager = cache_manager
         self.prefetch_service = next_episode_prefetch_service
         self.task_service = task_service
+        self.media_repository = media_repository
+        self.media_metadata_service = media_metadata_service
 
     def get_recent_media(self, limit: int = 10) -> list[dict[str, Any]]:
         recent_records = self.playback_history_repository.list_recent(limit=limit)
@@ -102,6 +108,29 @@ class HubService:
             else:
                 stremio_url = f"stremio://detail/series/{imdb_id}"
 
+            # Resolve clean title and poster from Media/MediaItem
+            media = None
+            media_item = None
+            if self.media_repository:
+                if getattr(record, "media_item_id", None):
+                    media_item = self.media_repository.get_media_item(record.media_item_id)
+                if not media_item and record.content_id:
+                    media_item = self.media_repository.get_media_item(record.content_id)
+                if media_item:
+                    media = self.media_repository.get_media(media_item.media_id)
+                elif imdb_id:
+                    media = self.media_repository.get_media(imdb_id)
+
+            clean_title = media.title if (media and media.title) else (record.title or "Senza titolo")
+            clean_poster = (media.poster if (media and media.poster) else record.poster) or None
+
+            if season is not None and episode is not None:
+                formatted_title = f"{clean_title} - S{season:02d}E{episode:02d}"
+                subtitle = f"Stagione {season} • Episodio {episode}"
+            else:
+                formatted_title = clean_title
+                subtitle = (media.year if (media and media.year) else (record.content_type or "Film"))
+
             results.append({
                 "id": record.id,
                 "content_id": record.content_id,
@@ -109,8 +138,13 @@ class HubService:
                 "season": season,
                 "episode": episode,
                 "content_type": record.content_type or ("series" if season is not None else "movie"),
-                "title": record.title or "Senza titolo",
-                "poster": record.poster,
+                "title": formatted_title,
+                "clean_title": clean_title,
+                "show_title": clean_title,
+                "subtitle": subtitle,
+                "raw_title": record.title,
+                "poster": clean_poster,
+                "backdrop": media.backdrop if media else None,
                 "category": record.category,
                 "played_at": record.played_at,
                 "played_at_str": time.strftime("%d/%m/%Y %H:%M", time.localtime(record.played_at)),
@@ -227,3 +261,84 @@ class HubService:
     def delete_stream(self, cache_key: str) -> dict[str, Any]:
         self.cache_manager.delete_entry(cache_key, reason="manual_user_request")
         return {"success": True, "cache_key": cache_key}
+
+    def get_library(
+        self,
+        media_type: str | None = None,
+        cached_only: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        if not self.media_repository:
+            return {"items": [], "total": 0}
+
+        all_media = self.media_repository.list_media(media_type=media_type, limit=limit, offset=offset)
+        total_count = self.media_repository.count_media(media_type=media_type)
+        items = []
+
+        for m in all_media:
+            media_items = self.media_repository.get_items_for_media(m.id)
+            cached_episodes = 0
+            ready_streams = 0
+            downloading_streams = 0
+
+            for mi in media_items:
+                entries = self.cache_manager.get_entries_for_content(mi.id)
+                has_ready = False
+                for _, e in entries:
+                    if e.status == CacheEntryStatusEnum.READY:
+                        ready_streams += 1
+                        has_ready = True
+                    elif e.status in (CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING):
+                        downloading_streams += 1
+                if has_ready:
+                    cached_episodes += 1
+
+            # If movie or media_items was empty, also check directly by m.id
+            if not media_items:
+                entries = self.cache_manager.get_entries_for_content(m.id)
+                for _, e in entries:
+                    if e.status == CacheEntryStatusEnum.READY:
+                        ready_streams += 1
+                        cached_episodes = 1
+                    elif e.status in (CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING):
+                        downloading_streams += 1
+
+            is_cached = ready_streams > 0
+            is_downloading = downloading_streams > 0
+
+            if cached_only and not is_cached and not is_downloading:
+                continue
+
+            # Stremio direct url
+            stremio_url = f"stremio://detail/{m.type}/{m.id}"
+
+            items.append({
+                "id": m.id,
+                "type": m.type,
+                "title": m.title,
+                "year": m.year,
+                "poster": m.poster,
+                "backdrop": m.backdrop,
+                "overview": m.overview,
+                "last_accessed_at": m.last_accessed_at,
+                "last_accessed_str": time.strftime("%d/%m/%Y %H:%M", time.localtime(m.last_accessed_at)),
+                "cached_episodes_count": cached_episodes,
+                "total_episodes_count": len(media_items),
+                "ready_streams_count": ready_streams,
+                "downloading_streams_count": downloading_streams,
+                "is_cached": is_cached,
+                "is_downloading": is_downloading,
+                "stremio_url": stremio_url,
+            })
+
+        return {
+            "items": items,
+            "total": len(items) if cached_only else total_count,
+        }
+
+    def delete_media(self, media_id: str) -> dict[str, Any]:
+        success = False
+        if self.media_repository:
+            success = self.media_repository.delete_media(media_id)
+        return {"success": success, "media_id": media_id}

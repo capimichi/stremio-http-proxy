@@ -21,6 +21,7 @@ class PlaybackHistoryRepository:
         source_link: str | None = None,
         infohash: str | None = None,
         file_index: int | None = None,
+        media_item_id: str | None = None,
     ) -> PlaybackHistory:
         with self.db_manager.session() as session:
             entry = PlaybackHistory(
@@ -32,6 +33,7 @@ class PlaybackHistoryRepository:
                 source_link=source_link,
                 infohash=infohash,
                 file_index=file_index,
+                media_item_id=media_item_id,
                 played_at=time.time(),
             )
             session.add(entry)
