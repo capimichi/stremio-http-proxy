@@ -127,3 +127,33 @@ def test_cache_manager_prefetch_jobs(tmp_path):
     assert rescheduled is True
 
 
+def test_get_entries_for_content_prefix(tmp_path):
+    manager = build_manager(tmp_path)
+    key1 = "1111111111111111111111111111111111111111:0"
+    key2 = "2222222222222222222222222222222222222222:0"
+    key3 = "3333333333333333333333333333333333333333:0"
+
+    entry1 = manager.get_entry(key1).model_copy(
+        update={"status": CacheEntryStatusEnum.READY, "content_id": "tt12345:1:1"}
+    )
+    entry2 = manager.get_entry(key2).model_copy(
+        update={"status": CacheEntryStatusEnum.DOWNLOADING, "content_id": "tt12345:1:2"}
+    )
+    entry3 = manager.get_entry(key3).model_copy(
+        update={"status": CacheEntryStatusEnum.READY, "content_id": "tt12345:2:1"}
+    )
+    manager._write_entry(key1, entry1)
+    manager._write_entry(key2, entry2)
+    manager._write_entry(key3, entry3)
+
+    results_s1 = manager.get_entries_for_content_prefix("tt12345:1:")
+    assert len(results_s1) == 2
+    keys_s1 = {k for k, _ in results_s1}
+    assert keys_s1 == {key1, key2}
+
+    results_s2 = manager.get_entries_for_content_prefix("tt12345:2:")
+    assert len(results_s2) == 1
+    assert results_s2[0][0] == key3
+
+
+

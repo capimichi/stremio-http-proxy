@@ -154,3 +154,51 @@ def test_hub_service_library(db_manager, playback_history_repo):
     assert del_res["success"] is True
     lib_after = service.get_library()
     assert lib_after["total"] == 0
+
+
+def test_hub_service_get_season_cache_status(playback_history_repo):
+    mock_cache_manager = MagicMock()
+    mock_entry_ep1 = CacheEntryModel(
+        cache_key="hash1:1",
+        infohash="hash1",
+        cache_index=1,
+        content_id="tt999:1:1",
+        status=CacheEntryStatusEnum.READY.value,
+        title="Show S01E01",
+        size_bytes=1000,
+        progress_percent=100.0,
+        file_path="/tmp/ep1.mkv",
+        tmp_path="/tmp/ep1.mkv.tmp",
+    )
+    mock_entry_ep2 = CacheEntryModel(
+        cache_key="hash2:1",
+        infohash="hash2",
+        cache_index=1,
+        content_id="tt999:1:2",
+        status=CacheEntryStatusEnum.DOWNLOADING.value,
+        title="Show S01E02",
+        size_bytes=0,
+        progress_percent=45.5,
+        file_path="/tmp/ep2.mkv",
+        tmp_path="/tmp/ep2.mkv.tmp",
+    )
+    mock_cache_manager.get_entries_for_content_prefix.return_value = [
+        ("hash1:1", mock_entry_ep1),
+        ("hash2:1", mock_entry_ep2),
+    ]
+
+    service = HubService(
+        playback_history_repository=playback_history_repo,
+        cache_manager=mock_cache_manager,
+        next_episode_prefetch_service=MagicMock(),
+    )
+
+    statuses = service.get_season_cache_status("tt999", 1)
+    mock_cache_manager.get_entries_for_content_prefix.assert_called_once_with("tt999:1:")
+    assert 1 in statuses
+    assert statuses[1]["status"] == "ready"
+    assert statuses[1]["progress_percent"] == 100.0
+    assert 2 in statuses
+    assert statuses[2]["status"] == "downloading"
+    assert statuses[2]["progress_percent"] == 45.5
+

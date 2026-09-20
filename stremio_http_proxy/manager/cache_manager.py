@@ -237,6 +237,15 @@ class CacheManager:
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
 
+    def get_entries_for_content_prefix(self, prefix: str) -> list[tuple[str, CacheEntryModel]]:
+        with self.db_manager.session() as session:
+            records = session.scalars(
+                select(CacheEntryRecord)
+                .where(CacheEntryRecord.content_id.like(f"{prefix}%"))
+                .order_by(CacheEntryRecord.created_at.desc())
+            ).all()
+        return [(record.cache_key, self._to_model(record)) for record in records]
+
 
     async def enqueue_download(self, job: DownloadJob) -> bool:
         entry = self.get_entry(job.cache_key)

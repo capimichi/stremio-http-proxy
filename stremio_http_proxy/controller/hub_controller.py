@@ -46,6 +46,7 @@ class HubController:
         self.router.add_api_route("/api/hub/library", self.get_library, methods=["GET"], dependencies=auth)
         self.router.add_api_route("/api/hub/library/{media_id:path}", self.delete_library_media, methods=["DELETE"], dependencies=auth)
         self.router.add_api_route("/api/hub/media-streams/{content_id:path}", self.get_media_streams, methods=["GET"], dependencies=auth)
+        self.router.add_api_route("/api/hub/season-cache/{content_id:path}/{season}", self.get_season_cache_status, methods=["GET"], dependencies=auth)
         self.router.add_api_route("/api/browser/cache-season", self.cache_season, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/browser/cache-episode", self.cache_episode, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/hub/streams/{cache_key:path}", self.delete_stream, methods=["DELETE"], dependencies=auth)
@@ -74,6 +75,10 @@ class HubController:
     async def get_media_streams(self, content_id: str) -> dict[str, Any]:
         streams = self.hub_service.get_media_streams(content_id)
         return {"content_id": content_id, "streams": streams}
+
+    async def get_season_cache_status(self, content_id: str, season: int) -> dict[str, Any]:
+        status_map = self.hub_service.get_season_cache_status(content_id, season)
+        return {"content_id": content_id, "season": season, "episodes": status_map}
 
     async def cache_season(self, payload: CacheSeasonRequest) -> dict[str, Any]:
         return self.hub_service.cache_season(

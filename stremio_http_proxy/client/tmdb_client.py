@@ -89,21 +89,44 @@ class TMDBClient:
             }
 
             if media_type == "series":
+                meta["seasons"] = []
                 for s in detail.get("seasons", []):
                     season_number = s.get("season_number")
                     if season_number is not None and season_number > 0:
+                        meta["seasons"].append({
+                            "season": season_number,
+                            "name": s.get("name") or f"Stagione {season_number}",
+                            "episode_count": s.get("episode_count", 0),
+                            "overview": s.get("overview") or "",
+                            "poster": f"https://image.tmdb.org/t/p/w500{s['poster_path']}" if s.get("poster_path") else None,
+                            "air_date": s.get("air_date"),
+                        })
                         meta["videos"].append({"season": season_number})
 
-                if season is not None:
-                    season_url = urljoin(self.BASE_URL + "/", f"tv/{tmdb_id}/season/{season}")
+                target_season = season
+                if target_season is None and meta["seasons"]:
+                    target_season = meta["seasons"][0]["season"]
+
+                if target_season is not None:
+                    season_url = urljoin(self.BASE_URL + "/", f"tv/{tmdb_id}/season/{target_season}")
                     season_resp = await client.get(season_url, params=detail_params)
                     if season_resp.status_code == 200:
                         season_data = season_resp.json()
+                        episodes = []
                         for ep in season_data.get("episodes", []):
-                            meta["videos"].append({
-                                "season": season,
-                                "episode": ep.get("episode_number"),
-                                "title": ep.get("name"),
+                            ep_num = ep.get("episode_number")
+                            ep_name = ep.get("name") or f"Episodio {ep_num}"
+                            episodes.append({
+                                "season": target_season,
+                                "episode": ep_num,
+                                "title": ep_name,
+                                "name": ep_name,
+                                "overview": ep.get("overview") or "",
+                                "thumbnail": f"https://image.tmdb.org/t/p/w500{ep['still_path']}" if ep.get("still_path") else None,
+                                "air_date": ep.get("air_date"),
+                                "vote_average": ep.get("vote_average"),
+                                "runtime": ep.get("runtime"),
                             })
+                        meta["videos"] = [v for v in meta["videos"] if v.get("season") != target_season] + episodes
 
             return meta

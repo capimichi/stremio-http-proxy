@@ -178,6 +178,34 @@ class HubService:
             })
         return results
 
+    def get_season_cache_status(self, content_id: str, season: int) -> dict[int, dict[str, Any]]:
+        clean_id = content_id.split(":")[0]
+        prefix = f"{clean_id}:{season}:"
+        entries = self.cache_manager.get_entries_for_content_prefix(prefix)
+        status_map: dict[int, dict[str, Any]] = {}
+        for cache_key, entry in entries:
+            parts = (entry.content_id or "").split(":")
+            if len(parts) >= 3 and parts[1] == str(season):
+                try:
+                    ep_num = int(parts[2])
+                    status_val = entry.status.value if hasattr(entry.status, "value") else str(entry.status)
+                    current = status_map.get(ep_num)
+                    if not current or (current.get("status") != "ready" and status_val == "ready"):
+                        status_map[ep_num] = {
+                            "status": status_val,
+                            "progress_percent": entry.progress_percent,
+                            "cache_key": cache_key,
+                        }
+                    elif not current:
+                        status_map[ep_num] = {
+                            "status": status_val,
+                            "progress_percent": entry.progress_percent,
+                            "cache_key": cache_key,
+                        }
+                except ValueError:
+                    pass
+        return status_map
+
     def cache_season(
         self,
         content_id: str,

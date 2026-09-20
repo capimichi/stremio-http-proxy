@@ -89,3 +89,18 @@ def test_delete_stream_endpoint(client, mock_hub_service):
     resp = client.delete("/api/hub/streams/abc:1")
     assert resp.status_code == 200
     assert resp.json()["cache_key"] == "abc:1"
+
+
+def test_get_season_cache_endpoint(client, mock_hub_service):
+    mock_hub_service.get_season_cache_status.return_value = {
+        1: {"status": "ready", "progress_percent": 100.0, "cache_key": "k1"},
+        2: {"status": "downloading", "progress_percent": 50.0, "cache_key": "k2"},
+    }
+    resp = client.get("/api/hub/season-cache/tt123/1")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["content_id"] == "tt123"
+    assert data["season"] == 1
+    assert data["episodes"]["1"]["status"] == "ready"
+    assert data["episodes"]["2"]["status"] == "downloading"
+
