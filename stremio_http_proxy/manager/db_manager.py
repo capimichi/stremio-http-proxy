@@ -6,8 +6,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from stremio_http_proxy.entity.cache_entry import Base
+from stremio_http_proxy.entity.playback_history import PlaybackHistory
 from stremio_http_proxy.entity.prefetch_entry import PrefetchEntry
 from stremio_http_proxy.entity.task_entry import TaskEntry
+
 
 
 class DbManager:

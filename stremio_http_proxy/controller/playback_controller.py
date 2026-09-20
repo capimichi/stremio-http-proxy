@@ -12,8 +12,11 @@ from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.service.cache_service import CacheService
+from stremio_http_proxy.helper.hash_helper import extract_infohash
+from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
+
 
 
 class PlaybackController:
@@ -27,13 +30,16 @@ class PlaybackController:
         logger_factory: LoggerFactory,
         hls_chunk_manager: HlsChunkManager | None = None,
         http_streams_proxy_enabled: bool = True,
+        playback_history_repository: PlaybackHistoryRepository | None = None,
     ):
         self.logger = logger_factory.get_logger("stremio_http_proxy.api", "api.log")
         self.torrserver_client = torrserver_client
         self.cache_service = cache_service
         self.download_queue_service = download_queue_service
         self.next_episode_prefetch_service = next_episode_prefetch_service
+        self.playback_history_repository = playback_history_repository
         self.http_streams_proxy_enabled = http_streams_proxy_enabled
+
         if hls_chunk_manager is not None:
             self.hls_chunk_manager = hls_chunk_manager
         elif hasattr(cache_service, "cache_manager") and hasattr(cache_service.cache_manager, "base_dir"):
@@ -58,7 +64,9 @@ class PlaybackController:
         content_type: str | None = None,
         content_id: str | None = None,
     ) -> Response:
+        self._record_playback(link, title, poster, category, index, content_type, content_id)
         cached_route = self._get_cached_route(link, index, content_id=content_id)
+
         if cached_route is not None:
             self._schedule_prefetch(content_type, content_id, category)
             return RedirectResponse(url=cached_route, status_code=307)
@@ -391,6 +399,7 @@ class PlaybackController:
         content_type: str | None = None,
         content_id: str | None = None,
     ) -> RedirectResponse:
+        self._record_playback(link, title, poster, category, index, content_type, content_id)
         cached_route = self._get_cached_route(link, index, content_id=content_id)
         if cached_route is not None:
             self._schedule_prefetch(content_type, content_id, category)
@@ -433,6 +442,36 @@ class PlaybackController:
             url=self.torrserver_client.build_play_url(link, title, poster, category, index),
             status_code=307,
         )
+
+    def _record_playback(
+        self,
+        link: str,
+        title: str | None,
+        poster: str | None,
+        category: str | None,
+        index: int | None,
+        content_type: str | None,
+        content_id: str | None,
+    ) -> None:
+        if not self.playback_history_repository:
+            return
+        if not content_id:
+            return
+        try:
+            infohash = extract_infohash(link)
+            self.playback_history_repository.record_playback(
+                content_id=content_id,
+                content_type=content_type,
+                title=title,
+                poster=poster,
+                category=category,
+                source_link=link,
+                infohash=infohash,
+                file_index=index,
+            )
+        except Exception as e:
+            self.logger.warning("Failed to record playback history: %s", e)
+
 
     def _schedule_prefetch(
         self,

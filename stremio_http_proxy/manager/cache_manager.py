@@ -228,6 +228,16 @@ class CacheManager:
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
 
+    def get_entries_for_content(self, content_id: str) -> list[tuple[str, CacheEntryModel]]:
+        with self.db_manager.session() as session:
+            records = session.scalars(
+                select(CacheEntryRecord)
+                .where(CacheEntryRecord.content_id == content_id)
+                .order_by(CacheEntryRecord.created_at.desc())
+            ).all()
+        return [(record.cache_key, self._to_model(record)) for record in records]
+
+
     async def enqueue_download(self, job: DownloadJob) -> bool:
         entry = self.get_entry(job.cache_key)
         if entry.status in {
@@ -439,7 +449,11 @@ class CacheManager:
             if total_size <= self.max_size_bytes:
                 return
 
+    def delete_entry(self, cache_key: str, reason: str = "manual") -> None:
+        self._delete_entry(cache_key, reason)
+
     def _delete_entry(self, cache_key: str, reason: str) -> None:
+
         infohash, index = self.parse_cache_key(cache_key)
         with self.db_manager.session() as session:
             record = session.get(CacheEntryRecord, cache_key)

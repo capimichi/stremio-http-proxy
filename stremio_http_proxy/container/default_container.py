@@ -15,10 +15,15 @@ from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
 
+import stremio_http_proxy.entity.playback_history  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.whitelist_entry  # noqa: F401 — ensure table creation
+from stremio_http_proxy.controller.hub_controller import HubController
+from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
 from stremio_http_proxy.repository.whitelist_repository import WhitelistRepository
+from stremio_http_proxy.service.hub_service import HubService
 from stremio_http_proxy.service.whitelist_service import WhitelistService
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
+
 from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
 from stremio_http_proxy.service.cache_service import CacheService
@@ -218,6 +223,7 @@ class DefaultContainer:
             prefetch_poll_seconds=self.prefetch_poll_seconds,
             task_service=task_service,
         )
+        playback_history_repository = PlaybackHistoryRepository(db_manager)
         playback_controller = PlaybackController(
             torrserver_client,
             cache_service,
@@ -226,7 +232,15 @@ class DefaultContainer:
             logger_factory,
             hls_chunk_manager=hls_chunk_manager,
             http_streams_proxy_enabled=self.http_streams_proxy_enabled,
+            playback_history_repository=playback_history_repository,
         )
+        hub_service = HubService(
+            playback_history_repository=playback_history_repository,
+            cache_manager=cache_manager,
+            next_episode_prefetch_service=next_episode_prefetch_service,
+            task_service=task_service,
+        )
+        hub_controller = HubController(hub_service, basic_auth_service)
         serve_command = ServeCommand(self.api_host, self.api_port)
 
         self.injector.binder.bind(LoggerFactory, to=logger_factory)
@@ -245,7 +259,10 @@ class DefaultContainer:
         self.injector.binder.bind(TaskRegistry, to=task_registry)
         self.injector.binder.bind(TaskService, to=task_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
+        self.injector.binder.bind(PlaybackHistoryRepository, to=playback_history_repository)
         self.injector.binder.bind(PlaybackController, to=playback_controller)
+        self.injector.binder.bind(HubService, to=hub_service)
+        self.injector.binder.bind(HubController, to=hub_controller)
         self.injector.binder.bind(WhitelistRepository, to=whitelist_repository)
         self.injector.binder.bind(TMDBClient, to=tmdb_client)
         self.injector.binder.bind(WhitelistService, to=whitelist_service)
@@ -253,3 +270,4 @@ class DefaultContainer:
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
         self.injector.binder.bind(JinjaManager, to=jinja_manager)
         self.injector.binder.bind(ServeCommand, to=serve_command)
+

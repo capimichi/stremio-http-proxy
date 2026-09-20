@@ -9,6 +9,7 @@ from stremio_http_proxy.controller.browser_controller import BrowserController
 from stremio_http_proxy.controller.cache_controller import CacheController
 from stremio_http_proxy.controller.dashboard_controller import DashboardController
 from stremio_http_proxy.controller.health_controller import HealthController
+from stremio_http_proxy.controller.hub_controller import HubController
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 from stremio_http_proxy.controller.whitelist_controller import WhitelistController
 
@@ -25,8 +26,10 @@ app.include_router(default_container.get(CacheController).router)
 app.include_router(default_container.get(PlaybackController).router)
 app.include_router(default_container.get(DashboardController).router)
 app.include_router(default_container.get(BrowserController).router)
+app.include_router(default_container.get(HubController).router)
 app.include_router(default_container.get(WhitelistController).router)
 app.include_router(default_container.get(HealthController).router)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 app.add_middleware(
