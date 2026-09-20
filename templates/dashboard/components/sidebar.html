@@ -1,34 +1,56 @@
-<aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-gray-900 text-gray-300 transform -translate-x-full shrink-0 shadow-2xl lg:shadow-none lg:static lg:translate-x-0">
-  <div class="flex h-16 items-center justify-between px-6 border-b border-gray-700">
+<aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-900 border-r border-slate-800 text-slate-300 transform -translate-x-full shrink-0 shadow-2xl lg:shadow-none lg:static lg:translate-x-0">
+  <div class="flex h-16 items-center justify-between px-5 border-b border-slate-800 bg-slate-900/50">
     <div class="flex items-center gap-3">
-      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white text-sm font-bold">S</div>
-      <span class="text-base font-semibold text-white">Stremio Proxy</span>
+      <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 text-white font-black shadow-md shadow-indigo-500/20 text-base">
+        <i class="fa-solid fa-play text-sm"></i>
+      </div>
+      <div>
+        <span class="text-sm font-bold text-white tracking-wide block leading-tight">Stremio Hub</span>
+        <span class="text-[10px] uppercase font-semibold tracking-wider text-indigo-400">Media & Cache</span>
+      </div>
     </div>
     <button
       type="button"
       onclick="closeMobileSidebar()"
-      class="lg:hidden text-gray-400 hover:text-white p-1 rounded-md focus:outline-none"
+      class="lg:hidden text-slate-400 hover:text-white p-1 rounded-md focus:outline-none"
       aria-label="Chiudi menu"
     >
       <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </div>
-  <nav class="flex-1 space-y-1 px-3 py-4">
+
+  <nav class="flex-1 space-y-1.5 px-3 py-4 overflow-y-auto">
+    <div class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Menu Principale</div>
     <a href="/dashboard/index" onclick="closeMobileSidebar()" class="sidebar-link {% if active_page == 'index' %}active{% endif %}">
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-      Dashboard
-    </a>
-    <a href="/dashboard/cache-items" onclick="closeMobileSidebar()" class="sidebar-link {% if active_page == 'cache_items' %}active{% endif %}">
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
-      Cache Items
+      <i class="fa-solid fa-house"></i>
+      <span>Media Hub</span>
     </a>
     <a href="/dashboard/browser" onclick="closeMobileSidebar()" class="sidebar-link {% if active_page == 'browser' %}active{% endif %}">
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-      Browser
+      <i class="fa-solid fa-compass"></i>
+      <span>Esplora & Cerca</span>
+    </a>
+    <a href="/dashboard/cache-items" onclick="closeMobileSidebar()" class="sidebar-link {% if active_page == 'cache_items' %}active{% endif %}">
+      <i class="fa-solid fa-hard-drive"></i>
+      <span>Download & Cache</span>
     </a>
     <a href="/dashboard/whitelist" onclick="closeMobileSidebar()" class="sidebar-link {% if active_page == 'whitelist' %}active{% endif %}">
-      <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      Whitelist
+      <i class="fa-solid fa-shield-halved"></i>
+      <span>Whitelist Flussi</span>
     </a>
   </nav>
+
+  <div class="p-3 border-t border-slate-800 bg-slate-900/30">
+    <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/60 text-xs">
+      <div class="flex items-center gap-2">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="font-medium text-slate-300">Proxy Online</span>
+      </div>
+      <a href="/manifest.json" target="_blank" class="text-indigo-400 hover:text-indigo-300 transition-colors" title="Apri Manifest">
+        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+      </a>
+    </div>
+  </div>
 </aside>

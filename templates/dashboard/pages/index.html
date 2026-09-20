@@ -1,59 +1,203 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "index" %}
-{% block title %}Dashboard - Stremio HTTP Proxy{% endblock %}
-{% block page_title %}Dashboard{% endblock %}
+{% block title %}Media Hub - Stremio Proxy{% endblock %}
+{% block page_title %}Media Hub & Control Center{% endblock %}
 
 {% block content %}
-<div class="grid grid-cols-2 gap-3 sm:gap-4 lg:gap-6 lg:grid-cols-4" id="summary-cards">
-  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
-    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Entry totali</p>
-    <p class="mt-1 text-xl font-bold text-gray-900 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-total-items">-</p>
-  </div>
-  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
-    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Download attivi</p>
-    <p class="mt-1 text-xl font-bold text-blue-600 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-active-downloads">-</p>
-  </div>
-  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
-    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Cache occupata</p>
-    <p class="mt-1 text-xl font-bold text-gray-900 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-cache-size">-</p>
-  </div>
-  <div class="rounded-xl border border-gray-200 bg-white p-3 sm:p-5 shadow-sm">
-    <p class="text-xs font-medium text-gray-500 sm:text-sm truncate">Pronti in cache</p>
-    <p class="mt-1 text-xl font-bold text-green-600 sm:mt-2 sm:text-2xl lg:text-3xl" id="summary-ready-count">-</p>
-  </div>
-</div>
+<div class="space-y-6 max-w-7xl mx-auto">
 
-<div class="mt-8">
-  <div class="flex items-center justify-between mb-4">
-    <div class="flex items-center gap-2.5">
-      <h2 class="text-base font-semibold text-gray-900" id="active-downloads-title">Download in corso</h2>
-      <span id="active-downloads-badge" class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">0</span>
+  <!-- TOP HERO GRID: Ultimo Riprodotto & System Overview -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- HERO CARD: In Riproduzione / Ultimo visto (Prende 2 colonne su desktop) -->
+    <div id="hero-now-playing-container" class="lg:col-span-2 relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800/80 p-5 sm:p-6 shadow-xl">
+      <!-- Loading Skeleton by default -->
+      <div id="hero-loading" class="animate-pulse flex flex-col sm:flex-row gap-5 items-center">
+        <div class="w-28 h-40 bg-slate-800 rounded-xl shrink-0"></div>
+        <div class="flex-1 space-y-3 w-full">
+          <div class="h-4 bg-slate-800 rounded w-1/4"></div>
+          <div class="h-6 bg-slate-800 rounded w-3/4"></div>
+          <div class="h-4 bg-slate-800 rounded w-1/2"></div>
+        </div>
+      </div>
+
+      <!-- Real Content (populated by JS) -->
+      <div id="hero-content" class="hidden flex flex-col sm:flex-row gap-5 sm:gap-6 items-start">
+        <div class="relative w-28 sm:w-32 h-40 sm:h-44 rounded-xl overflow-hidden bg-slate-800 shrink-0 shadow-lg border border-slate-700/50">
+          <img id="hero-poster" src="" alt="Poster" class="w-full h-full object-cover">
+          <div id="hero-media-badge" class="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/70 text-slate-200 backdrop-blur-md">
+            Serie
+          </div>
+        </div>
+
+        <div class="flex-1 min-w-0 w-full flex flex-col justify-between self-stretch">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-indigo-400">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span id="hero-played-time">Ultima riproduzione</span>
+              </span>
+            </div>
+
+            <h2 id="hero-title" class="text-xl sm:text-2xl font-bold text-white tracking-tight truncate">
+              Nessun titolo riprodotto
+            </h2>
+            <p id="hero-subtitle" class="text-sm font-medium text-slate-400 mt-0.5 truncate">
+              Avvia un contenuto su Stremio per vederlo qui
+            </p>
+          </div>
+
+          <!-- Dynamic Cache Status Banner in Hero -->
+          <div id="hero-cache-status-box" class="my-3 p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <div id="hero-status-icon-box" class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-sm">
+                  <i class="fa-solid fa-check"></i>
+                </div>
+                <div>
+                  <div class="text-xs font-semibold text-white flex items-center gap-2">
+                    <span id="hero-status-text">Pronto in Cache Locale</span>
+                    <span id="hero-streams-count-badge" class="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700 hidden">
+                      1 stream
+                    </span>
+                  </div>
+                  <div id="hero-status-subtext" class="text-[11px] text-slate-400 mt-0.5">
+                    File pronto per la riproduzione istantanea ad alta velocità
+                  </div>
+                </div>
+              </div>
+              <div id="hero-status-metric" class="text-right shrink-0 font-mono text-xs text-slate-300 font-semibold">
+                -
+              </div>
+            </div>
+
+            <!-- Progress bar (visible when downloading) -->
+            <div id="hero-progress-container" class="mt-2.5 hidden">
+              <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div id="hero-progress-bar" class="bg-gradient-to-r from-indigo-500 to-sky-400 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex flex-wrap items-center gap-2.5 pt-1">
+            <a
+              id="hero-stremio-btn"
+              href="#"
+              class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02]"
+            >
+              <i class="fa-solid fa-play text-[10px]"></i>
+              <span>Guarda in Stremio</span>
+            </a>
+            <a
+              id="hero-detail-btn"
+              href="#"
+              class="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-200 transition-colors"
+            >
+              <i class="fa-solid fa-layer-group text-[11px] text-slate-400"></i>
+              <span>Gestisci Flussi & Stagione</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state when no history yet -->
+      <div id="hero-empty" class="hidden py-8 text-center">
+        <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 mx-auto mb-3 text-2xl">
+          <i class="fa-solid fa-tv"></i>
+        </div>
+        <h3 class="text-base font-semibold text-white">Nessuna riproduzione recente</h3>
+        <p class="text-xs text-slate-400 max-w-sm mx-auto mt-1">
+          Configura Stremio con questo proxy o usa la sezione <a href="/dashboard/browser" class="text-indigo-400 hover:underline">Esplora & Cerca</a> per avviare contenuti e metterli in cache.
+        </p>
+      </div>
     </div>
-    <a href="/dashboard/cache-items" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
-      Tutti gli elementi in cache &rarr;
-    </a>
+
+    <!-- SYSTEM & STORAGE OVERVIEW WIDGET (1 colonna) -->
+    <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Stato Sistema & Cache</h3>
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Online
+          </span>
+        </div>
+
+        <!-- Storage Progress -->
+        <div class="mt-4 space-y-2">
+          <div class="flex justify-between text-xs">
+            <span class="text-slate-400">Spazio Cache Disco</span>
+            <span id="widget-cache-size" class="font-semibold text-white font-mono">-</span>
+          </div>
+          <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <div id="widget-storage-bar" class="bg-indigo-500 h-full rounded-full transition-all" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Metrics Grid -->
+        <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-800/80">
+          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+            <span class="text-[11px] font-medium text-slate-400 block">Download Attivi</span>
+            <span id="widget-active-downloads" class="text-lg font-bold text-sky-400 font-mono">0</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+            <span class="text-[11px] font-medium text-slate-400 block">Pronti in Cache</span>
+            <span id="widget-ready-count" class="text-lg font-bold text-emerald-400 font-mono">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+        <span>TorrServer Backend</span>
+        <span class="font-semibold text-slate-300 flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-check text-emerald-400 text-[10px]"></i>
+          Connesso
+        </span>
+      </div>
+    </div>
+
   </div>
 
-  <div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+  <!-- LIVE DOWNLOADS IN PROGRESS SECTION -->
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 text-xs">
+          <i class="fa-solid fa-arrow-down"></i>
+        </div>
+        <h3 id="active-downloads-title" class="text-sm font-bold text-white tracking-wide">
+          Download in Corso nella Cache
+        </h3>
+        <span id="active-downloads-badge" class="inline-flex items-center rounded-full bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 text-[11px] font-semibold text-sky-400">
+          0
+        </span>
+      </div>
+
+      <a href="/dashboard/cache-items" class="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-1">
+        <span>Vedi tutti i file in cache</span>
+        <i class="fa-solid fa-arrow-right text-[10px]"></i>
+      </a>
+    </div>
+
     <div class="overflow-x-auto">
-      <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
-        <thead class="bg-gray-50 text-xs font-medium uppercase tracking-wider text-gray-500">
+      <table class="min-w-full divide-y divide-slate-800 text-left text-xs">
+        <thead class="bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
           <tr>
-            <th class="px-5 py-3">Contenuto</th>
+            <th class="px-5 py-3">Contenuto / Titolo</th>
             <th class="px-5 py-3">Dimensione</th>
             <th class="px-5 py-3">Stato</th>
-            <th class="px-5 py-3">Progresso / Velocità</th>
-            <th class="px-5 py-3">Data</th>
-            <th class="px-5 py-3">Azione</th>
+            <th class="px-5 py-3">Progresso & Velocità</th>
+            <th class="px-5 py-3 text-right">Azione</th>
           </tr>
         </thead>
-        <tbody id="active-downloads-body" class="divide-y divide-gray-100 bg-white">
+        <tbody id="active-downloads-body" class="divide-y divide-slate-800/60 bg-slate-900/40">
           <tr>
-            <td colspan="6" class="px-5 py-8 text-center text-sm text-gray-400">
+            <td colspan="5" class="px-5 py-8 text-center text-slate-500">
               <div class="flex flex-col items-center justify-center gap-1.5">
-                <i class="fa-solid fa-circle-check text-green-500 text-2xl"></i>
-                <span class="font-medium text-gray-600">Nessun download attivo al momento.</span>
-                <span class="text-xs text-gray-400">Tutti i contenuti accodati sono pronti in cache.</span>
+                <i class="fa-solid fa-circle-check text-emerald-500 text-2xl mb-1"></i>
+                <span class="font-medium text-slate-300">Nessun download attivo al momento.</span>
+                <span class="text-xs text-slate-500">Tutti i contenuti accodati sono pronti in cache locale.</span>
               </div>
             </td>
           </tr>
@@ -61,9 +205,33 @@
       </table>
     </div>
   </div>
+
+  <!-- RECENT PLAYBACKS & CONTINUA A GUARDARE -->
+  <div class="space-y-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <i class="fa-solid fa-film text-indigo-400"></i>
+        <h3 class="text-base font-bold text-white tracking-wide">
+          Continua a guardare & Riprodotti di Recente
+        </h3>
+      </div>
+      <a href="/dashboard/browser" class="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+        Cerca nuovi titoli &rarr;
+      </a>
+    </div>
+
+    <!-- Recent Grid -->
+    <div id="recent-media-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+      <!-- Populated via JS -->
+      <div class="col-span-full py-8 text-center text-slate-500">
+        Caricamento titoli recenti...
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/dashboard.js?v=4"></script>
+<script src="/static/dashboard.js?v=5"></script>
 {% endblock %}
