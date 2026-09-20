@@ -161,12 +161,13 @@ class DashboardService:
         active_items = []
         for cache_key, entry in all_entries:
             status_counts[entry.status] = status_counts.get(entry.status, 0) + 1
-            if entry.status in {CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING}:
+            if entry.status in {CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING, CacheEntryStatusEnum.OPTIMIZING}:
                 active_downloads += 1
             if entry.status in {
                 CacheEntryStatusEnum.DOWNLOADING,
                 CacheEntryStatusEnum.PROCESSING,
                 CacheEntryStatusEnum.QUEUED,
+                CacheEntryStatusEnum.OPTIMIZING,
             }:
                 infohash, index = self.cache_manager.parse_cache_key(cache_key)
                 media_info = self._resolve_media_info(entry)
@@ -221,6 +222,7 @@ class DashboardService:
                         CacheEntryStatusEnum.DOWNLOADING,
                         CacheEntryStatusEnum.PROCESSING,
                         CacheEntryStatusEnum.QUEUED,
+                        CacheEntryStatusEnum.OPTIMIZING,
                     }
                 ]
             else:

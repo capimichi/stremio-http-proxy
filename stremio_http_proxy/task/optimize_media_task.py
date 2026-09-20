@@ -33,8 +33,8 @@ class OptimizeMediaTask(AbstractTask):
             return True
 
         status_val = getattr(entry.status, "value", entry.status)
-        if status_val != "ready":
-            self.logger.info("Cache entry %s status is %s (not ready), skipping optimization", cache_key, status_val)
+        if status_val not in ("optimizing", "ready"):
+            self.logger.info("Cache entry %s status is %s (neither optimizing nor ready), skipping optimization", cache_key, status_val)
             return True
 
         infohash, index = self.cache_manager.parse_cache_key(cache_key)
@@ -45,7 +45,9 @@ class OptimizeMediaTask(AbstractTask):
 
         _, ext = detect_media_type(media_path)
         if ext.lower() in COMPATIBLE_EXTENSIONS:
-            self.logger.info("Media %s is already in compatible container (%s), skipping", cache_key, ext)
+            size_bytes = media_path.stat().st_size
+            self.cache_manager.mark_ready(cache_key, size_bytes)
+            self.logger.info("Media %s is already in compatible container (%s), marked ready (size: %s bytes)", cache_key, ext, size_bytes)
             return True
 
         self.logger.info("Media %s container (%s) needs optimization. Starting ffmpeg remux to MKV...", cache_key, ext)
@@ -69,7 +71,10 @@ class OptimizeMediaTask(AbstractTask):
         else:
             if temp_mkv_path.exists():
                 temp_mkv_path.unlink(missing_ok=True)
-            self.logger.error("Failed to optimize media %s to MKV; original file preserved", cache_key)
+            if media_path.exists():
+                orig_size = media_path.stat().st_size
+                self.cache_manager.mark_ready(cache_key, orig_size)
+            self.logger.error("Failed to optimize media %s to MKV; original file preserved and marked ready", cache_key)
             return False
 
     async def _remux_to_mkv(self, src: Path, dest: Path) -> bool:

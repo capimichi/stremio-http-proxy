@@ -97,6 +97,7 @@ N/A
             <dd class="mt-1">
               <span class="inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-semibold
                 {% if entry.status == 'ready' %}text-emerald-400 bg-emerald-500/10 border border-emerald-500/20
+                {% elif entry.status == 'optimizing' %}text-purple-400 bg-purple-500/10 border border-purple-500/20
                 {% elif entry.status == 'downloading' %}text-sky-400 bg-sky-500/10 border border-sky-500/20
                 {% elif entry.status == 'processing' %}text-amber-400 bg-amber-500/10 border border-amber-500/20
                 {% elif entry.status == 'queued' %}text-slate-300 bg-slate-800 border border-slate-700

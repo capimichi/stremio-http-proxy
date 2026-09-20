@@ -107,6 +107,27 @@ class CacheManager:
         self._write_entry(cache_key, updated)
         return updated
 
+    def mark_optimizing(self, cache_key: str, size_bytes: int) -> CacheEntryModel:
+        entry = self.get_entry(cache_key)
+        now = time.time()
+        updated = entry.model_copy(
+            update={
+                "status": CacheEntryStatusEnum.OPTIMIZING,
+                "last_accessed_at": now,
+                "size_bytes": size_bytes,
+                "downloaded_bytes": size_bytes,
+                "progress_percent": 100.0,
+                "download_speed_bytes_per_second": None,
+                "last_progress_at": now,
+                "claimed_at": None,
+                "claimed_by": None,
+                "processing_expires_at": None,
+                "last_error": None,
+            }
+        )
+        self._write_entry(cache_key, updated)
+        return updated
+
     def mark_ready(self, cache_key: str, size_bytes: int) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
         now = time.time()
@@ -208,6 +229,7 @@ class CacheManager:
                         CacheEntryStatusEnum.DOWNLOADING.value,
                         CacheEntryStatusEnum.QUEUED.value,
                         CacheEntryStatusEnum.PROCESSING.value,
+                        CacheEntryStatusEnum.OPTIMIZING.value,
                     ]),
                 )
             )
@@ -251,6 +273,7 @@ class CacheManager:
             CacheEntryStatusEnum.QUEUED,
             CacheEntryStatusEnum.PROCESSING,
             CacheEntryStatusEnum.DOWNLOADING,
+            CacheEntryStatusEnum.OPTIMIZING,
         }:
             return False
 

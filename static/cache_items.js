@@ -37,6 +37,10 @@ function statusBadgeHtml(status) {
       return `<span class="inline-flex items-center gap-1 rounded-md bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-400">
         <i class="fa-solid fa-check text-[9px]"></i> Pronto
       </span>`;
+    case "optimizing":
+      return `<span class="inline-flex items-center gap-1 rounded-md bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[11px] font-semibold text-purple-400 animate-pulse">
+        <i class="fa-solid fa-wand-magic-sparkles text-[9px]"></i> Ottimizzazione
+      </span>`;
     case "downloading":
       return `<span class="inline-flex items-center gap-1 rounded-md bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 text-[11px] font-semibold text-sky-400 animate-pulse">
         <i class="fa-solid fa-arrow-down text-[9px]"></i> Download

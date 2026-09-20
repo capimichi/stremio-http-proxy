@@ -47,6 +47,7 @@ class HubService:
 
             streams = []
             has_ready = False
+            has_optimizing = False
             has_downloading = False
             has_queued = False
             active_stream = None
@@ -69,6 +70,10 @@ class HubService:
 
                 if entry.status == CacheEntryStatusEnum.READY:
                     has_ready = True
+                elif entry.status == CacheEntryStatusEnum.OPTIMIZING:
+                    has_optimizing = True
+                    if active_stream is None:
+                        active_stream = st_data
                 elif entry.status in {CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING}:
                     has_downloading = True
                     if active_stream is None or (entry.progress_percent or 0) > (active_stream.get("progress_percent") or 0):
@@ -80,6 +85,8 @@ class HubService:
 
             if has_ready:
                 agg_status = "ready"
+            elif has_optimizing:
+                agg_status = "optimizing"
             elif has_downloading:
                 agg_status = "downloading"
             elif has_queued:
@@ -320,7 +327,7 @@ class HubService:
                     if e.status == CacheEntryStatusEnum.READY:
                         ready_streams += 1
                         has_ready = True
-                    elif e.status in (CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING):
+                    elif e.status in (CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING, CacheEntryStatusEnum.OPTIMIZING):
                         downloading_streams += 1
                 if has_ready:
                     cached_episodes += 1
@@ -332,7 +339,7 @@ class HubService:
                     if e.status == CacheEntryStatusEnum.READY:
                         ready_streams += 1
                         cached_episodes = 1
-                    elif e.status in (CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING):
+                    elif e.status in (CacheEntryStatusEnum.DOWNLOADING, CacheEntryStatusEnum.PROCESSING, CacheEntryStatusEnum.OPTIMIZING):
                         downloading_streams += 1
 
             is_cached = ready_streams > 0

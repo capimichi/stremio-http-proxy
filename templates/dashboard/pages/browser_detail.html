@@ -361,6 +361,8 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
     if (cacheInfo) {
       if (cacheInfo.status === 'ready') {
         cacheBadgeHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"><i class="fa-solid fa-check"></i> Pronto in Cache</span>';
+      } else if (cacheInfo.status === 'optimizing') {
+        cacheBadgeHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 animate-pulse"><i class="fa-solid fa-wand-magic-sparkles"></i> Ottimizzazione</span>';
       } else if (cacheInfo.status === 'downloading' || cacheInfo.status === 'processing') {
         const pct = Math.round(cacheInfo.progress_percent || 0);
         cacheBadgeHtml = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 animate-pulse"><i class="fa-solid fa-arrow-down"></i> Download (${pct}%)</span>`;

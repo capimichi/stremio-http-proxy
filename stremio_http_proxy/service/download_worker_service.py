@@ -549,8 +549,8 @@ class DownloadWorkerService:
         self.logger.info("Worker %s completed job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
 
     def _on_download_completed(self, cache_key: str, size_bytes: int) -> None:
-        self.cache_manager.mark_ready(cache_key, size_bytes)
         if self.task_service is not None:
+            self.cache_manager.mark_optimizing(cache_key, size_bytes)
             try:
                 self.task_service.enqueue_task(
                     name="optimize_media",
@@ -558,7 +558,10 @@ class DownloadWorkerService:
                     deduplicate=True,
                 )
             except Exception as e:
-                self.logger.warning("Failed to enqueue optimize_media task for %s: %s", cache_key, e)
+                self.logger.warning("Failed to enqueue optimize_media task for %s: %s; falling back to ready", cache_key, e)
+                self.cache_manager.mark_ready(cache_key, size_bytes)
+        else:
+            self.cache_manager.mark_ready(cache_key, size_bytes)
 
     def _retry_delay(self, attempt: int) -> int:
         schedule = {1: 30, 2: 300, 3: 1800}

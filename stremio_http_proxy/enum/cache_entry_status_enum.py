@@ -6,5 +6,7 @@ class CacheEntryStatusEnum(StrEnum):
     QUEUED = "queued"
     PROCESSING = "processing"
     DOWNLOADING = "downloading"
+    OPTIMIZING = "optimizing"
     READY = "ready"
     FAILED = "failed"
+

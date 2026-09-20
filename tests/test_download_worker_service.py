@@ -22,6 +22,7 @@ class FakeCacheManager:
         self.dead = []
         self.acknowledged = []
         self.ready_keys = []
+        self.optimizing_keys = []
         self.claimed_job = None
         self.tmp_dir = tmp_dir
 
@@ -71,6 +72,9 @@ class FakeCacheManager:
 
     def mark_ready(self, cache_key: str, size_bytes: int):
         self.ready_keys.append((cache_key, size_bytes))
+
+    def mark_optimizing(self, cache_key: str, size_bytes: int):
+        self.optimizing_keys.append((cache_key, size_bytes))
 
     def get_min_cache_size(self) -> int:
         return 10
@@ -522,6 +526,44 @@ def test_download_worker_resolves_index_if_missing_or_zero(tmp_path):
     # Must have passed index=6 to build_download_url
     assert len(client.build_download_calls) == 1
     assert client.build_download_calls[0][1] == 6
+
+
+def test_download_worker_marks_optimizing_when_task_service_present(tmp_path):
+    class FakeTaskService:
+        def __init__(self):
+            self.enqueued = []
+
+        def enqueue_task(self, name: str, arguments: dict, deduplicate: bool = True):
+            self.enqueued.append((name, arguments, deduplicate))
+
+    cache_manager = FakeCacheManager(tmp_path)
+    task_service = FakeTaskService()
+    service = DownloadWorkerService(
+        FakeTorrServerClient(),
+        cache_manager,
+        LoggerFactory(str(tmp_path)),
+        1,
+        10,
+        30,
+        1024,
+        120,
+        60,
+        10,
+        task_service=task_service,
+    )
+
+    service._on_download_completed("hash_test:0", 5000)
+
+    # Should mark optimizing, NOT ready directly
+    assert len(cache_manager.optimizing_keys) == 1
+    assert cache_manager.optimizing_keys[0] == ("hash_test:0", 5000)
+    assert len(cache_manager.ready_keys) == 0
+
+    # Should enqueue optimize_media task
+    assert len(task_service.enqueued) == 1
+    assert task_service.enqueued[0][0] == "optimize_media"
+    assert task_service.enqueued[0][1] == {"cache_key": "hash_test:0"}
+
 
 
 
