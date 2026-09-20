@@ -1,55 +1,67 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "whitelist" %}
-{% block title %}Whitelist - Stremio HTTP Proxy{% endblock %}
-{% block page_title %}Whitelist Rules{% endblock %}
+{% block title %}Whitelist - Stremio Media Hub{% endblock %}
+{% block page_title %}Regole di Whitelist{% endblock %}
 
 {% block content %}
-<div class="rounded-xl border bg-white shadow-sm">
-  <div class="border-b px-5 py-4">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div class="flex flex-wrap items-end gap-3">
+<div class="space-y-6 max-w-7xl mx-auto">
+
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden">
+    <!-- Header with Filters -->
+    <div class="p-5 sm:p-6 border-b border-slate-800 space-y-4">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">IMDB ID</label>
-          <input type="text" id="filter-imdb" placeholder="tt..." class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-32 focus:border-indigo-500 focus:outline-none">
+          <h2 class="text-base font-bold text-white tracking-wide">Regole di Selezione Flussi</h2>
+          <p class="text-xs text-slate-400 mt-0.5">I torrent o flussi in whitelist vengono preferiti ed evidenziati automaticamente per quel media</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-end gap-3 pt-2">
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">IMDb ID</label>
+          <input type="text" id="filter-imdb" placeholder="es. tt0944947" class="rounded-xl bg-slate-950 border border-slate-700/80 px-3 py-2 text-xs text-white placeholder-slate-500 w-36 focus:border-indigo-500 focus:outline-none">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Infohash</label>
-          <input type="text" id="filter-infohash" placeholder="hash..." class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-48 font-mono focus:border-indigo-500 focus:outline-none">
+          <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Infohash</label>
+          <input type="text" id="filter-infohash" placeholder="hash..." class="rounded-xl bg-slate-950 border border-slate-700/80 px-3 py-2 text-xs text-white placeholder-slate-500 font-mono w-48 focus:border-indigo-500 focus:outline-none">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Stagione</label>
-          <input type="number" id="filter-season" placeholder="-" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-20 focus:border-indigo-500 focus:outline-none">
+          <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Stagione</label>
+          <input type="number" id="filter-season" placeholder="Tutte" class="rounded-xl bg-slate-950 border border-slate-700/80 px-3 py-2 text-xs text-white placeholder-slate-500 w-20 focus:border-indigo-500 focus:outline-none">
         </div>
         <div>
-          <label class="block text-xs font-medium text-gray-500 mb-1">Episodio</label>
-          <input type="number" id="filter-episode" placeholder="-" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm w-20 focus:border-indigo-500 focus:outline-none">
+          <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Episodio</label>
+          <input type="number" id="filter-episode" placeholder="Tutti" class="rounded-xl bg-slate-950 border border-slate-700/80 px-3 py-2 text-xs text-white placeholder-slate-500 w-20 focus:border-indigo-500 focus:outline-none">
         </div>
-        <div class="flex items-end gap-1">
-          <button id="filter-btn" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Filtra</button>
-          <button id="clear-btn" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancella</button>
+        <div class="flex items-center gap-2">
+          <button id="filter-btn" class="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-colors">Filtra</button>
+          <button id="clear-btn" class="rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors">Reset</button>
         </div>
       </div>
     </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="px-5 py-3">ID</th>
+            <th class="px-5 py-3">Titolo Media</th>
+            <th class="px-5 py-3">IMDb ID</th>
+            <th class="px-5 py-3">Infohash</th>
+            <th class="px-5 py-3">Stagione</th>
+            <th class="px-5 py-3">Episodio</th>
+            <th class="px-5 py-3">Creato</th>
+            <th class="px-5 py-3 text-right">Azione</th>
+          </tr>
+        </thead>
+        <tbody id="whitelist-tbody" class="divide-y divide-slate-800/60 bg-slate-900/40">
+          <tr><td colspan="8" class="px-5 py-8 text-center text-slate-500">Caricamento regole...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-          <th class="px-5 py-3">ID</th>
-          <th class="px-5 py-3">Media</th>
-          <th class="px-5 py-3">IMDB ID</th>
-          <th class="px-5 py-3">Infohash</th>
-          <th class="px-5 py-3">Stagione</th>
-          <th class="px-5 py-3">Episodio</th>
-          <th class="px-5 py-3">Creato</th>
-          <th class="px-5 py-3"></th>
-        </tr>
-      </thead>
-      <tbody id="whitelist-tbody" class="divide-y">
-        <tr><td colspan="8" class="px-5 py-8 text-center text-gray-400">Caricamento...</td></tr>
-      </tbody>
-    </table>
-  </div>
+
 </div>
 {% endblock %}
 
@@ -75,27 +87,30 @@ async function loadRules() {
 
   tbody.innerHTML = '';
   if (rules.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="px-5 py-8 text-center text-gray-400">Nessuna regola</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="px-5 py-8 text-center text-slate-500 text-xs">Nessuna regola di whitelist configurata</td></tr>';
     return;
   }
 
   for (const r of rules) {
     const tr = document.createElement('tr');
-    tr.className = 'border-b';
-    const ts = r.created_at ? new Date(r.created_at * 1000).toLocaleString() : '-';
-    const shortHash = r.infohash.length > 20 ? r.infohash.slice(0, 20) + '…' : r.infohash;
+    tr.className = 'hover:bg-slate-800/40 transition-colors';
+    const ts = r.created_at ? new Date(r.created_at * 1000).toLocaleString('it-IT') : '-';
+    const shortHash = r.infohash.length > 16 ? r.infohash.slice(0, 16) + '…' : r.infohash;
     const mediaLabel = r.media_title || r.imdb_id;
-    const scopeLabel = r.season != null ? (r.episode != null ? `(S${r.season} E${r.episode})` : `(S${r.season})`) : '';
+    const scopeLabel = r.season != null ? (r.episode != null ? `(S${r.season} E${r.episode})` : `(S${r.season})`) : '<span class="text-slate-500">Intero Media</span>';
+
     tr.innerHTML = `
-      <td class="px-5 py-3 text-gray-500">${r.id}</td>
-      <td class="px-5 py-3 font-medium">${mediaLabel} <span class="text-xs text-gray-400">${scopeLabel}</span></td>
-      <td class="px-5 py-3 text-gray-500">${r.imdb_id}</td>
-      <td class="px-5 py-3 font-mono text-xs text-gray-500">${shortHash}</td>
-      <td class="px-5 py-3">${r.season ?? '-'}</td>
-      <td class="px-5 py-3">${r.episode ?? '-'}</td>
-      <td class="px-5 py-3 text-xs text-gray-500">${ts}</td>
-      <td class="px-5 py-3">
-        <button class="delete-btn text-red-600 hover:text-red-800 text-xs font-medium" data-id="${r.id}">Elimina</button>
+      <td class="px-5 py-3 text-slate-500 font-mono text-[11px]">${r.id}</td>
+      <td class="px-5 py-3 font-semibold text-slate-200">${mediaLabel}</td>
+      <td class="px-5 py-3 text-indigo-400 font-mono text-[11px]">${r.imdb_id}</td>
+      <td class="px-5 py-3 font-mono text-[11px] text-slate-400" title="${r.infohash}">${shortHash}</td>
+      <td class="px-5 py-3 font-mono text-slate-300">${r.season ?? '-'}</td>
+      <td class="px-5 py-3 font-mono text-slate-300">${r.episode ?? '-'}</td>
+      <td class="px-5 py-3 text-slate-500 font-mono text-[11px]">${ts}</td>
+      <td class="px-5 py-3 text-right whitespace-nowrap">
+        <button class="delete-btn text-rose-400 hover:text-rose-300 text-xs font-semibold" data-id="${r.id}">
+          <i class="fa-solid fa-trash mr-1"></i> Rimuovi
+        </button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -103,7 +118,7 @@ async function loadRules() {
 
   document.querySelectorAll('.delete-btn').forEach(btn => {
     btn.addEventListener('click', async function() {
-      if (!confirm('Eliminare questa regola?')) return;
+      if (!confirm('Rimuovere questa regola di whitelist?')) return;
       await fetch('/api/whitelist/' + this.dataset.id, { method: 'DELETE' });
       await loadRules();
     });

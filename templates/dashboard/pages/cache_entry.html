@@ -1,7 +1,7 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "cache_items" %}
-{% block title %}{{ entry.title or 'Dettaglio Cache' }} - Stremio HTTP Proxy{% endblock %}
-{% block page_title %}{{ entry.title or 'Dettaglio Cache' }}{% endblock %}
+{% block title %}{{ entry.title or 'Dettaglio Cache' }} - Stremio Media Hub{% endblock %}
+{% block page_title %}{{ entry.title or 'Dettaglio Cache Entry' }}{% endblock %}
 
 {% macro format_bytes(value) %}
 {% if value is not none and value >= 1073741824 %}
@@ -30,88 +30,134 @@ N/A
 {% endmacro %}
 
 {% block content %}
-<div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
-  <div class="lg:col-span-2 space-y-6">
-    <div class="rounded-xl border bg-white p-6 shadow-sm">
-      <dl class="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-        <div>
-          <dt class="text-gray-500">Infohash</dt>
-          <dd class="mt-1 font-mono text-gray-900 break-all">{{ infohash }}</dd>
-        </div>
-        <div>
-          <dt class="text-gray-500">Index</dt>
-          <dd class="mt-1 text-gray-900">{{ index }}</dd>
-        </div>
-        <div>
-          <dt class="text-gray-500">Cache Key</dt>
-          <dd class="mt-1 font-mono text-gray-900 break-all">{{ infohash }}:{{ index }}</dd>
-        </div>
-        <div>
-          <dt class="text-gray-500">Stato</dt>
-          <dd class="mt-1">
-            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium
-              {% if entry.status == 'ready' %}text-green-600 bg-green-50
-              {% elif entry.status == 'downloading' %}text-blue-600 bg-blue-50
-              {% elif entry.status == 'processing' %}text-yellow-600 bg-yellow-50
-              {% elif entry.status == 'queued' %}text-gray-600 bg-gray-100
-              {% elif entry.status == 'failed' %}text-red-600 bg-red-50
-              {% else %}text-gray-400 bg-gray-50{% endif %}">
-              {{ entry.status }}
-            </span>
-          </dd>
-        </div>
-        <div>
-          <dt class="text-gray-500">Dimensione totale</dt>
-          <dd class="mt-1 text-gray-900">{{ format_bytes(entry.expected_bytes) }}</dd>
-        </div>
-        <div>
-          <dt class="text-gray-500">Scaricato</dt>
-          <dd class="mt-1 text-gray-900">{{ format_bytes(entry.downloaded_bytes) }}</dd>
-        </div>
-        {% if entry.progress_percent is not none %}
-        <div>
-          <dt class="text-gray-500">Progresso</dt>
-          <dd class="mt-1 text-gray-900">{{ '%.1f'|format(entry.progress_percent) }}%</dd>
-        </div>
-        {% endif %}
-        {% if entry.download_speed_bytes_per_second is not none %}
-        <div>
-          <dt class="text-gray-500">Velocità</dt>
-          <dd class="mt-1 text-gray-900">{{ format_speed(entry.download_speed_bytes_per_second) }}</dd>
-        </div>
-        {% endif %}
-        <div>
-          <dt class="text-gray-500">Creato</dt>
-          <dd class="mt-1 text-gray-900">{{ created_at_str }}</dd>
-        </div>
-        <div>
-          <dt class="text-gray-500">Completato</dt>
-          <dd class="mt-1 text-gray-900">{{ completed_at_str }}</dd>
-        </div>
-        {% if entry.last_error %}
-        <div class="col-span-2">
-          <dt class="text-gray-500">Ultimo errore</dt>
-          <dd class="mt-1 text-red-600 bg-red-50 rounded-md p-2 text-xs">{{ entry.last_error }}</dd>
-        </div>
-        {% endif %}
-      </dl>
-    </div>
-  </div>
+<div class="space-y-6 max-w-5xl mx-auto">
+  <!-- Back button -->
+  <a href="/dashboard/cache-items" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors">
+    <i class="fa-solid fa-arrow-left text-[10px]"></i>
+    <span>Torna a tutti gli elementi in cache</span>
+  </a>
 
-  <div class="space-y-6">
-    <div class="rounded-xl border bg-white p-6 shadow-sm">
-      <h3 class="text-sm font-semibold text-gray-900 mb-4">Azioni</h3>
-      <div class="space-y-3">
-        {% if play_url %}
-        <a href="{{ play_url }}" target="_blank" class="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors">
-          <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          Play
-        </a>
-        {% else %}
-        <p class="text-sm text-gray-400">Nessun link sorgente disponibile per la riproduzione.</p>
-        {% endif %}
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <!-- Main Info (2 cols) -->
+    <div class="lg:col-span-2 space-y-6">
+      <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-6 shadow-xl">
+        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400 pb-4 mb-4 border-b border-slate-800">
+          Dettagli Tecnici & File
+        </h3>
+
+        <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-xs">
+          <div>
+            <dt class="text-slate-400 font-medium">Infohash</dt>
+            <dd class="mt-1 font-mono text-slate-200 break-all select-all">{{ infohash }}</dd>
+          </div>
+          <div>
+            <dt class="text-slate-400 font-medium">File Index</dt>
+            <dd class="mt-1 font-mono text-slate-200">{{ index }}</dd>
+          </div>
+          <div>
+            <dt class="text-slate-400 font-medium">Cache Key</dt>
+            <dd class="mt-1 font-mono text-indigo-400 break-all">{{ infohash }}:{{ index }}</dd>
+          </div>
+          <div>
+            <dt class="text-slate-400 font-medium">Stato Flusso</dt>
+            <dd class="mt-1">
+              <span class="inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-semibold
+                {% if entry.status == 'ready' %}text-emerald-400 bg-emerald-500/10 border border-emerald-500/20
+                {% elif entry.status == 'downloading' %}text-sky-400 bg-sky-500/10 border border-sky-500/20
+                {% elif entry.status == 'processing' %}text-amber-400 bg-amber-500/10 border border-amber-500/20
+                {% elif entry.status == 'queued' %}text-slate-300 bg-slate-800 border border-slate-700
+                {% elif entry.status == 'failed' %}text-rose-400 bg-rose-500/10 border border-rose-500/20
+                {% else %}text-slate-400 bg-slate-800{% endif %}">
+                {{ entry.status }}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt class="text-slate-400 font-medium">Dimensione Totale</dt>
+            <dd class="mt-1 font-mono text-slate-200">{{ format_bytes(entry.expected_bytes) }}</dd>
+          </div>
+          <div>
+            <dt class="text-slate-400 font-medium">Scaricato su Disco</dt>
+            <dd class="mt-1 font-mono text-slate-200">{{ format_bytes(entry.downloaded_bytes) }}</dd>
+          </div>
+          {% if entry.progress_percent is not none %}
+          <div>
+            <dt class="text-slate-400 font-medium">Progresso</dt>
+            <dd class="mt-1 font-mono text-slate-200">{{ '%.1f'|format(entry.progress_percent) }}%</dd>
+          </div>
+          {% endif %}
+          {% if entry.download_speed_bytes_per_second is not none %}
+          <div>
+            <dt class="text-slate-400 font-medium">Velocità Download</dt>
+            <dd class="mt-1 font-mono text-sky-400">{{ format_speed(entry.download_speed_bytes_per_second) }}</dd>
+          </div>
+          {% endif %}
+          <div>
+            <dt class="text-slate-400 font-medium">Data Creazione</dt>
+            <dd class="mt-1 font-mono text-slate-400">{{ created_at_str }}</dd>
+          </div>
+          <div>
+            <dt class="text-slate-400 font-medium">Data Completamento</dt>
+            <dd class="mt-1 font-mono text-slate-400">{{ completed_at_str }}</dd>
+          </div>
+          {% if entry.last_error %}
+          <div class="sm:col-span-2">
+            <dt class="text-rose-400 font-semibold">Ultimo Errore Riscontrato</dt>
+            <dd class="mt-1 text-rose-300 bg-rose-950/40 border border-rose-900/50 rounded-xl p-3 text-xs font-mono break-all">{{ entry.last_error }}</dd>
+          </div>
+          {% endif %}
+        </dl>
+      </div>
+    </div>
+
+    <!-- Actions Side Card (1 col) -->
+    <div class="space-y-6">
+      <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-6 shadow-xl space-y-4">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 pb-3 border-b border-slate-800">
+          Azioni Rapide
+        </h3>
+        
+        <div class="space-y-3">
+          {% if play_url %}
+          <a
+            href="{{ play_url }}"
+            target="_blank"
+            class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02]"
+          >
+            <i class="fa-solid fa-play text-xs"></i>
+            <span>Avvia Stream Diretto</span>
+          </a>
+          {% endif %}
+
+          <button
+            type="button"
+            onclick="deleteCurrentStream('{{ infohash }}:{{ index }}')"
+            class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-rose-900/50 bg-rose-950/30 hover:bg-rose-900/40 px-4 py-2 text-xs font-semibold text-rose-400 transition-colors"
+          >
+            <i class="fa-solid fa-trash text-xs"></i>
+            <span>Elimina File dalla Cache</span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function deleteCurrentStream(cacheKey) {
+  if (!confirm(`Vuoi eliminare definitivamente questo file dalla cache?\n${cacheKey}`)) return;
+  try {
+    const resp = await fetch(`/api/hub/streams/${encodeURIComponent(cacheKey)}`, { method: 'DELETE' });
+    if (resp.ok) {
+      window.location.href = '/dashboard/cache-items';
+    } else {
+      alert("Errore durante l'eliminazione.");
+    }
+  } catch (e) {
+    alert("Errore di rete: " + e);
+  }
+}
+</script>
 {% endblock %}

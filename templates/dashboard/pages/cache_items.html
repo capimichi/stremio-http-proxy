@@ -1,44 +1,81 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "cache_items" %}
-{% block title %}Cache Items - Stremio HTTP Proxy{% endblock %}
-{% block page_title %}Cache Items{% endblock %}
+{% block title %}Download & Cache - Stremio Media Hub{% endblock %}
+{% block page_title %}Download & Archivio Cache{% endblock %}
 
 {% block content %}
-<div class="rounded-xl border bg-white shadow-sm">
-  <div class="border-b px-5 py-4">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div class="relative flex-1 max-w-md">
-        <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        <input type="text" id="search-input" placeholder="Cerca per nome..." class="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+<div class="space-y-6 max-w-7xl mx-auto">
+
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden">
+    <!-- Header with Search & Filters -->
+    <div class="p-5 sm:p-6 border-b border-slate-800 space-y-4">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <!-- Search bar -->
+        <div class="relative flex-1 w-full max-w-md">
+          <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+          </span>
+          <input
+            type="text"
+            id="search-input"
+            placeholder="Cerca contenuti in cache per nome..."
+            class="w-full rounded-xl bg-slate-950 border border-slate-700/80 pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+          >
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex items-center gap-2 self-end sm:self-center">
+          <button id="cache-prev-page" class="rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 disabled:opacity-40 transition-colors" disabled>
+            &larr; Precedente
+          </button>
+          <span id="cache-page-info" class="text-xs font-mono text-slate-400 px-2">Pagina 1</span>
+          <button id="cache-next-page" class="rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 disabled:opacity-40 transition-colors">
+            Successiva &rarr;
+          </button>
+        </div>
       </div>
-      <div class="flex items-center gap-2" id="cache-pagination">
-        <button id="cache-prev-page" class="rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled>Precedente</button>
-        <span id="cache-page-info" class="text-sm text-gray-500">Pagina 1</span>
-        <button id="cache-next-page" class="rounded-lg border px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Successiva</button>
+
+      <!-- Status Filter Tabs -->
+      <div class="flex items-center gap-2 pt-2 border-t border-slate-800/80 overflow-x-auto text-xs">
+        <button class="status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-indigo-600 text-white" data-status="">
+          Tutti i File
+        </button>
+        <button class="status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-slate-800 text-slate-400 hover:text-white" data-status="active">
+          In Download / Coda
+        </button>
+        <button class="status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-slate-800 text-slate-400 hover:text-white" data-status="ready">
+          Pronti in Cache
+        </button>
+        <button class="status-tab-btn px-3 py-1.5 rounded-lg font-semibold transition-colors bg-slate-800 text-slate-400 hover:text-white" data-status="failed">
+          Errori / Falliti
+        </button>
       </div>
     </div>
+
+    <!-- Table -->
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="px-5 py-3">Nome / Release</th>
+            <th class="px-5 py-3">Dimensione</th>
+            <th class="px-5 py-3">Stato</th>
+            <th class="px-5 py-3">Progresso</th>
+            <th class="px-5 py-3">Creato</th>
+            <th class="px-5 py-3">Infohash</th>
+            <th class="px-5 py-3 text-right">Azioni</th>
+          </tr>
+        </thead>
+        <tbody id="cache-table-body" class="divide-y divide-slate-800/60 bg-slate-900/40">
+          <tr><td colspan="7" class="px-5 py-8 text-center text-slate-500">Caricamento elementi in cache...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
-  <div class="overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead>
-        <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-          <th class="px-5 py-3">Nome</th>
-          <th class="px-5 py-3">Dimensione</th>
-          <th class="px-5 py-3">Stato</th>
-          <th class="px-5 py-3">Progresso</th>
-          <th class="px-5 py-3">Creato</th>
-          <th class="px-5 py-3">Infohash</th>
-          <th class="px-5 py-3"></th>
-        </tr>
-      </thead>
-      <tbody id="cache-table-body" class="divide-y">
-        <tr><td colspan="7" class="px-5 py-8 text-center text-gray-400">Caricamento...</td></tr>
-      </tbody>
-    </table>
-  </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/cache_items.js"></script>
+<script src="/static/cache_items.js?v=2"></script>
 {% endblock %}
