@@ -7,13 +7,11 @@ from sqlalchemy import func, or_, select, update
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.entity.cache_entry import CacheEntry as CacheEntryRecord
-from stremio_http_proxy.entity.prefetch_entry import PrefetchEntry
 from stremio_http_proxy.helper.hash_helper import extract_infohash, hash_url, normalize_infohash
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
 from stremio_http_proxy.model.download_job import DownloadJob
-from stremio_http_proxy.model.prefetch_job import PrefetchJob
 
 
 class CacheManager:
@@ -192,7 +190,7 @@ class CacheManager:
                 select(func.count())
                 .select_from(CacheEntryRecord)
                 .where(
-                    CacheEntryRecord.content_id == content_id,
+                    CacheEntryRecord.media_item_id == content_id,
                     CacheEntryRecord.status == CacheEntryStatusEnum.READY.value,
                 )
             )
@@ -204,7 +202,7 @@ class CacheManager:
                 select(func.count())
                 .select_from(CacheEntryRecord)
                 .where(
-                    CacheEntryRecord.content_id == content_id,
+                    CacheEntryRecord.media_item_id == content_id,
                     CacheEntryRecord.status.in_([
                         CacheEntryStatusEnum.READY.value,
                         CacheEntryStatusEnum.DOWNLOADING.value,
@@ -232,7 +230,7 @@ class CacheManager:
         with self.db_manager.session() as session:
             records = session.scalars(
                 select(CacheEntryRecord)
-                .where(CacheEntryRecord.content_id == content_id)
+                .where(CacheEntryRecord.media_item_id == content_id)
                 .order_by(CacheEntryRecord.created_at.desc())
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
@@ -241,7 +239,7 @@ class CacheManager:
         with self.db_manager.session() as session:
             records = session.scalars(
                 select(CacheEntryRecord)
-                .where(CacheEntryRecord.content_id.like(f"{prefix}%"))
+                .where(CacheEntryRecord.media_item_id.like(f"{prefix}%"))
                 .order_by(CacheEntryRecord.created_at.desc())
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
@@ -506,13 +504,13 @@ class CacheManager:
             max_attempts=record.max_attempts or 3,
             trigger=record.trigger,
             content_type=record.content_type,
-            content_id=record.content_id,
+            content_id=record.media_item_id,
+            media_item_id=record.media_item_id,
             available_at=record.available_at,
             claimed_at=record.claimed_at,
             claimed_by=record.claimed_by,
             processing_expires_at=record.processing_expires_at,
             last_error=record.last_error,
-            media_item_id=getattr(record, "media_item_id", None),
         )
 
     def _to_job(self, record: CacheEntryRecord) -> DownloadJob:
@@ -529,7 +527,7 @@ class CacheManager:
             max_attempts=record.max_attempts or 3,
             trigger=record.trigger or "playback",
             content_type=record.content_type,
-            content_id=record.content_id,
+            content_id=record.media_item_id,
             enqueued_at=record.created_at or time.time(),
             available_at=record.available_at or time.time(),
             last_error=record.last_error,
@@ -557,14 +555,12 @@ class CacheManager:
         record.max_attempts = entry.max_attempts
         record.trigger = entry.trigger
         record.content_type = entry.content_type
-        record.content_id = entry.content_id
+        record.media_item_id = entry.media_item_id or entry.content_id
         record.available_at = entry.available_at
         record.claimed_at = entry.claimed_at
         record.claimed_by = entry.claimed_by
         record.processing_expires_at = entry.processing_expires_at
         record.last_error = entry.last_error
-        if hasattr(record, "media_item_id") and entry.media_item_id is not None:
-            record.media_item_id = entry.media_item_id
 
     def get_ready_entry_by_content(self, infohash: str, content_id: str | None) -> CacheEntryModel | None:
         if not content_id:
@@ -576,7 +572,7 @@ class CacheManager:
             records = session.scalars(
                 select(CacheEntryRecord)
                 .where(CacheEntryRecord.infohash == normalized)
-                .where(CacheEntryRecord.content_id == content_id)
+                .where(CacheEntryRecord.media_item_id == content_id)
                 .where(CacheEntryRecord.status == CacheEntryStatusEnum.READY)
             ).all()
         for r in records:
@@ -587,142 +583,4 @@ class CacheManager:
     def is_content_ready(self, infohash: str, content_id: str | None) -> bool:
         return self.get_ready_entry_by_content(infohash, content_id) is not None
 
-    def schedule_prefetch_job(
-        self,
-        content_type: str,
-        content_id: str,
-        category: str | None = None,
-        delay_seconds: int = 120,
-    ) -> bool:
-        now = time.time()
-        scheduled_at = now + max(0, delay_seconds)
-        with self.db_manager.session() as session:
-            record = session.scalars(
-                select(PrefetchEntry).where(
-                    PrefetchEntry.content_type == content_type,
-                    PrefetchEntry.content_id == content_id,
-                )
-            ).first()
-            if record is not None:
-                if record.status in ("pending", "processing"):
-                    return False
-                record.status = "pending"
-                record.scheduled_at = scheduled_at
-                record.updated_at = now
-                record.claimed_by = None
-                record.claimed_at = None
-                record.processing_expires_at = None
-                record.attempt = 0
-                record.last_error = None
-                if category:
-                    record.category = category
-                self.logger.info("Rescheduled prefetch job %s for %s:%s at %s", record.id, content_type, content_id, scheduled_at)
-                return True
-
-            new_entry = PrefetchEntry(
-                content_type=content_type,
-                content_id=content_id,
-                category=category,
-                status="pending",
-                scheduled_at=scheduled_at,
-                created_at=now,
-                updated_at=now,
-                attempt=0,
-                max_attempts=3,
-            )
-            session.add(new_entry)
-            self.logger.info("Scheduled prefetch job for %s:%s at %s", content_type, content_id, scheduled_at)
-            return True
-
-    async def claim_next_prefetch_job(self, worker_id: str, lease_seconds: int = 180) -> PrefetchJob | None:
-        now = time.time()
-        with self.db_manager.session() as session:
-            expired_records = session.scalars(
-                select(PrefetchEntry).where(
-                    PrefetchEntry.status == "processing",
-                    PrefetchEntry.processing_expires_at.is_not(None),
-                    PrefetchEntry.processing_expires_at <= now,
-                )
-            ).all()
-            for record in expired_records:
-                record.status = "pending"
-                record.claimed_by = None
-                record.claimed_at = None
-                record.processing_expires_at = None
-                record.scheduled_at = now
-                record.updated_at = now
-                self.logger.warning("Requeued expired prefetch job %s", record.id)
-
-            candidates = session.scalars(
-                select(PrefetchEntry)
-                .where(
-                    PrefetchEntry.status == "pending",
-                    PrefetchEntry.scheduled_at <= now,
-                )
-                .order_by(PrefetchEntry.scheduled_at.asc())
-                .limit(5)
-            ).all()
-            for record in candidates:
-                claimed = session.execute(
-                    update(PrefetchEntry)
-                    .where(
-                        PrefetchEntry.id == record.id,
-                        PrefetchEntry.status == "pending",
-                    )
-                    .values(
-                        status="processing",
-                        claimed_at=now,
-                        claimed_by=worker_id,
-                        processing_expires_at=now + lease_seconds,
-                        updated_at=now,
-                        attempt=PrefetchEntry.attempt + 1,
-                    )
-                )
-                if claimed.rowcount != 1:
-                    continue
-                claimed_record = session.get(PrefetchEntry, record.id)
-                return PrefetchJob(
-                    id=claimed_record.id,
-                    content_type=claimed_record.content_type,
-                    content_id=claimed_record.content_id,
-                    category=claimed_record.category,
-                    status=claimed_record.status,
-                    scheduled_at=claimed_record.scheduled_at,
-                    created_at=claimed_record.created_at,
-                    updated_at=claimed_record.updated_at,
-                    claimed_by=claimed_record.claimed_by,
-                    claimed_at=claimed_record.claimed_at,
-                    processing_expires_at=claimed_record.processing_expires_at,
-                    attempt=claimed_record.attempt,
-                    max_attempts=claimed_record.max_attempts,
-                    last_error=claimed_record.last_error,
-                )
-            return None
-
-    async def complete_prefetch_job(self, job_id: int) -> None:
-        now = time.time()
-        with self.db_manager.session() as session:
-            record = session.get(PrefetchEntry, job_id)
-            if record:
-                record.status = "completed"
-                record.claimed_by = None
-                record.claimed_at = None
-                record.processing_expires_at = None
-                record.updated_at = now
-
-    async def fail_prefetch_job(self, job_id: int, error: str, retry: bool = False, retry_delay_seconds: int = 60) -> None:
-        now = time.time()
-        with self.db_manager.session() as session:
-            record = session.get(PrefetchEntry, job_id)
-            if record:
-                record.last_error = error
-                record.updated_at = now
-                record.claimed_by = None
-                record.claimed_at = None
-                record.processing_expires_at = None
-                if retry:
-                    record.status = "pending"
-                    record.scheduled_at = now + retry_delay_seconds
-                else:
-                    record.status = "failed"
 

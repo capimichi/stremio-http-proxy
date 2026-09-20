@@ -94,52 +94,8 @@ class DownloadWorkerService:
 
     async def process_next_task(self) -> bool:
         if self.task_service:
-            processed = await self.task_service.process_next_task(self.worker_id)
-            if processed:
-                return True
-        return await self.process_next_prefetch_job()
-
-    async def process_next_prefetch_job(self) -> bool:
-        if not self.next_episode_prefetch_service or not self.next_episode_prefetch_service.enabled:
-            return False
-        if not hasattr(self.cache_manager, "claim_next_prefetch_job"):
-            return False
-
-        job = await self.cache_manager.claim_next_prefetch_job(self.worker_id)
-        if job is None:
-            return False
-
-        self.logger.info("Worker %s picked prefetch job %s for %s:%s", self.worker_id, job.id, job.content_type, job.content_id)
-        try:
-            success = await self.next_episode_prefetch_service.enqueue_next_episode(
-                job.content_type,
-                job.content_id,
-                job.category,
-            )
-            if success:
-                self.logger.info("Worker %s completed prefetch job %s", self.worker_id, job.id)
-                await self.cache_manager.complete_prefetch_job(job.id)
-            else:
-                self.logger.warning("Worker %s found no candidate streams for prefetch job %s", self.worker_id, job.id)
-                can_retry = job.attempt < job.max_attempts
-                await self.cache_manager.fail_prefetch_job(
-                    job.id,
-                    error="No candidate streams found",
-                    retry=can_retry,
-                    retry_delay_seconds=60 * job.attempt,
-                )
-            return True
-        except Exception as exc:
-            error = str(exc)
-            self.logger.exception("Worker %s failed prefetch job %s: %s", self.worker_id, job.id, error)
-            can_retry = job.attempt < job.max_attempts
-            await self.cache_manager.fail_prefetch_job(
-                job.id,
-                error=error,
-                retry=can_retry,
-                retry_delay_seconds=60 * job.attempt,
-            )
-            return True
+            return await self.task_service.process_next_task(self.worker_id)
+        return False
 
     async def process_next_job(self) -> bool:
         job = await self.cache_manager.claim_next_download(self.worker_id)

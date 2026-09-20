@@ -1,7 +1,7 @@
 from sqlalchemy import Float, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from stremio_http_proxy.entity.cache_entry import Base
+from stremio_http_proxy.entity.base import Base
 
 
 class TaskEntry(Base):

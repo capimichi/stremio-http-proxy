@@ -84,45 +84,6 @@ def test_count_and_candidate_attempted(tmp_path):
     assert manager.count_ready_for_content(content_id) == 1
 
 
-def test_cache_manager_prefetch_jobs(tmp_path):
-    import asyncio
-    manager = build_manager(tmp_path)
-
-    # 1. Schedule prefetch job with 0 delay
-    scheduled = manager.schedule_prefetch_job("series", "tt3749900:1:2", category="tv", delay_seconds=0)
-    assert scheduled is True
-
-    # Duplicate scheduling while pending returns False
-    duplicate = manager.schedule_prefetch_job("series", "tt3749900:1:2", category="tv", delay_seconds=0)
-    assert duplicate is False
-
-    # 2. Claim prefetch job
-    job = asyncio.run(manager.claim_next_prefetch_job("worker-1", lease_seconds=10))
-    assert job is not None
-    assert job.content_type == "series"
-    assert job.content_id == "tt3749900:1:2"
-    assert job.category == "tv"
-    assert job.status == "processing"
-    assert job.attempt == 1
-
-    # No more pending jobs
-    none_job = asyncio.run(manager.claim_next_prefetch_job("worker-1"))
-    assert none_job is None
-
-    # 3. Fail with retry
-    asyncio.run(manager.fail_prefetch_job(job.id, error="Temporary failure", retry=True, retry_delay_seconds=0))
-    reclaimed = asyncio.run(manager.claim_next_prefetch_job("worker-1"))
-    assert reclaimed is not None
-    assert reclaimed.id == job.id
-    assert reclaimed.attempt == 2
-
-    # 4. Complete job
-    asyncio.run(manager.complete_prefetch_job(reclaimed.id))
-    assert asyncio.run(manager.claim_next_prefetch_job("worker-1")) is None
-
-    # Rescheduling after completion works (e.g. if re-requested later)
-    rescheduled = manager.schedule_prefetch_job("series", "tt3749900:1:2", category="tv", delay_seconds=0)
-    assert rescheduled is True
 
 
 def test_get_entries_for_content_prefix(tmp_path):

@@ -1,4 +1,23 @@
 services:
+  db:
+    image: mariadb:10.11
+    container_name: stremio-http-proxy-db
+    command: --innodb-buffer-pool-size=64M --max-connections=50
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-stremio_http_proxy}
+      MYSQL_USER: ${DB_USER:-proxy_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-proxy_password}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   stremio-http-proxy:
     build:
       context: .
@@ -11,6 +30,9 @@ services:
     volumes:
       - app-var:/app/var
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
 
   stremio-http-proxy-worker:
     build:
@@ -22,6 +44,10 @@ services:
     volumes:
       - app-var:/app/var
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   app-var:
+  mariadb_data:

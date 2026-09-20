@@ -1,7 +1,7 @@
 from sqlalchemy import Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from stremio_http_proxy.entity.cache_entry import Base
+from stremio_http_proxy.entity.base import Base
 
 
 class MediaItem(Base):

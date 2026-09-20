@@ -1,9 +1,7 @@
-from sqlalchemy import Float, Index, Integer, String, Text
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import BigInteger, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
-
-class Base(DeclarativeBase):
-    pass
+from stremio_http_proxy.entity.base import Base
 
 
 class CacheEntry(Base):
@@ -12,6 +10,7 @@ class CacheEntry(Base):
         Index("ix_cache_entries_status", "status"),
         Index("ix_cache_entries_last_accessed_at", "last_accessed_at"),
         Index("ix_cache_entries_infohash_cache_index", "infohash", "cache_index", unique=True),
+        Index("ix_cache_entries_media_item_id", "media_item_id"),
     )
 
     cache_key: Mapped[str] = mapped_column(String(128), primary_key=True)
@@ -27,9 +26,9 @@ class CacheEntry(Base):
     created_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_accessed_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     completed_at: Mapped[float | None] = mapped_column(Float, nullable=True)
-    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    downloaded_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    expected_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    downloaded_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    expected_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     progress_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
     download_speed_bytes_per_second: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_progress_at: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -38,10 +37,11 @@ class CacheEntry(Base):
     max_attempts: Mapped[int | None] = mapped_column(Integer, nullable=True, default=3)
     trigger: Mapped[str | None] = mapped_column(String(32), nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    content_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    media_item_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("media_items.id", ondelete="SET NULL"), nullable=True
+    )
     available_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     claimed_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     claimed_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     processing_expires_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    media_item_id: Mapped[str | None] = mapped_column(String(128), nullable=True)

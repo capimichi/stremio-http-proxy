@@ -416,25 +416,15 @@ class PlaybackController:
             return RedirectResponse(url=link, status_code=307)
 
         if hasattr(self.torrserver_client, "resolve_file_index"):
-            try:
-                index = await self.torrserver_client.resolve_file_index(
-                    link,
-                    index=index,
-                    content_id=content_id,
-                    content_type=content_type,
-                    title=title,
-                    poster=poster,
-                    category=category,
-                )
-            except TypeError:
-                index = await self.torrserver_client.resolve_file_index(
-                    link,
-                    content_id=content_id,
-                    content_type=content_type,
-                    title=title,
-                    poster=poster,
-                    category=category,
-                )
+            index = await self.torrserver_client.resolve_file_index(
+                link,
+                index=index,
+                content_id=content_id,
+                content_type=content_type,
+                title=title,
+                poster=poster,
+                category=category,
+            )
         elif index is None or index <= 0:
             index = 1
 
@@ -459,11 +449,10 @@ class PlaybackController:
     ) -> None:
         if not self.playback_history_repository:
             return
-        if not content_id:
-            return
         try:
             infohash = extract_infohash(link)
-            media_item_id = None
+            media_item_id = content_id
+            media_id = content_id.split(":")[0] if ":" in content_id else content_id
             if self.media_metadata_service:
                 try:
                     media, item = self.media_metadata_service.ensure_media_and_item(
@@ -473,21 +462,21 @@ class PlaybackController:
                         fallback_poster=poster,
                     )
                     media_item_id = item.id
+                    media_id = media.id
                     if media.poster:
                         poster = media.poster
                 except Exception as ex:
                     self.logger.warning("Error resolving media metadata for playback: %s", ex)
 
             self.playback_history_repository.record_playback(
-                content_id=content_id,
-                content_type=content_type,
+                media_item_id=media_item_id,
+                media_id=media_id,
                 title=title,
                 poster=poster,
                 category=category,
                 source_link=link,
                 infohash=infohash,
                 file_index=index,
-                media_item_id=media_item_id,
             )
         except Exception as e:
             self.logger.warning("Failed to record playback history: %s", e)

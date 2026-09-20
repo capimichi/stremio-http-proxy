@@ -1,29 +1,49 @@
+import os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from stremio_http_proxy.entity.cache_entry import Base
-from stremio_http_proxy.entity.media import Media
-from stremio_http_proxy.entity.media_item import MediaItem
-from stremio_http_proxy.entity.playback_history import PlaybackHistory
-from stremio_http_proxy.entity.prefetch_entry import PrefetchEntry
-from stremio_http_proxy.entity.task_entry import TaskEntry
-
+from stremio_http_proxy.entity.base import Base
+# Import all entities to register them with Base.metadata
+from stremio_http_proxy.entity.cache_entry import CacheEntry  # noqa: F401
+from stremio_http_proxy.entity.media import Media  # noqa: F401
+from stremio_http_proxy.entity.media_item import MediaItem  # noqa: F401
+from stremio_http_proxy.entity.playback_history import PlaybackHistory  # noqa: F401
+from stremio_http_proxy.entity.task_entry import TaskEntry  # noqa: F401
 
 
 class DbManager:
-    def __init__(self, sqlite_path: str):
-        self.sqlite_path = Path(sqlite_path)
-        self.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-        self.engine = create_engine(
-            f"sqlite:///{self.sqlite_path}",
-            connect_args={"check_same_thread": False},
-        )
+    def __init__(self, sqlite_path: str | None = None, db_url: str | None = None, auto_migrate: bool = True):
+        env_db_url = os.environ.get("DATABASE_URL")
+        self.db_url = db_url or env_db_url
+
+        if not self.db_url:
+            path = sqlite_path or "var/db/stremio_http_proxy.db"
+            p = Path(path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            self.db_url = f"sqlite:///{p.resolve()}"
+
+        if self.db_url.startswith("sqlite"):
+            self.engine = create_engine(
+                self.db_url,
+                connect_args={"check_same_thread": False},
+            )
+        else:
+            self.engine = create_engine(
+                self.db_url,
+                pool_pre_ping=True,
+                pool_recycle=3600,
+                pool_size=10,
+                max_overflow=20,
+            )
+
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
-        self._initialize()
+        self._initialize(auto_migrate=auto_migrate)
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -37,106 +57,36 @@ class DbManager:
         finally:
             session.close()
 
-    def _initialize(self) -> None:
-        with self.engine.begin() as connection:
-            connection.execute(text("PRAGMA journal_mode=WAL"))
-            connection.execute(text("PRAGMA synchronous=NORMAL"))
-            connection.execute(text("PRAGMA busy_timeout=5000"))
-        Base.metadata.create_all(self.engine)
-        self._ensure_cache_entry_columns()
-        self._ensure_playback_history_columns()
-        self._ensure_prefetch_job_columns()
-        self._ensure_task_entry_columns()
+    def _initialize(self, auto_migrate: bool = True) -> None:
+        if self.db_url.startswith("sqlite") and ":memory:" not in self.db_url:
+            with self.engine.begin() as connection:
+                connection.execute(text("PRAGMA journal_mode=WAL"))
+                connection.execute(text("PRAGMA synchronous=NORMAL"))
+                connection.execute(text("PRAGMA busy_timeout=5000"))
 
-    def _ensure_cache_entry_columns(self) -> None:
-        columns = {
-            "title": "TEXT",
-            "source_link": "TEXT",
-            "poster": "TEXT",
-            "category": "VARCHAR(64)",
-            "priority": "INTEGER DEFAULT 100",
-            "max_attempts": "INTEGER DEFAULT 3",
-            "trigger": "VARCHAR(32)",
-            "content_type": "VARCHAR(32)",
-            "content_id": "TEXT",
-            "available_at": "FLOAT",
-            "claimed_at": "FLOAT",
-            "claimed_by": "VARCHAR(128)",
-            "processing_expires_at": "FLOAT",
-            "media_item_id": "VARCHAR(128)",
-        }
-        with self.engine.begin() as connection:
-            existing = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(cache_entries)"))
-            }
-            for column_name, column_sql in columns.items():
-                if column_name in existing:
-                    continue
-                connection.execute(text(f"ALTER TABLE cache_entries ADD COLUMN {column_name} {column_sql}"))
+        if auto_migrate:
+            try:
+                self.run_migrations()
+            except Exception:
+                # Fallback to create_all for in-memory / non-alembic test setups
+                Base.metadata.create_all(self.engine)
+        else:
+            Base.metadata.create_all(self.engine)
 
-    def _ensure_playback_history_columns(self) -> None:
-        columns = {
-            "media_item_id": "VARCHAR(128)",
-        }
-        with self.engine.begin() as connection:
-            existing = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(playback_history)"))
-            }
-            for column_name, column_sql in columns.items():
-                if column_name in existing:
-                    continue
-                connection.execute(text(f"ALTER TABLE playback_history ADD COLUMN {column_name} {column_sql}"))
+    def run_migrations(self) -> None:
+        alembic_ini_path = Path("alembic.ini")
+        if not alembic_ini_path.exists():
+            # Check parent directory or project root
+            for parent in Path(__file__).resolve().parents:
+                candidate = parent / "alembic.ini"
+                if candidate.exists():
+                    alembic_ini_path = candidate
+                    break
 
-    def _ensure_prefetch_job_columns(self) -> None:
-        columns = {
-            "claimed_by": "VARCHAR(128)",
-            "claimed_at": "FLOAT",
-            "processing_expires_at": "FLOAT",
-            "attempt": "INTEGER DEFAULT 0",
-            "max_attempts": "INTEGER DEFAULT 3",
-            "last_error": "TEXT",
-        }
-        with self.engine.begin() as connection:
-            tables = {
-                row[0]
-                for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            }
-            if "prefetch_jobs" not in tables:
-                return
-            existing = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(prefetch_jobs)"))
-            }
-            for column_name, column_sql in columns.items():
-                if column_name in existing:
-                    continue
-                connection.execute(text(f"ALTER TABLE prefetch_jobs ADD COLUMN {column_name} {column_sql}"))
+        if not alembic_ini_path.exists():
+            Base.metadata.create_all(self.engine)
+            return
 
-    def _ensure_task_entry_columns(self) -> None:
-        columns = {
-            "claimed_by": "VARCHAR(128)",
-            "claimed_at": "FLOAT",
-            "processing_expires_at": "FLOAT",
-            "attempt": "INTEGER DEFAULT 0",
-            "max_attempts": "INTEGER DEFAULT 3",
-            "last_error": "TEXT",
-        }
-        with self.engine.begin() as connection:
-            tables = {
-                row[0]
-                for row in connection.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
-            }
-            if "task_entry" not in tables:
-                return
-            existing = {
-                row[1]
-                for row in connection.execute(text("PRAGMA table_info(task_entry)"))
-            }
-            for column_name, column_sql in columns.items():
-                if column_name in existing:
-                    continue
-                connection.execute(text(f"ALTER TABLE task_entry ADD COLUMN {column_name} {column_sql}"))
-
-
+        alembic_cfg = Config(str(alembic_ini_path))
+        alembic_cfg.set_main_option("sqlalchemy.url", self.db_url)
+        command.upgrade(alembic_cfg, "head")

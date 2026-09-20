@@ -13,28 +13,35 @@ class PlaybackHistoryRepository:
 
     def record_playback(
         self,
-        content_id: str,
-        content_type: str | None = None,
+        media_item_id: str | None = None,
+        media_id: str | None = None,
         title: str | None = None,
         poster: str | None = None,
         category: str | None = None,
         source_link: str | None = None,
         infohash: str | None = None,
         file_index: int | None = None,
-        media_item_id: str | None = None,
+        duration_seconds: float | None = None,
+        progress_seconds: float | None = None,
+        # Backward compatibility if content_id keyword arg is passed
+        content_id: str | None = None,
+        content_type: str | None = None,
     ) -> PlaybackHistory:
+        item_id = media_item_id or content_id or ""
+        resolved_media_id = media_id or (item_id.split(":")[0] if item_id else "")
         with self.db_manager.session() as session:
             entry = PlaybackHistory(
-                content_id=content_id,
-                content_type=content_type,
+                media_item_id=item_id,
+                media_id=resolved_media_id,
                 title=title,
                 poster=poster,
                 category=category,
                 source_link=source_link,
                 infohash=infohash,
                 file_index=file_index,
-                media_item_id=media_item_id,
                 played_at=time.time(),
+                duration_seconds=duration_seconds,
+                progress_seconds=progress_seconds,
             )
             session.add(entry)
             session.flush()
@@ -50,12 +57,12 @@ class PlaybackHistoryRepository:
             )
             all_records = list(session.scalars(query))
 
-            # Deduplicate by content_id preserving order (most recent first)
-            seen_content_ids = set()
+            # Deduplicate by media_item_id preserving order (most recent first)
+            seen_item_ids = set()
             unique_recent = []
             for record in all_records:
-                if record.content_id not in seen_content_ids:
-                    seen_content_ids.add(record.content_id)
+                if record.media_item_id not in seen_item_ids:
+                    seen_item_ids.add(record.media_item_id)
                     unique_recent.append(record)
                     if len(unique_recent) >= limit:
                         break

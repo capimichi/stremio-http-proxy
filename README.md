@@ -133,9 +133,9 @@ Le variabili possono essere impostate in un file `.env` o iniettate via containe
 | `TORRSERVER_BASIC_AUTH_PASSWORD` | - | Password autenticazione TorrServer (opzionale) |
 | `MEDIAFLOW_ENABLED` | `true` | Abilita il supporto a MediaFlow Proxy per stream HLS/HTTP |
 | `MEDIAFLOW_BASE_URL` | - | URL dell'istanza MediaFlow Proxy |
-| `MEDIAFLOW_API_PASSWORD` | - | Password API di MediaFlow Proxy |
+| `DATABASE_URL` | `sqlite:///var/db/cache.sqlite` | URL di connessione al database (es. `mysql+pymysql://user:pass@db:3306/stremio_http_proxy?charset=utf8mb4` per MariaDB) |
 | `LOCAL_CACHE_DIR` | `var/cache` | Cartella in cui salvare i file scaricati |
-| `SQLITE_PATH` | `var/db/cache.sqlite` | Percorso del database SQLite |
+| `SQLITE_PATH` | `var/db/cache.sqlite` | Percorso del database SQLite di fallback (se `DATABASE_URL` non specificato) |
 | `LOG_DIR` | `var/log` | Cartella per i file di log |
 | `LOCAL_CACHE_MAX_SIZE_GB` | `20` | Dimensione massima della cache locale prima dell'eviction LRU |
 | `LOCAL_CACHE_MAX_AGE_DAYS` | `7` | Giorni massimi di conservazione di un file non utilizzato |

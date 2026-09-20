@@ -1,7 +1,7 @@
 from sqlalchemy import Float, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from stremio_http_proxy.entity.cache_entry import Base
+from stremio_http_proxy.entity.base import Base
 
 
 class Media(Base):
@@ -13,7 +13,7 @@ class Media(Base):
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     type: Mapped[str] = mapped_column(String(32), nullable=False)  # "series" or "movie"
-    title: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
     year: Mapped[str | None] = mapped_column(String(16), nullable=True)
     poster: Mapped[str | None] = mapped_column(Text, nullable=True)
     backdrop: Mapped[str | None] = mapped_column(Text, nullable=True)

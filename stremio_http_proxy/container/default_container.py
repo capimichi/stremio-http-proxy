@@ -86,6 +86,7 @@ class DefaultContainer:
         self.log_dir = os.environ.get("LOG_DIR", "var/log")
         self.local_cache_dir = os.environ.get("LOCAL_CACHE_DIR", "var/cache")
         self.sqlite_path = os.environ.get("SQLITE_PATH", "var/db/cache.sqlite")
+        self.database_url = os.environ.get("DATABASE_URL")
         self.local_cache_max_age_days = int(os.environ.get("LOCAL_CACHE_MAX_AGE_DAYS", "7"))
         self.local_cache_max_size_gb = int(os.environ.get("LOCAL_CACHE_MAX_SIZE_GB", "20"))
         self.download_queue_poll_seconds = int(os.environ.get("DOWNLOAD_QUEUE_POLL_SECONDS", "1"))
@@ -137,7 +138,7 @@ class DefaultContainer:
             self.torrserver_basic_auth_password,
             internal_base_url=self.torrserver_internal_url,
         )
-        db_manager = DbManager(self.sqlite_path)
+        db_manager = DbManager(sqlite_path=self.sqlite_path, db_url=self.database_url)
         cache_manager = CacheManager(
             self.local_cache_dir,
             db_manager,
