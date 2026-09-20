@@ -68,6 +68,8 @@
 
 {% block scripts %}
 <script>
+const PLACEHOLDER_POSTER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 220'%3E%3Crect fill='%231e293b' width='150' height='220'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='12'%3ENo Poster%3C/text%3E%3C/svg%3E";
+
 const searchType = document.getElementById('search-type');
 const searchQuery = document.getElementById('search-query');
 const searchBtn = document.getElementById('search-btn');
@@ -113,13 +115,16 @@ async function fetchAndRenderResults(query, type, page, append) {
       const div = document.createElement('div');
       div.className = 'group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/60 p-2.5 transition-all hover:scale-[1.02] cursor-pointer flex flex-col justify-between shadow-md';
       
-      const poster = r.poster || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='220'><rect fill='%231e293b' width='150' height='220'/></svg>";
+      const poster = r.poster || PLACEHOLDER_POSTER;
       const year = r.year ? `<span class="text-[10px] text-slate-400 font-mono">${r.year}</span>` : '';
       
       div.innerHTML = `
-        <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-800">
-          <img class="w-full h-full object-cover group-hover:opacity-90 transition-opacity" src="${poster}" alt="" loading="lazy">
-          <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[10px] font-bold text-slate-200 uppercase">
+        <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 flex items-center justify-center">
+          <div class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700">
+            <i class="fa-solid fa-film text-xl"></i>
+          </div>
+          <img class="w-full h-full object-cover group-hover:opacity-90 transition-opacity relative z-10" src="${poster}" alt="" loading="lazy" onload="this.previousElementSibling && this.previousElementSibling.remove()" onerror="this.src='${PLACEHOLDER_POSTER}'; this.previousElementSibling && this.previousElementSibling.remove()">
+          <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[10px] font-bold text-slate-200 uppercase z-20">
             ${type === 'movie' ? 'Film' : 'Serie'}
           </div>
         </div>
@@ -133,8 +138,12 @@ async function fetchAndRenderResults(query, type, page, append) {
       `;
 
       div.onclick = async () => {
-        div.style.opacity = '0.6';
         div.style.pointerEvents = 'none';
+        const loadingOverlay = document.createElement('div');
+        loadingOverlay.className = 'absolute inset-0 bg-slate-950/80 backdrop-blur-xs rounded-xl flex flex-col items-center justify-center gap-2 z-30 text-indigo-400';
+        loadingOverlay.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xl"></i><span class="text-[11px] font-bold text-white tracking-wide">Apertura...</span>';
+        div.appendChild(loadingOverlay);
+
         try {
           const resolveResp = await fetch('/api/browser/resolve?tmdb_id=' + r.tmdb_id + '&type=' + type);
           const resolveData = await resolveResp.json();
@@ -142,12 +151,12 @@ async function fetchAndRenderResults(query, type, page, append) {
             await goToDetail(resolveData.imdb_id, type);
           } else {
             alert('IMDb ID non trovato su TMDB per questo titolo');
-            div.style.opacity = '1';
+            loadingOverlay.remove();
             div.style.pointerEvents = 'auto';
           }
         } catch (e) {
           alert('Errore durante la risoluzione del titolo: ' + e);
-          div.style.opacity = '1';
+          loadingOverlay.remove();
           div.style.pointerEvents = 'auto';
         }
       };

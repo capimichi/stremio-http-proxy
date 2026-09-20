@@ -30,8 +30,22 @@
   <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl">
     <div class="flex flex-col md:flex-row gap-6 items-start">
       <!-- Poster -->
-      <div class="w-36 sm:w-44 aspect-[2/3] rounded-xl overflow-hidden bg-slate-800 shrink-0 shadow-lg border border-slate-700/60">
-        <img id="detail-poster" src="" alt="Poster" class="w-full h-full object-cover">
+      <div class="relative w-36 sm:w-44 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 shadow-lg border border-slate-800 flex items-center justify-center">
+        <!-- Skeleton & Placeholder -->
+        <div id="detail-poster-skeleton" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center text-slate-500 animate-pulse z-0 {% if initial_media and initial_media.poster %}hidden{% endif %}">
+          <div class="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/50 flex items-center justify-center text-slate-400 mb-2 shadow-inner">
+            <i class="fa-solid fa-film text-xl"></i>
+          </div>
+          <span class="text-[11px] font-medium text-slate-400">Caricamento poster...</span>
+        </div>
+
+        <!-- Real Poster -->
+        <img
+          id="detail-poster"
+          src="{{ initial_media.poster if initial_media and initial_media.poster else '' }}"
+          alt="Poster"
+          class="w-full h-full object-cover relative z-10 transition-opacity duration-300 {% if not (initial_media and initial_media.poster) %}opacity-0{% endif %}"
+        >
       </div>
 
       <!-- Info & Metadata -->
@@ -41,16 +55,25 @@
             <span id="detail-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
               {{ "Film" if media_type == "movie" else "Serie TV" }}
             </span>
-            <span id="detail-year" class="text-xs text-slate-400 font-mono"></span>
+            <span id="detail-year" class="text-xs text-slate-400 font-mono">{{ initial_media.year if initial_media and initial_media.year else '' }}</span>
             <span id="detail-genres" class="text-xs text-slate-500"></span>
           </div>
 
-          <h2 id="detail-title" class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Caricamento...
-          </h2>
-          <p id="detail-overview" class="text-xs sm:text-sm text-slate-400 mt-2 line-clamp-3 leading-relaxed">
-            -
-          </p>
+          <!-- Skeletons for title & overview when loading without initial media -->
+          <div id="detail-title-skeleton" class="{% if initial_media and initial_media.title %}hidden{% endif %} space-y-2 mb-3">
+            <div class="h-8 bg-slate-800 rounded-lg w-2/3 animate-pulse"></div>
+            <div class="h-4 bg-slate-800 rounded w-full animate-pulse"></div>
+            <div class="h-4 bg-slate-800 rounded w-4/5 animate-pulse"></div>
+          </div>
+
+          <div id="detail-title-container" class="{% if not (initial_media and initial_media.title) %}hidden{% endif %}">
+            <h2 id="detail-title" class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              {{ initial_media.title if initial_media and initial_media.title else '' }}
+            </h2>
+            <p id="detail-overview" class="text-xs sm:text-sm text-slate-400 mt-2 line-clamp-3 leading-relaxed">
+              {{ initial_media.overview if initial_media and initial_media.overview else '' }}
+            </p>
+          </div>
         </div>
 
         <div class="flex flex-wrap items-center gap-3 pt-4 mt-4 border-t border-slate-800">
@@ -205,7 +228,12 @@
 const mediaType = '{{ media_type }}';
 const imdbId = '{{ imdb_id }}';
 
+const PLACEHOLDER_POSTER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 220'%3E%3Crect fill='%231e293b' width='150' height='220'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='12'%3ENo Poster%3C/text%3E%3C/svg%3E";
+
 const detailPoster = document.getElementById('detail-poster');
+const posterSkeleton = document.getElementById('detail-poster-skeleton');
+const titleSkeleton = document.getElementById('detail-title-skeleton');
+const titleContainer = document.getElementById('detail-title-container');
 const detailTitle = document.getElementById('detail-title');
 const detailYear = document.getElementById('detail-year');
 const detailGenres = document.getElementById('detail-genres');
@@ -215,6 +243,30 @@ const detailSeason = document.getElementById('detail-season');
 const detailEpisode = document.getElementById('detail-episode');
 const detailSeriesSection = document.getElementById('detail-series-section');
 const detailMovieSection = document.getElementById('detail-movie-section');
+
+function setPosterImage(src) {
+  if (!detailPoster) return;
+  if (!src) {
+    detailPoster.src = PLACEHOLDER_POSTER;
+    detailPoster.classList.remove('opacity-0');
+    if (posterSkeleton) posterSkeleton.classList.add('hidden');
+    return;
+  }
+  detailPoster.onload = () => {
+    detailPoster.classList.remove('opacity-0');
+    if (posterSkeleton) posterSkeleton.classList.add('hidden');
+  };
+  detailPoster.onerror = () => {
+    detailPoster.src = PLACEHOLDER_POSTER;
+    detailPoster.classList.remove('opacity-0');
+    if (posterSkeleton) posterSkeleton.classList.add('hidden');
+  };
+  detailPoster.src = src;
+  if (detailPoster.complete && detailPoster.naturalWidth > 0) {
+    detailPoster.classList.remove('opacity-0');
+    if (posterSkeleton) posterSkeleton.classList.add('hidden');
+  }
+}
 const loadStreamsBtn = document.getElementById('load-streams-btn');
 const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
 const cacheSeasonBtn = document.getElementById('cache-season-btn');
@@ -378,7 +430,7 @@ async function loadStreams(season, episode) {
 
     const meta = data.meta;
     if (meta) {
-      detailPoster.src = meta.poster || meta.background || '';
+      setPosterImage(meta.poster || meta.background || '');
       detailTitle.textContent = meta.name || meta.title || '';
     }
 
@@ -510,17 +562,28 @@ async function loadMeta() {
   metadataStore = meta;
 
   if (meta) {
-    detailPoster.src = meta.poster || meta.background || '';
-    detailTitle.textContent = meta.name || meta.title || 'Titolo';
+    setPosterImage(meta.poster || meta.background || '');
+    if (detailTitle) detailTitle.textContent = meta.name || meta.title || 'Titolo';
     if (meta.year || meta.releaseInfo) detailYear.textContent = meta.year || meta.releaseInfo;
     if (meta.genres && meta.genres.length) detailGenres.textContent = `• ${meta.genres.join(', ')}`;
     if (meta.description) detailOverview.textContent = meta.description;
+  } else {
+    setPosterImage('');
   }
+
+  if (titleSkeleton) titleSkeleton.classList.add('hidden');
+  if (titleContainer) titleContainer.classList.remove('hidden');
+
   return data;
 }
 
 async function init() {
   detailStremioLink.href = buildStremioUrl(mediaType, imdbId);
+
+  const initialSrc = detailPoster ? detailPoster.getAttribute('src') : '';
+  if (initialSrc) {
+    setPosterImage(initialSrc);
+  }
 
   const data = await loadMeta();
 

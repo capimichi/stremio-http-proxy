@@ -132,11 +132,22 @@ function renderHeroNowPlaying(item) {
   if (contentEl) contentEl.classList.remove("hidden");
 
   const posterImg = document.getElementById("hero-poster");
+  const posterSkeleton = document.getElementById("hero-poster-skeleton");
   if (posterImg) {
+    posterImg.onload = function () {
+      this.classList.remove("opacity-0");
+      if (posterSkeleton) posterSkeleton.classList.add("hidden");
+    };
     posterImg.onerror = function () {
       this.src = PLACEHOLDER_POSTER;
+      this.classList.remove("opacity-0");
+      if (posterSkeleton) posterSkeleton.classList.add("hidden");
     };
     posterImg.src = item.poster || PLACEHOLDER_POSTER;
+    if (posterImg.complete && posterImg.naturalWidth > 0) {
+      posterImg.classList.remove("opacity-0");
+      if (posterSkeleton) posterSkeleton.classList.add("hidden");
+    }
   }
 
   const mediaBadge = document.getElementById("hero-media-badge");

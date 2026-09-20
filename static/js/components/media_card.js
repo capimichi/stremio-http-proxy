@@ -17,13 +17,17 @@ export class MediaCard {
       <div class="group relative rounded-2xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-2.5 transition-all duration-200 hover:scale-[1.02] flex flex-col justify-between shadow-lg hover:shadow-indigo-500/10">
         
         <!-- Poster container -->
-        <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 border border-slate-800/60">
+        <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 border border-slate-800/60 flex items-center justify-center">
+          <div class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700 pointer-events-none">
+            <i class="fa-solid fa-film text-xl"></i>
+          </div>
           <img
             src="${poster}"
             alt="${title}"
-            class="w-full h-full object-cover group-hover:opacity-95 transition-opacity"
+            class="w-full h-full object-cover group-hover:opacity-95 transition-opacity relative z-10"
             loading="lazy"
-            onerror="this.src='${PLACEHOLDER_POSTER}'"
+            onload="this.previousElementSibling && this.previousElementSibling.remove()"
+            onerror="this.src='${PLACEHOLDER_POSTER}'; this.previousElementSibling && this.previousElementSibling.remove()"
           >
 
           <!-- Top Badges -->
@@ -101,8 +105,11 @@ export class MediaCard {
     return `
       <a href="/dashboard/browser/${item.content_type}/${item.imdb_id}" class="group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-2 transition-all hover:scale-[1.02] flex flex-col justify-between shadow-md">
         <!-- Poster container -->
-        <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-800">
-          <img src="${poster}" alt="${displayTitle}" class="w-full h-full object-cover group-hover:opacity-90 transition-opacity" loading="lazy" onerror="this.src='${PLACEHOLDER_POSTER}'">
+        <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 flex items-center justify-center">
+          <div class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700 pointer-events-none">
+            <i class="fa-solid fa-film text-lg"></i>
+          </div>
+          <img src="${poster}" alt="${displayTitle}" class="w-full h-full object-cover group-hover:opacity-90 transition-opacity relative z-10" loading="lazy" onload="this.previousElementSibling && this.previousElementSibling.remove()" onerror="this.src='${PLACEHOLDER_POSTER}'; this.previousElementSibling && this.previousElementSibling.remove()">
           
           <!-- Top Badges -->
           <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[10px] font-bold text-slate-200">

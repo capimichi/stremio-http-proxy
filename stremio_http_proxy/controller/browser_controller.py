@@ -46,7 +46,20 @@ class BrowserController:
         return HTMLResponse(self.jinja_manager.render("dashboard/pages/browser.html"))
 
     async def browser_detail_page(self, media_type: str, imdb_id: str) -> HTMLResponse:
-        return HTMLResponse(self.jinja_manager.render("dashboard/pages/browser_detail.html", media_type=media_type, imdb_id=imdb_id))
+        initial_media = None
+        if self.media_repository:
+            try:
+                initial_media = self.media_repository.get_media(imdb_id)
+            except Exception:
+                initial_media = None
+        return HTMLResponse(
+            self.jinja_manager.render(
+                "dashboard/pages/browser_detail.html",
+                media_type=media_type,
+                imdb_id=imdb_id,
+                initial_media=initial_media,
+            )
+        )
 
     async def search_content(self, q: str, type: str = "movie", page: int = 1) -> dict:
         return await self.content_browser_service.search_content(q, type, page)

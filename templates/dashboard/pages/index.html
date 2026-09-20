@@ -23,9 +23,12 @@
 
       <!-- Real Content (populated by JS) -->
       <div id="hero-content" class="hidden flex flex-col sm:flex-row gap-5 sm:gap-6 items-start">
-        <div class="relative w-28 sm:w-32 h-40 sm:h-44 rounded-xl overflow-hidden bg-slate-800 shrink-0 shadow-lg border border-slate-700/50">
-          <img id="hero-poster" src="" alt="Poster" class="w-full h-full object-cover">
-          <div id="hero-media-badge" class="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/70 text-slate-200 backdrop-blur-md">
+        <div class="relative w-28 sm:w-32 h-40 sm:h-44 rounded-xl overflow-hidden bg-slate-950 shrink-0 shadow-lg border border-slate-700/50 flex items-center justify-center">
+          <div id="hero-poster-skeleton" class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700 pointer-events-none">
+            <i class="fa-solid fa-film text-2xl"></i>
+          </div>
+          <img id="hero-poster" src="" alt="Poster" class="w-full h-full object-cover relative z-10 opacity-0 transition-opacity duration-300">
+          <div id="hero-media-badge" class="absolute top-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-black/70 text-slate-200 backdrop-blur-md z-20">
             Serie
           </div>
         </div>
