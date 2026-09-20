@@ -1,60 +1,202 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "browser" %}
-{% block title %}{{ imdb_id }} - Stremio HTTP Proxy{% endblock %}
+{% block title %}{{ imdb_id }} - Dettaglio Media{% endblock %}
 {% block page_title %}Dettaglio Media{% endblock %}
 
 {% block content %}
-<div class="rounded-xl border bg-white shadow-sm">
-  <div class="border-b px-5 py-4 flex items-center gap-3">
-    <a href="/dashboard/browser" class="text-indigo-600 hover:text-indigo-800 text-sm font-medium">&larr; Torna alla ricerca</a>
-    <h2 class="text-lg font-semibold text-gray-900">Dettaglio Media</h2>
+<div class="space-y-6 max-w-7xl mx-auto">
+
+  <!-- Breadcrumb & Back -->
+  <div class="flex items-center justify-between">
+    <a href="/dashboard/browser" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors">
+      <i class="fa-solid fa-arrow-left text-[10px]"></i>
+      <span>Torna alla ricerca</span>
+    </a>
+    <span class="text-xs font-mono text-slate-500" id="top-imdb-id">IMDb: {{ imdb_id }}</span>
   </div>
-  <div class="p-5 space-y-4">
-    <div id="content-detail">
-      <div class="flex items-start gap-4 p-4 bg-gray-50 rounded-lg">
-        <img id="detail-poster" class="w-24 h-36 rounded object-cover bg-gray-200" src="" alt="">
-        <div>
-          <h3 id="detail-title" class="text-lg font-semibold text-gray-900"></h3>
-          <p id="detail-imdb" class="text-sm text-gray-500 mt-1"></p>
-          <div class="flex gap-2 mt-2">
-            <a id="detail-stremio-link" href="#" target="_blank" class="inline-block rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700">Apri in Stremio</a>
-          </div>
-          <div id="detail-series-controls" class="hidden mt-3 flex gap-3">
-            <div>
-              <label class="block text-xs font-medium text-gray-500 mb-1">Stagione</label>
-              <select id="detail-season" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"></select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-500 mb-1">Episodio</label>
-              <select id="detail-episode" class="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"></select>
-            </div>
-            <div class="flex items-end">
-              <button id="load-streams-btn" class="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Carica stream</button>
-            </div>
-          </div>
-          <button id="load-streams-movie-btn" class="hidden mt-3 rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Carica stream</button>
-        </div>
+
+  <!-- Notification Banner for Batch Caching -->
+  <div id="batch-toast" class="hidden p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-300 flex items-center justify-between transition-all">
+    <div class="flex items-center gap-2.5">
+      <i class="fa-solid fa-circle-check text-indigo-400 text-sm"></i>
+      <span id="batch-toast-message">Operazione completata con successo.</span>
+    </div>
+    <button type="button" onclick="document.getElementById('batch-toast').classList.add('hidden')" class="text-slate-400 hover:text-white">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+
+  <!-- MEDIA HERO CARD -->
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl">
+    <div class="flex flex-col md:flex-row gap-6 items-start">
+      <!-- Poster -->
+      <div class="w-36 sm:w-44 aspect-[2/3] rounded-xl overflow-hidden bg-slate-800 shrink-0 shadow-lg border border-slate-700/60">
+        <img id="detail-poster" src="" alt="Poster" class="w-full h-full object-cover">
       </div>
 
-      <div id="streams-section" class="hidden mt-4">
-        <h4 class="text-sm font-semibold text-gray-700 mb-2">Stream disponibili</h4>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b bg-gray-50 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                <th class="px-4 py-2">Nome</th>
-                <th class="px-4 py-2">Descrizione</th>
-                <th class="px-4 py-2">Infohash</th>
-                <th class="px-4 py-2">Seeders</th>
-                <th class="px-4 py-2">Azioni</th>
-              </tr>
-            </thead>
-            <tbody id="streams-tbody" class="divide-y"></tbody>
-          </table>
+      <!-- Info & Metadata -->
+      <div class="flex-1 min-w-0 flex flex-col justify-between self-stretch">
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-2">
+            <span id="detail-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              {{ "Film" if media_type == "movie" else "Serie TV" }}
+            </span>
+            <span id="detail-year" class="text-xs text-slate-400 font-mono"></span>
+            <span id="detail-genres" class="text-xs text-slate-500"></span>
+          </div>
+
+          <h2 id="detail-title" class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Caricamento...
+          </h2>
+          <p id="detail-overview" class="text-xs sm:text-sm text-slate-400 mt-2 line-clamp-3 leading-relaxed">
+            -
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 pt-4 mt-4 border-t border-slate-800">
+          <a
+            id="detail-stremio-link"
+            href="#"
+            target="_blank"
+            class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-orange-600/20 transition-all hover:scale-[1.02]"
+          >
+            <i class="fa-solid fa-play text-[10px]"></i>
+            <span>Apri in Stremio</span>
+          </a>
+
+          <a
+            id="detail-imdb-link"
+            href="https://www.imdb.com/title/{{ imdb_id }}"
+            target="_blank"
+            class="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3.5 py-2 text-xs font-semibold text-slate-300 transition-colors"
+          >
+            <i class="fa-brands fa-imdb text-amber-400 text-sm"></i>
+            <span>Scheda IMDb</span>
+          </a>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- SERIES CONTROLS & BATCH CACHING BAR (Only for Series) -->
+  <div id="detail-series-section" class="hidden rounded-2xl bg-slate-900 border border-slate-800/80 p-5 shadow-xl space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div class="flex items-center gap-3">
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Seleziona Stagione</label>
+          <select id="detail-season" class="rounded-xl bg-slate-950 border border-slate-700 px-3.5 py-2 text-xs font-semibold text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Episodio</label>
+          <select id="detail-episode" class="rounded-xl bg-slate-950 border border-slate-700 px-3.5 py-2 text-xs font-semibold text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+          </select>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-wrap items-center gap-2.5">
+        <!-- 1-Click Season Batch Cache Button -->
+        <button
+          id="cache-season-btn"
+          type="button"
+          class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 px-4 py-2 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.02]"
+        >
+          <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
+          <span id="cache-season-label">Metti in cache tutta la Stagione</span>
+        </button>
+
+        <!-- 1-Click Episode Cache Button -->
+        <button
+          id="cache-episode-btn"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3.5 py-2 text-xs font-semibold text-slate-200 transition-colors"
+        >
+          <i class="fa-solid fa-arrow-down text-indigo-400"></i>
+          <span>Cache solo questo Episodio</span>
+        </button>
+
+        <button
+          id="load-streams-btn"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-all shadow-sm shadow-indigo-600/30"
+        >
+          <i class="fa-solid fa-list-ul"></i>
+          <span>Carica Flussi Upstream</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Cached Status for Current Episode -->
+    <div id="episode-cache-status-bar" class="flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
+      <div class="flex items-center gap-2">
+        <span class="text-slate-400">Stato cache episodio selezionato:</span>
+        <span id="episode-cache-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+          In verifica...
+        </span>
+      </div>
+      <div id="episode-streams-detail" class="text-slate-400 font-mono text-[11px]"></div>
+    </div>
+  </div>
+
+  <!-- MOVIE STREAM TRIGGER (Only for Movie) -->
+  <div id="detail-movie-section" class="hidden rounded-2xl bg-slate-900 border border-slate-800/80 p-5 shadow-xl flex items-center justify-between">
+    <div>
+      <h3 class="text-sm font-bold text-white">Stream & Flussi per questo Film</h3>
+      <p class="text-xs text-slate-400 mt-0.5">Visualizza i flussi trovati dall'addon o mettilo direttamente in download</p>
+    </div>
+    <div class="flex items-center gap-2.5">
+      <button
+        id="cache-movie-btn"
+        type="button"
+        class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 px-4 py-2 text-xs font-bold text-white shadow-md transition-all hover:scale-[1.02]"
+      >
+        <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
+        <span>Metti in cache Film</span>
+      </button>
+
+      <button
+        id="load-streams-movie-btn"
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-all shadow-sm"
+      >
+        <i class="fa-solid fa-list-ul"></i>
+        <span>Carica Flussi Upstream</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- STREAMS LIST SECTION -->
+  <div id="streams-section" class="hidden rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden">
+    <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-network-wired text-indigo-400 text-sm"></i>
+        <h3 class="text-sm font-bold text-white tracking-wide">
+          Flussi & Torrent Disponibili dall'Addon
+        </h3>
+        <span id="streams-count-badge" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">0</span>
+      </div>
+      <span class="text-xs text-slate-500">I flussi contrassegnati con 🔥 sono pronti o in Debrid</span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+          <tr>
+            <th class="px-5 py-3">Nome / Release</th>
+            <th class="px-5 py-3">Descrizione</th>
+            <th class="px-5 py-3">Infohash</th>
+            <th class="px-5 py-3">Seeders</th>
+            <th class="px-5 py-3 text-right">Azioni & Whitelist</th>
+          </tr>
+        </thead>
+        <tbody id="streams-tbody" class="divide-y divide-slate-800/60 bg-slate-900/40">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
@@ -65,17 +207,40 @@ const imdbId = '{{ imdb_id }}';
 
 const detailPoster = document.getElementById('detail-poster');
 const detailTitle = document.getElementById('detail-title');
-const detailImdb = document.getElementById('detail-imdb');
+const detailYear = document.getElementById('detail-year');
+const detailGenres = document.getElementById('detail-genres');
+const detailOverview = document.getElementById('detail-overview');
 const detailStremioLink = document.getElementById('detail-stremio-link');
 const detailSeason = document.getElementById('detail-season');
 const detailEpisode = document.getElementById('detail-episode');
-const detailSeriesControls = document.getElementById('detail-series-controls');
+const detailSeriesSection = document.getElementById('detail-series-section');
+const detailMovieSection = document.getElementById('detail-movie-section');
 const loadStreamsBtn = document.getElementById('load-streams-btn');
 const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
+const cacheSeasonBtn = document.getElementById('cache-season-btn');
+const cacheSeasonLabel = document.getElementById('cache-season-label');
+const cacheEpisodeBtn = document.getElementById('cache-episode-btn');
+const cacheMovieBtn = document.getElementById('cache-movie-btn');
 const streamsSection = document.getElementById('streams-section');
 const streamsTbody = document.getElementById('streams-tbody');
+const streamsCountBadge = document.getElementById('streams-count-badge');
+const episodeCacheBadge = document.getElementById('episode-cache-badge');
+const episodeStreamsDetail = document.getElementById('episode-streams-detail');
+const batchToast = document.getElementById('batch-toast');
+const batchToastMessage = document.getElementById('batch-toast-message');
 
 let currentWhitelist = [];
+let metadataStore = null;
+
+function showToast(msg) {
+  if (batchToast && batchToastMessage) {
+    batchToastMessage.textContent = msg;
+    batchToast.classList.remove('hidden');
+    setTimeout(() => {
+      batchToast.classList.add('hidden');
+    }, 6000);
+  }
+}
 
 function buildStremioUrl(type, id, season, episode) {
   if (type === 'movie') {
@@ -86,181 +251,331 @@ function buildStremioUrl(type, id, season, episode) {
   return 'stremio://detail/series/' + id;
 }
 
+// Check current episode cache status via /api/hub/media-streams
+async function checkCurrentEpisodeCacheStatus() {
+  const currentSeason = mediaType === 'series' ? parseInt(detailSeason.value) : null;
+  const currentEpisode = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
+  const contentId = mediaType === 'series' && currentSeason && currentEpisode
+    ? `${imdbId}:${currentSeason}:${currentEpisode}`
+    : imdbId;
+
+  try {
+    const resp = await fetch(`/api/hub/media-streams/${contentId}`);
+    if (resp.ok) {
+      const data = await resp.json();
+      const streams = data.streams || [];
+      if (streams.length === 0) {
+        episodeCacheBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700';
+        episodeCacheBadge.innerHTML = '<i class="fa-solid fa-circle-notch text-[9px]"></i> Non in Cache';
+        episodeStreamsDetail.textContent = 'Nessun flusso salvato su disco';
+      } else {
+        const readyStreams = streams.filter(s => s.status === 'ready');
+        const downStreams = streams.filter(s => s.status === 'downloading' || s.status === 'processing');
+        if (readyStreams.length > 0) {
+          episodeCacheBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+          episodeCacheBadge.innerHTML = `<i class="fa-solid fa-check text-[9px]"></i> Pronto in Cache (${readyStreams.length} stream)`;
+          episodeStreamsDetail.textContent = `${(readyStreams[0].size_bytes / (1024*1024*1024)).toFixed(1)} GB su disco`;
+        } else if (downStreams.length > 0) {
+          const s = downStreams[0];
+          episodeCacheBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20 animate-pulse';
+          episodeCacheBadge.innerHTML = `<i class="fa-solid fa-arrow-down text-[9px]"></i> In Download (${Math.round(s.progress_percent || 0)}%)`;
+          episodeStreamsDetail.textContent = 'Download in corso sul server';
+        } else {
+          episodeCacheBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+          episodeCacheBadge.innerHTML = '<i class="fa-solid fa-clock text-[9px]"></i> In Coda';
+          episodeStreamsDetail.textContent = 'In attesa del download worker';
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Errore check status episodio:', e);
+  }
+}
+
+// 1-Click Season Cache Action
+async function triggerCacheSeason() {
+  const seasonVal = parseInt(detailSeason.value);
+  if (!seasonVal) return;
+
+  let totalEpisodes = 10;
+  if (metadataStore && metadataStore.videos) {
+    const eps = metadataStore.videos.filter(v => v.season === seasonVal && v.episode);
+    if (eps.length > 0) totalEpisodes = eps.length;
+  }
+
+  cacheSeasonBtn.disabled = true;
+  cacheSeasonBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Accodamento in corso...</span>';
+
+  try {
+    const resp = await fetch('/api/browser/cache-season', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content_id: imdbId,
+        season: seasonVal,
+        total_episodes: totalEpisodes,
+        category: 'tv',
+      }),
+    });
+    const res = await resp.json();
+    if (res.success) {
+      showToast(`✅ Stagione ${seasonVal}: tutti i ${res.enqueued_count} episodi sono stati accodati per il pre-caching in background!`);
+      await checkCurrentEpisodeCacheStatus();
+    } else {
+      alert('Errore: ' + (res.error || 'Impossibile accodare la stagione'));
+    }
+  } catch (e) {
+    alert('Errore di connessione: ' + e);
+  } finally {
+    cacheSeasonBtn.disabled = false;
+    cacheSeasonBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-xs"></i> <span>Metti in cache tutta la Stagione</span>';
+  }
+}
+
+// 1-Click Episode Cache Action
+async function triggerCacheEpisode() {
+  const seasonVal = mediaType === 'series' ? parseInt(detailSeason.value) : null;
+  const episodeVal = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
+
+  try {
+    const resp = await fetch('/api/browser/cache-episode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content_id: imdbId,
+        season: seasonVal,
+        episode: episodeVal,
+        content_type: mediaType,
+      }),
+    });
+    const res = await resp.json();
+    if (res.success) {
+      showToast(`✅ Episodio accodato con successo per il caching!`);
+      await checkCurrentEpisodeCacheStatus();
+    }
+  } catch (e) {
+    alert('Errore: ' + e);
+  }
+}
+
 async function loadStreams(season, episode) {
   const params = new URLSearchParams({ type: mediaType, id: imdbId });
   if (mediaType === 'series' && season != null) {
     params.set('season', season);
     params.set('episode', episode);
   }
-  const resp = await fetch('/api/browser/content?' + params.toString());
-  const data = await resp.json();
-  currentWhitelist = data.whitelist || [];
 
-  const meta = data.meta;
-  if (meta) {
-    detailPoster.src = meta.poster || meta.background || '';
-    detailTitle.textContent = meta.name || meta.title || '';
+  const btn = mediaType === 'series' ? loadStreamsBtn : loadStreamsMovieBtn;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Caricamento flussi...</span>';
   }
 
-  const tbody = streamsTbody;
-  tbody.innerHTML = '';
-  const streams = data.streams || [];
-  if (streams.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-400">Nessuno stream disponibile</td></tr>';
-  } else {
-    for (const s of streams) {
-      const tr = document.createElement('tr');
-      tr.className = 'border-b';
+  try {
+    const resp = await fetch('/api/browser/content?' + params.toString());
+    const data = await resp.json();
+    currentWhitelist = data.whitelist || [];
 
-      const infohash = s.infohash || '-';
-      const shortHash = infohash.length > 16 ? infohash.slice(0, 16) + '…' : infohash;
-      const seeders = s.meta?.seeders ?? '-';
-      const cached = s.meta?.cached ? '🔥' : '';
-      const playUrl = s.url || '#';
-
-      const episodeScope = mediaType === 'series' ? episode : null;
-      const seasonScope = mediaType === 'series' ? season : null;
-
-      const whitelistedEpisode = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === episodeScope);
-      const whitelistedSeason = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === null);
-      const whitelistedAll = currentWhitelist.some(w => w.infohash === infohash && w.season === null && w.episode === null);
-      const anyWhitelisted = whitelistedEpisode || whitelistedSeason || whitelistedAll;
-
-      tr.innerHTML = `
-        <td class="px-4 py-2" title="${(s.title || s.name || '').replace(/"/g, '&quot;')}">${cached} ${s.name || s.title || ''}</td>
-        <td class="px-4 py-2 max-w-[300px] truncate" title="${(s.description || '').replace(/"/g, '&quot;')}">${s.description || ''}</td>
-        <td class="px-4 py-2 font-mono text-xs text-gray-500">${shortHash}</td>
-        <td class="px-4 py-2">${seeders}</td>
-        <td class="px-4 py-2">
-          <div class="flex items-center gap-2">
-            <a href="${playUrl}" target="_blank" class="text-indigo-600 hover:text-indigo-800" title="Play"><i class="fa-solid fa-play"></i></a>
-            <div class="relative wl-dropdown-container">
-              <button class="wl-toggle text-sm ${anyWhitelisted ? 'text-green-600' : 'text-gray-400 hover:text-indigo-600'}" title="Whitelist">
-                <i class="fa-solid fa-bookmark"></i>
-              </button>
-              <div class="wl-menu hidden absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[180px]">
-                <button class="wl-item flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-gray-50" data-scope="all" data-infohash="${infohash}">
-                  ${whitelistedAll ? '<i class="fa-solid fa-check text-green-600 w-4"></i>' : '<span class="w-4"></span>'}
-                  Intero Media
-                </button>
-                ${mediaType === 'series' ? `
-                  <button class="wl-item flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-gray-50" data-scope="season" data-infohash="${infohash}">
-                    ${whitelistedSeason ? '<i class="fa-solid fa-check text-green-600 w-4"></i>' : '<span class="w-4"></span>'}
-                    Intera Stagione
-                  </button>
-                  <button class="wl-item flex items-center gap-2 w-full px-3 py-2 text-xs text-left hover:bg-gray-50" data-scope="episode" data-infohash="${infohash}">
-                    ${whitelistedEpisode ? '<i class="fa-solid fa-check text-green-600 w-4"></i>' : '<span class="w-4"></span>'}
-                    Singolo Episodio
-                  </button>
-                ` : ''}
-              </div>
-            </div>
-          </div>
-        </td>
-      `;
-      tbody.appendChild(tr);
+    const meta = data.meta;
+    if (meta) {
+      detailPoster.src = meta.poster || meta.background || '';
+      detailTitle.textContent = meta.name || meta.title || '';
     }
 
-    document.addEventListener('click', function closeWlMenu(e) {
-      document.querySelectorAll('.wl-menu:not(.hidden)').forEach(menu => {
-        if (!menu.closest('.wl-dropdown-container')?.contains(e.target)) {
-          menu.classList.add('hidden');
-        }
-      });
-    });
+    const tbody = streamsTbody;
+    tbody.innerHTML = '';
+    const streams = data.streams || [];
+    streamsCountBadge.textContent = streams.length;
 
-    document.querySelectorAll('.wl-toggle').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.stopPropagation();
-        const menu = this.closest('.wl-dropdown-container').querySelector('.wl-menu');
-        menu.classList.toggle('hidden');
-      });
-    });
+    if (streams.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-8 text-center text-slate-500">Nessuno stream restituito dall\'addon upstream</td></tr>';
+    } else {
+      for (const s of streams) {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition-colors';
 
-    document.querySelectorAll('.wl-item').forEach(btn => {
-      btn.addEventListener('click', async function() {
-        const container = this.closest('.wl-dropdown-container');
-        const toggle = container.querySelector('.wl-toggle');
-        const infohash = this.dataset.infohash;
-        const scope = this.dataset.scope;
-        const currentSeason = mediaType === 'series' ? parseInt(detailSeason.value) : null;
-        const currentEpisode = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
+        const infohash = s.infohash || '-';
+        const shortHash = infohash.length > 14 ? infohash.slice(0, 14) + '…' : infohash;
+        const seeders = s.meta?.seeders ?? '-';
+        const cached = s.meta?.cached ? '🔥' : '';
+        const playUrl = s.url || '#';
 
-        let seasonVal, episodeVal;
-        if (scope === 'all') {
-          seasonVal = null;
-          episodeVal = null;
-        } else if (scope === 'season') {
-          seasonVal = currentSeason;
-          episodeVal = null;
-        } else {
-          seasonVal = currentSeason;
-          episodeVal = currentEpisode;
-        }
+        const episodeScope = mediaType === 'series' ? episode : null;
+        const seasonScope = mediaType === 'series' ? season : null;
 
-        const title = detailTitle.textContent;
+        const whitelistedEpisode = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === episodeScope);
+        const whitelistedSeason = currentWhitelist.some(w => w.infohash === infohash && w.season === seasonScope && w.episode === null);
+        const whitelistedAll = currentWhitelist.some(w => w.infohash === infohash && w.season === null && w.episode === null);
+        const anyWhitelisted = whitelistedEpisode || whitelistedSeason || whitelistedAll;
 
-        await fetch('/api/whitelist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ infohash, imdb_id: imdbId, media_title: title, season: seasonVal, episode: episodeVal }),
+        tr.innerHTML = `
+          <td class="px-5 py-3 text-slate-200 font-semibold max-w-xs truncate" title="${(s.title || s.name || '').replace(/"/g, '&quot;')}">
+            <span class="mr-1">${cached}</span> ${s.name || s.title || 'Stream'}
+          </td>
+          <td class="px-5 py-3 text-slate-400 max-w-sm truncate" title="${(s.description || '').replace(/"/g, '&quot;')}">
+            ${s.description || '-'}
+          </td>
+          <td class="px-5 py-3 font-mono text-[11px] text-slate-500">${shortHash}</td>
+          <td class="px-5 py-3 font-mono text-slate-300">${seeders}</td>
+          <td class="px-5 py-3 text-right">
+            <div class="flex items-center justify-end gap-2.5">
+              <a href="${playUrl}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors" title="Play">
+                <i class="fa-solid fa-play text-[10px]"></i>
+                <span>Play</span>
+              </a>
+
+              <div class="relative wl-dropdown-container">
+                <button class="wl-toggle inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-2.5 py-1 text-xs font-medium ${anyWhitelisted ? 'text-emerald-400 border-emerald-500/40' : 'text-slate-300'}" title="Aggiungi a Whitelist">
+                  <i class="fa-solid fa-bookmark text-[10px]"></i>
+                  <span>${anyWhitelisted ? 'Whitelisted' : 'Whitelist'}</span>
+                </button>
+                <div class="wl-menu hidden absolute right-0 top-full mt-1.5 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1.5 min-w-[200px] text-xs">
+                  <button class="wl-item flex items-center gap-2 w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800" data-scope="all" data-infohash="${infohash}">
+                    ${whitelistedAll ? '<i class="fa-solid fa-check text-emerald-400 w-4"></i>' : '<span class="w-4"></span>'}
+                    Intero Media
+                  </button>
+                  ${mediaType === 'series' ? `
+                    <button class="wl-item flex items-center gap-2 w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800" data-scope="season" data-infohash="${infohash}">
+                      ${whitelistedSeason ? '<i class="fa-solid fa-check text-emerald-400 w-4"></i>' : '<span class="w-4"></span>'}
+                      Intera Stagione
+                    </button>
+                    <button class="wl-item flex items-center gap-2 w-full px-3.5 py-2 text-left text-slate-200 hover:bg-slate-800" data-scope="episode" data-infohash="${infohash}">
+                      ${whitelistedEpisode ? '<i class="fa-solid fa-check text-emerald-400 w-4"></i>' : '<span class="w-4"></span>'}
+                      Singolo Episodio
+                    </button>
+                  ` : ''}
+                </div>
+              </div>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      document.querySelectorAll('.wl-toggle').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const menu = this.closest('.wl-dropdown-container').querySelector('.wl-menu');
+          menu.classList.toggle('hidden');
         });
-        container.querySelector('.wl-menu').classList.add('hidden');
-        await loadStreams(currentSeason, currentEpisode);
       });
-    });
-  }
 
-  streamsSection.classList.remove('hidden');
+      document.querySelectorAll('.wl-item').forEach(btn => {
+        btn.addEventListener('click', async function() {
+          const container = this.closest('.wl-dropdown-container');
+          const infohash = this.dataset.infohash;
+          const scope = this.dataset.scope;
+          const currentSeason = mediaType === 'series' ? parseInt(detailSeason.value) : null;
+          const currentEpisode = mediaType === 'series' ? parseInt(detailEpisode.value) : null;
+
+          let seasonVal, episodeVal;
+          if (scope === 'all') {
+            seasonVal = null;
+            episodeVal = null;
+          } else if (scope === 'season') {
+            seasonVal = currentSeason;
+            episodeVal = null;
+          } else {
+            seasonVal = currentSeason;
+            episodeVal = currentEpisode;
+          }
+
+          const title = detailTitle.textContent;
+
+          await fetch('/api/whitelist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ infohash, imdb_id: imdbId, media_title: title, season: seasonVal, episode: episodeVal }),
+          });
+          container.querySelector('.wl-menu').classList.add('hidden');
+          showToast(`✅ Regola di whitelist salvata per questo flusso!`);
+          await loadStreams(currentSeason, currentEpisode);
+        });
+      });
+    }
+
+    streamsSection.classList.remove('hidden');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-list-ul"></i> <span>Carica Flussi Upstream</span>';
+    }
+  }
 }
 
 async function loadMeta() {
   const resp = await fetch('/api/browser/content?type=' + mediaType + '&id=' + imdbId);
   const data = await resp.json();
   const meta = data.meta;
+  metadataStore = meta;
+
   if (meta) {
     detailPoster.src = meta.poster || meta.background || '';
-    detailTitle.textContent = meta.name || meta.title || '';
+    detailTitle.textContent = meta.name || meta.title || 'Titolo';
+    if (meta.year || meta.releaseInfo) detailYear.textContent = meta.year || meta.releaseInfo;
+    if (meta.genres && meta.genres.length) detailGenres.textContent = `• ${meta.genres.join(', ')}`;
+    if (meta.description) detailOverview.textContent = meta.description;
   }
   return data;
 }
 
 async function init() {
-  detailImdb.textContent = 'IMDB: ' + imdbId;
   detailStremioLink.href = buildStremioUrl(mediaType, imdbId);
 
   const data = await loadMeta();
 
   if (mediaType === 'movie') {
-    loadStreamsMovieBtn.classList.remove('hidden');
+    detailMovieSection.classList.remove('hidden');
     loadStreamsMovieBtn.onclick = () => loadStreams(null, null);
+    cacheMovieBtn.onclick = triggerCacheEpisode;
   } else {
-    detailSeriesControls.classList.remove('hidden');
+    detailSeriesSection.classList.remove('hidden');
     const meta = data.meta;
+
     async function loadEpisodes() {
       const seasonVal = detailSeason.value;
+      if (cacheSeasonLabel) {
+        cacheSeasonLabel.textContent = `Metti in cache tutta la Stagione ${seasonVal}`;
+      }
+
       const params = new URLSearchParams({ type: 'series', id: imdbId, season: seasonVal, episode: '1' });
       const resp = await fetch('/api/browser/content?' + params.toString());
-      const data = await resp.json();
-      const meta = data.meta;
-      if (meta && meta.videos) {
+      const resData = await resp.json();
+      const metaRes = resData.meta;
+      if (metaRes && metaRes.videos) {
         const seasonNum = parseInt(seasonVal);
-        const eps = meta.videos.filter(v => v.season === seasonNum && v.episode);
-        detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}</option>`).join('');
+        const eps = metaRes.videos.filter(v => v.season === seasonNum && v.episode);
+        detailEpisode.innerHTML = eps.map(e => `<option value="${e.episode}">Episodio ${e.episode}${e.name ? ' - ' + e.name : ''}</option>`).join('');
       }
+      await checkCurrentEpisodeCacheStatus();
     }
+
     if (meta && meta.videos) {
       const seasons = [...new Set(meta.videos.filter(v => v.season).map(v => v.season))].sort((a,b) => a-b);
       detailSeason.innerHTML = seasons.map(s => `<option value="${s}">Stagione ${s}</option>`).join('');
       detailSeason.onchange = loadEpisodes;
+      detailEpisode.onchange = checkCurrentEpisodeCacheStatus;
       await loadEpisodes();
     }
+
     loadStreamsBtn.onclick = () => {
       const seasonVal = parseInt(detailSeason.value);
       const episodeVal = parseInt(detailEpisode.value);
       loadStreams(seasonVal, episodeVal);
     };
+
+    cacheSeasonBtn.onclick = triggerCacheSeason;
+    cacheEpisodeBtn.onclick = triggerCacheEpisode;
   }
+
+  // Close menus on outside click
+  document.addEventListener('click', function(e) {
+    document.querySelectorAll('.wl-menu:not(.hidden)').forEach(menu => {
+      if (!menu.closest('.wl-dropdown-container')?.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
+  });
 }
 
 init();

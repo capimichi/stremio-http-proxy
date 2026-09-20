@@ -1,36 +1,68 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "browser" %}
-{% block title %}Browser - Stremio HTTP Proxy{% endblock %}
-{% block page_title %}Browser Media{% endblock %}
+{% block title %}Esplora Catalogo - Stremio Media Hub{% endblock %}
+{% block page_title %}Esplora & Cerca Media{% endblock %}
 
 {% block content %}
-<div class="rounded-xl border bg-white shadow-sm">
-  <div class="border-b px-5 py-4">
-    <h2 class="text-lg font-semibold text-gray-900">Cerca media</h2>
-  </div>
-  <div class="p-5 space-y-4">
-    <div class="flex flex-wrap items-end gap-3">
+<div class="space-y-6 max-w-7xl mx-auto">
+
+  <!-- Search Card -->
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pb-4 mb-4 border-b border-slate-800">
       <div>
-        <label class="block text-xs font-medium text-gray-500 mb-1">Tipo</label>
-        <select id="search-type" class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
-          <option value="movie">Film</option>
-          <option value="series">Serie TV</option>
-        </select>
+        <h2 class="text-base font-bold text-white tracking-wide">Cerca Titoli o IMDb ID</h2>
+        <p class="text-xs text-slate-400 mt-0.5">Cerca film o serie TV su TMDB o inserisci direttamente un codice IMDb (es. tt0944947)</p>
       </div>
-      <div class="flex-1 min-w-[200px]">
-        <label class="block text-xs font-medium text-gray-500 mb-1">Nome o IMDB ID</label>
-        <input type="text" id="search-query" placeholder="es. The Matrix o tt0133093" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none">
-      </div>
-      <button id="search-btn" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">Cerca</button>
     </div>
 
-    <div id="search-results" class="hidden">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" id="results-grid"></div>
-      <div id="load-more-container" class="hidden mt-4 text-center">
-        <button id="load-more-btn" class="rounded-lg border border-indigo-300 px-5 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">Carica altri risultati</button>
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="w-full sm:w-36">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Tipologia</label>
+        <select id="search-type" class="w-full rounded-xl bg-slate-950 border border-slate-700/80 px-3.5 py-2.5 text-xs font-medium text-slate-200 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors">
+          <option value="series">Serie TV</option>
+          <option value="movie">Film</option>
+        </select>
+      </div>
+
+      <div class="flex-1 min-w-[240px]">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Titolo o ID</label>
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+          </span>
+          <input
+            type="text"
+            id="search-query"
+            placeholder="es. Severance, Breaking Bad o tt0944947..."
+            class="w-full rounded-xl bg-slate-950 border border-slate-700/80 pl-9 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
+          >
+        </div>
+      </div>
+
+      <button
+        id="search-btn"
+        class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] shrink-0"
+      >
+        <i class="fa-solid fa-magnifying-glass text-[11px]"></i>
+        <span>Cerca</span>
+      </button>
+    </div>
+
+    <!-- Results Section -->
+    <div id="search-results" class="hidden mt-6 pt-6 border-t border-slate-800">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400" id="results-count-title">Risultati di ricerca</h3>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4" id="results-grid"></div>
+
+      <div id="load-more-container" class="hidden mt-6 text-center">
+        <button id="load-more-btn" class="rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-6 py-2.5 text-xs font-semibold text-slate-200 transition-colors">
+          Carica altri risultati
+        </button>
       </div>
     </div>
   </div>
+
 </div>
 {% endblock %}
 
@@ -47,47 +79,90 @@ const loadMoreBtn = document.getElementById('load-more-btn');
 let currentPage = 1;
 let totalPages = 1;
 let lastQuery = '';
-let lastSearchType = 'movie';
+let lastSearchType = 'series';
 
 async function goToDetail(imdbId, type) {
   window.location.href = '/dashboard/browser/' + type + '/' + imdbId;
 }
 
 async function fetchAndRenderResults(query, type, page, append) {
-  const resp = await fetch('/api/browser/search?q=' + encodeURIComponent(query) + '&type=' + type + '&page=' + page);
-  const data = await resp.json();
+  searchBtn.disabled = true;
+  searchBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[11px]"></i> <span>Ricerca...</span>';
 
-  if (!append) {
-    resultsGrid.innerHTML = '';
-  }
+  try {
+    const resp = await fetch('/api/browser/search?q=' + encodeURIComponent(query) + '&type=' + type + '&page=' + page);
+    const data = await resp.json();
 
-  totalPages = data.total_pages;
-  currentPage = data.page;
+    if (!append) {
+      resultsGrid.innerHTML = '';
+    }
 
-  for (const r of data.results) {
-    const div = document.createElement('div');
-    div.className = 'rounded-lg border bg-white p-3 cursor-pointer hover:shadow-md transition-shadow';
-    div.innerHTML = `
-      <img class="w-full h-40 object-cover rounded bg-gray-100" src="${r.poster || ''}" alt="" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22185%22 height=%22278%22><rect fill=%22%23e5e7eb%22 width=%22185%22 height=%22278%22/></svg>'">
-      <p class="mt-2 text-sm font-medium text-gray-900">${r.title}</p>
-      <p class="text-xs text-gray-500">${r.year || ''}</p>
-    `;
-    div.onclick = async () => {
-      const resolveResp = await fetch('/api/browser/resolve?tmdb_id=' + r.tmdb_id + '&type=' + type);
-      const resolveData = await resolveResp.json();
-      if (resolveData.imdb_id) {
-        await goToDetail(resolveData.imdb_id, type);
-      } else {
-        alert('IMDB ID non trovato per questo titolo');
-      }
-    };
-    resultsGrid.appendChild(div);
-  }
+    totalPages = data.total_pages || 1;
+    currentPage = data.page || 1;
 
-  if (currentPage < totalPages) {
-    loadMoreContainer.classList.remove('hidden');
-  } else {
-    loadMoreContainer.classList.add('hidden');
+    const results = data.results || [];
+    if (results.length === 0 && !append) {
+      resultsGrid.innerHTML = `
+        <div class="col-span-full py-8 text-center text-slate-500 text-xs">
+          Nessun risultato trovato per "${query}".
+        </div>`;
+      return;
+    }
+
+    for (const r of results) {
+      const div = document.createElement('div');
+      div.className = 'group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/60 p-2.5 transition-all hover:scale-[1.02] cursor-pointer flex flex-col justify-between shadow-md';
+      
+      const poster = r.poster || "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='150' height='220'><rect fill='%231e293b' width='150' height='220'/></svg>";
+      const year = r.year ? `<span class="text-[10px] text-slate-400 font-mono">${r.year}</span>` : '';
+      
+      div.innerHTML = `
+        <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-800">
+          <img class="w-full h-full object-cover group-hover:opacity-90 transition-opacity" src="${poster}" alt="" loading="lazy">
+          <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[10px] font-bold text-slate-200 uppercase">
+            ${type === 'movie' ? 'Film' : 'Serie'}
+          </div>
+        </div>
+        <div class="mt-2.5 px-0.5">
+          <p class="text-xs font-semibold text-white truncate group-hover:text-indigo-400 transition-colors" title="${r.title}">${r.title}</p>
+          <div class="flex items-center justify-between mt-0.5">
+            ${year}
+            <span class="text-[10px] text-indigo-400 font-semibold group-hover:translate-x-0.5 transition-transform">Apri &rarr;</span>
+          </div>
+        </div>
+      `;
+
+      div.onclick = async () => {
+        div.style.opacity = '0.6';
+        div.style.pointerEvents = 'none';
+        try {
+          const resolveResp = await fetch('/api/browser/resolve?tmdb_id=' + r.tmdb_id + '&type=' + type);
+          const resolveData = await resolveResp.json();
+          if (resolveData.imdb_id) {
+            await goToDetail(resolveData.imdb_id, type);
+          } else {
+            alert('IMDb ID non trovato su TMDB per questo titolo');
+            div.style.opacity = '1';
+            div.style.pointerEvents = 'auto';
+          }
+        } catch (e) {
+          alert('Errore durante la risoluzione del titolo: ' + e);
+          div.style.opacity = '1';
+          div.style.pointerEvents = 'auto';
+        }
+      };
+
+      resultsGrid.appendChild(div);
+    }
+
+    if (currentPage < totalPages) {
+      loadMoreContainer.classList.remove('hidden');
+    } else {
+      loadMoreContainer.classList.add('hidden');
+    }
+  } finally {
+    searchBtn.disabled = false;
+    searchBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass text-[11px]"></i> <span>Cerca</span>';
   }
 }
 
