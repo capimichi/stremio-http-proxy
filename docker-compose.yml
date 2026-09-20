@@ -5,6 +5,10 @@ services:
     command: --innodb-buffer-pool-size=64M --max-connections=50
     restart: unless-stopped
     environment:
+      MARIADB_DATABASE: ${DB_NAME:-stremio_http_proxy}
+      MARIADB_USER: ${DB_USER:-proxy_user}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-proxy_password}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password}
       MYSQL_DATABASE: ${DB_NAME:-stremio_http_proxy}
       MYSQL_USER: ${DB_USER:-proxy_user}
       MYSQL_PASSWORD: ${DB_PASSWORD:-proxy_password}
@@ -15,7 +19,7 @@ services:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 15
       start_period: 30s
 
   stremio-http-proxy:
