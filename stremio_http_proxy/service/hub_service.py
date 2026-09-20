@@ -370,3 +370,62 @@ class HubService:
         if self.media_repository:
             success = self.media_repository.delete_media(media_id)
         return {"success": success, "media_id": media_id}
+
+    def get_tasks(self, status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+        if not self.task_service:
+            return []
+        raw_tasks = self.task_service.list_tasks(status=status, limit=limit)
+        results = []
+        now = time.time()
+        for t in raw_tasks:
+            args = t.get("arguments") or {}
+            content_id = args.get("content_id")
+            media_title = None
+            season = None
+            episode = None
+
+            if content_id:
+                parts = content_id.split(":")
+                media_id = parts[0]
+                if len(parts) >= 3:
+                    try:
+                        season = int(parts[1])
+                        episode = int(parts[2])
+                    except ValueError:
+                        pass
+                if self.media_repository:
+                    try:
+                        media = self.media_repository.get_media(media_id)
+                        if media:
+                            media_title = media.title
+                    except Exception:
+                        pass
+
+            display_name = {
+                "fetch_next_episode": "Smart Prefetch Episodio",
+                "fetch_media": "Recupero Flussi Media",
+                "enrich_media_metadata": "Arricchimento Metadati",
+                "optimize_media": "Ottimizzazione Media (MKV/MP4)",
+            }.get(t["name"], t["name"])
+
+            results.append({
+                "id": t["id"],
+                "name": t["name"],
+                "display_name": display_name,
+                "status": t["status"],
+                "arguments": args,
+                "content_id": content_id,
+                "media_title": media_title,
+                "season": season,
+                "episode": episode,
+                "scheduled_at": t["scheduled_at"],
+                "created_at": t["created_at"],
+                "updated_at": t["updated_at"],
+                "remaining_seconds": max(0, int(t["scheduled_at"] - now)) if t["status"] == "pending" and t["scheduled_at"] > now else 0,
+                "attempt": t["attempt"],
+                "max_attempts": t["max_attempts"],
+                "last_error": t["last_error"],
+                "claimed_by": t["claimed_by"],
+            })
+        return results
+

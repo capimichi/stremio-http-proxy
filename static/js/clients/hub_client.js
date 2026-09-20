@@ -35,4 +35,13 @@ export class HubClient {
   static cacheEpisode(payload) {
     return ApiClient.post("/api/browser/cache-episode", payload);
   }
+
+  static getTasks({ status = null, limit = 20 } = {}) {
+    let url = `/api/hub/tasks?limit=${encodeURIComponent(limit)}`;
+    if (status) {
+      url += `&status=${encodeURIComponent(status)}`;
+    }
+    return ApiClient.get(url);
+  }
 }
+

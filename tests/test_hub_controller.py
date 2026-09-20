@@ -104,3 +104,15 @@ def test_get_season_cache_endpoint(client, mock_hub_service):
     assert data["episodes"]["1"]["status"] == "ready"
     assert data["episodes"]["2"]["status"] == "downloading"
 
+
+def test_get_tasks_endpoint(client, mock_hub_service):
+    mock_hub_service.get_tasks.return_value = [
+        {"id": 1, "name": "fetch_next_episode", "status": "pending"}
+    ]
+    resp = client.get("/api/hub/tasks?limit=10")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["count"] == 1
+    assert data["tasks"][0]["id"] == 1
+
+

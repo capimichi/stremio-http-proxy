@@ -1,5 +1,5 @@
 import { MediaCard } from "../components/media_card.js";
-import { statusBadgeHtml } from "../components/status_badge.js";
+import { statusBadgeHtml, taskStatusBadgeHtml } from "../components/status_badge.js";
 import { HubService } from "../services/hub_service.js";
 import { PLACEHOLDER_POSTER } from "../utils/dom.js";
 import { formatBytes, formatProgress, formatSpeed, timeAgo } from "../utils/formatters.js";
@@ -290,12 +290,114 @@ function renderRecentMediaGrid(items) {
   container.innerHTML = items.map((item) => MediaCard.renderRecent(item)).join("");
 }
 
+// Render Tasks Table
+function renderTasksTable(tasks) {
+  const tbody = document.getElementById("tasks-table-body");
+  const badge = document.getElementById("tasks-badge");
+  if (!tbody) return;
+
+  const activeCount = (tasks || []).filter((t) => t.status === "pending" || t.status === "processing").length;
+  if (badge) {
+    badge.textContent = tasks ? tasks.length : "0";
+    if (activeCount > 0) {
+      badge.className = "inline-flex items-center rounded-full bg-indigo-500/20 border border-indigo-500/40 px-2 py-0.5 text-[11px] font-bold text-indigo-300 animate-pulse";
+    } else {
+      badge.className = "inline-flex items-center rounded-full bg-slate-800 border border-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-400";
+    }
+  }
+
+  if (!tasks || tasks.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="px-5 py-8 text-center text-slate-500">
+          <div class="flex flex-col items-center justify-center gap-1.5">
+            <i class="fa-solid fa-check-double text-indigo-400 text-2xl mb-1"></i>
+            <span class="font-medium text-slate-300">Nessun task asincrono in coda.</span>
+            <span class="text-xs text-slate-500">I task di prefetch, arricchimento metadati e ottimizzazione compariranno qui.</span>
+          </div>
+        </td>
+      </tr>`;
+    return;
+  }
+
+  tbody.innerHTML = tasks
+    .map((t) => {
+      let mediaHtml = "-";
+      if (t.media_title) {
+        let epBadge = "";
+        if (t.season != null && t.episode != null) {
+          epBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">S${t.season}E${t.episode}</span>`;
+        }
+        mediaHtml = `
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-semibold text-white text-xs truncate max-w-[200px]" title="${t.media_title}">${t.media_title}</span>
+            ${epBadge}
+          </div>`;
+      } else if (t.content_id) {
+        mediaHtml = `<span class="font-mono text-[11px] text-slate-300 truncate max-w-[200px] block" title="${t.content_id}">${t.content_id}</span>`;
+      }
+
+      let timeHtml = "";
+      if (t.status === "pending") {
+        if (t.remaining_seconds > 0) {
+          const mins = Math.floor(t.remaining_seconds / 60);
+          const secs = t.remaining_seconds % 60;
+          const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+          timeHtml = `
+            <div class="flex items-center gap-1 text-amber-400 font-mono text-[11px]">
+              <i class="fa-solid fa-hourglass-half text-[10px] animate-pulse"></i>
+              <span>Tra ${timeStr}</span>
+            </div>`;
+        } else {
+          timeHtml = `<span class="text-slate-400 text-[11px]">Pronto per esecuzione</span>`;
+        }
+      } else if (t.status === "processing") {
+        timeHtml = `
+          <div class="flex items-center gap-1 text-sky-400 font-mono text-[11px]">
+            <i class="fa-solid fa-arrows-rotate text-[10px] animate-spin"></i>
+            <span>In esecuzione...</span>
+          </div>`;
+      } else {
+        timeHtml = `<span class="text-slate-400 text-[11px]">${timeAgo(t.updated_at || t.created_at)}</span>`;
+      }
+
+      let detailsHtml = "";
+      if (t.last_error) {
+        detailsHtml = `<span class="text-rose-400 text-[10px] max-w-xs truncate block" title="${t.last_error}"><i class="fa-solid fa-circle-exclamation mr-1"></i>${t.last_error}</span>`;
+      } else if (t.status === "pending" || t.status === "processing") {
+        detailsHtml = `<span class="text-slate-500 text-[10px]">Tentativo ${t.attempt + (t.status === "processing" ? 0 : 1)}/${t.max_attempts}</span>`;
+      } else {
+        detailsHtml = `<span class="text-slate-500 text-[10px]">Completato con successo</span>`;
+      }
+
+      return `<tr class="hover:bg-slate-800/40 transition-colors">
+        <td class="px-5 py-3 whitespace-nowrap">
+          <div class="flex items-center gap-2">
+            <span class="flex h-6 w-6 items-center justify-center rounded bg-indigo-500/10 text-indigo-400 text-xs">
+              <i class="fa-solid ${t.name === "fetch_next_episode" ? "fa-forward-step" : t.name === "optimize_media" ? "fa-wand-magic-sparkles" : "fa-gear"}"></i>
+            </span>
+            <div class="flex flex-col">
+              <span class="font-semibold text-white text-xs">${t.display_name || t.name}</span>
+              <span class="text-[10px] text-slate-500 font-mono">#${t.id} • ${t.name}</span>
+            </div>
+          </div>
+        </td>
+        <td class="px-5 py-3 whitespace-nowrap">${mediaHtml}</td>
+        <td class="px-5 py-3 whitespace-nowrap">${taskStatusBadgeHtml(t.status)}</td>
+        <td class="px-5 py-3 whitespace-nowrap">${timeHtml}</td>
+        <td class="px-5 py-3 text-right whitespace-nowrap">${detailsHtml}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
 // Main Polling Loop
 async function tick() {
   try {
-    const [recentItems, downloads] = await Promise.all([
+    const [recentItems, downloads, tasks] = await Promise.all([
       hubService.fetchRecent(12),
       hubService.fetchDownloads(1, 5),
+      hubService.fetchTasks(10),
     ]);
 
     renderHeroNowPlaying(recentItems[0] || null);
@@ -307,6 +409,8 @@ async function tick() {
     } else if (downloads) {
       renderActiveDownloadsTable(downloads.downloads || [], false);
     }
+
+    renderTasksTable(tasks);
   } catch (err) {
     console.error("Errore polling dashboard:", err);
   }
@@ -316,3 +420,4 @@ document.addEventListener("DOMContentLoaded", () => {
   tick();
   setInterval(tick, 2500);
 });
+

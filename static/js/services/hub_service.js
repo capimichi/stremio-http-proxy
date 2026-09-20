@@ -18,7 +18,13 @@ export class HubService {
     return this.downloadsPayload;
   }
 
+  async fetchTasks(limit = 20) {
+    const data = await HubClient.getTasks({ limit });
+    return data.tasks || [];
+  }
+
   getHeroItem() {
     return this.recentMedia.length > 0 ? this.recentMedia[0] : null;
   }
 }
+

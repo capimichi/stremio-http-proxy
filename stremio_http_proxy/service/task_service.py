@@ -194,6 +194,25 @@ class TaskService:
             )
             return True
 
+    def list_tasks(
+        self,
+        status: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with self.db_manager.session() as session:
+            query = select(TaskEntry)
+            if status:
+                query = query.where(TaskEntry.status == status)
+            query = query.order_by(TaskEntry.created_at.desc()).limit(limit).offset(offset)
+            records = session.scalars(query).all()
+
+            results = []
+            for r in records:
+                job = self._to_job(r)
+                results.append(job.model_dump())
+            return results
+
     def _to_job(self, record: TaskEntry) -> TaskJob:
         try:
             parsed_args = json.loads(record.arguments) if record.arguments else {}
@@ -215,3 +234,4 @@ class TaskService:
             max_attempts=record.max_attempts,
             last_error=record.last_error,
         )
+

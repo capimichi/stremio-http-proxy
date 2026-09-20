@@ -50,6 +50,15 @@ class HubController:
         self.router.add_api_route("/api/browser/cache-season", self.cache_season, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/browser/cache-episode", self.cache_episode, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/hub/streams/{cache_key:path}", self.delete_stream, methods=["DELETE"], dependencies=auth)
+        self.router.add_api_route("/api/hub/tasks", self.get_tasks, methods=["GET"], dependencies=auth)
+
+    async def get_tasks(
+        self,
+        status: str | None = Query(default=None),
+        limit: int = Query(default=20, ge=1, le=100),
+    ) -> dict[str, Any]:
+        tasks = self.hub_service.get_tasks(status=status, limit=limit)
+        return {"tasks": tasks, "count": len(tasks)}
 
     async def get_recent_media(self, limit: int = Query(default=10, ge=1, le=50)) -> dict[str, Any]:
         items = self.hub_service.get_recent_media(limit=limit)

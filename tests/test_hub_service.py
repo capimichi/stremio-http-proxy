@@ -202,3 +202,39 @@ def test_hub_service_get_season_cache_status(playback_history_repo):
     assert statuses[2]["status"] == "downloading"
     assert statuses[2]["progress_percent"] == 45.5
 
+
+def test_hub_service_get_tasks(playback_history_repo):
+    mock_cache_manager = MagicMock()
+    mock_prefetch_service = MagicMock()
+    mock_task_service = MagicMock()
+    mock_task_service.list_tasks.return_value = [
+        {
+            "id": 1,
+            "name": "fetch_next_episode",
+            "arguments": {"content_type": "series", "content_id": "tt123:1:2"},
+            "status": "pending",
+            "scheduled_at": time.time() + 60,
+            "created_at": time.time(),
+            "updated_at": time.time(),
+            "attempt": 0,
+            "max_attempts": 3,
+            "last_error": None,
+            "claimed_by": None,
+        }
+    ]
+
+    service = HubService(
+        playback_history_repository=playback_history_repo,
+        cache_manager=mock_cache_manager,
+        next_episode_prefetch_service=mock_prefetch_service,
+        task_service=mock_task_service,
+    )
+
+    tasks = service.get_tasks()
+    assert len(tasks) == 1
+    assert tasks[0]["display_name"] == "Smart Prefetch Episodio"
+    assert tasks[0]["season"] == 1
+    assert tasks[0]["episode"] == 2
+    assert tasks[0]["remaining_seconds"] > 0
+
+

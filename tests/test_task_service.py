@@ -109,3 +109,17 @@ def test_task_service_process_next_task_retry_and_fail(tmp_path):
         rec = session.get(TaskEntry, task_id)
         assert rec.status == "failed"
         assert rec.attempt == 2
+
+
+def test_task_service_list_tasks(tmp_path):
+    service, registry = build_task_service(tmp_path)
+    service.enqueue_task("task_a", {"foo": "1"}, delay_seconds=0)
+    service.enqueue_task("task_b", {"foo": "2"}, delay_seconds=10)
+
+    tasks = service.list_tasks()
+    assert len(tasks) == 2
+    assert {t["name"] for t in tasks} == {"task_a", "task_b"}
+
+    pending_tasks = service.list_tasks(status="pending")
+    assert len(pending_tasks) == 2
+
