@@ -188,12 +188,12 @@ docker compose up --build -d --scale stremio-http-proxy-worker=2
 ## 📦 Deployment in Produzione con Ansible
 
 Il deployment del proxy è completamente automatizzato tramite il repository **Ansible** (`capimichi-home`), all'interno del ruolo dedicato:
-`roles/stremio_http_proxy/`
+`roles/stremio_http_proxy/` e del playbook dedicato `playbooks/services/stremio_http_proxy.yml`.
 
 ### Cosa fa il ruolo Ansible:
 1. Crea le directory necessarie sul volume permanente del server (es. disco esterno WD):
    - `/mnt/wd/stremio_http_proxy/var/cache` (storage cache video)
-   - `/mnt/wd/stremio_http_proxy/var/db` (database SQLite)
+   - `/mnt/wd/stremio_http_proxy/var/db` (storage database / MariaDB)
    - `/mnt/wd/stremio_http_proxy/var/log` (log di sistema)
 2. Effettua il clone o il pull del repository Git dal branch `master`.
 3. Compila e distribuisce i template:
@@ -202,11 +202,13 @@ Il deployment del proxy è completamente automatizzato tramite il repository **A
 4. Avvia e ricrea lo stack Docker Compose tramite `community.docker.docker_compose_v2`, scalando automaticamente i worker in background in base alla variabile `stremio_http_proxy_worker_replicas`.
 
 ### Comando per il Deployment:
-Dalla cartella del progetto Ansible (`capimichi-home`):
+Dalla cartella del progetto Ansible (`capimichi-home`), è possibile lanciare direttamente il playbook del singolo servizio (es. `stremio_http_proxy.yml`, `navidrome.yml`, ecc.):
 
 ```bash
-ansible-playbook playbooks/site.yml --tags stremio_http_proxy --vault-password-file ~/.vault_pass
+ansible-playbook playbooks/services/stremio_http_proxy.yml --vault-password-file ~/.vault_pass
 ```
+
+*(In alternativa, per eseguire l'intero catalogo dei servizi è disponibile `playbooks/site.yml`).*
 
 L'esecuzione applicherà tutte le ultime modifiche del codice, ricompilerà le immagini Docker e riavvierà i servizi senza perdita di dati o interruzioni della cache preesistente.
 
