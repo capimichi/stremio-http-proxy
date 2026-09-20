@@ -36,7 +36,7 @@ export function taskStatusBadgeHtml(status) {
       </span>`;
     case "processing":
       return `<span class="inline-flex items-center gap-1 rounded-md bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 text-[11px] font-semibold text-sky-400 animate-pulse">
-        <i class="fa-solid fa-arrows-rotate text-[9px] animate-spin"></i> In esecuzione
+        <i class="fa-solid fa-arrows-rotate text-[9px]"></i> In esecuzione
       </span>`;
     case "pending":
       return `<span class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-400">

@@ -354,7 +354,7 @@ function renderTasksTable(tasks) {
       } else if (t.status === "processing") {
         timeHtml = `
           <div class="flex items-center gap-1 text-sky-400 font-mono text-[11px]">
-            <i class="fa-solid fa-arrows-rotate text-[10px] animate-spin"></i>
+            <i class="fa-solid fa-arrows-rotate text-[10px]"></i>
             <span>In esecuzione...</span>
           </div>`;
       } else {
