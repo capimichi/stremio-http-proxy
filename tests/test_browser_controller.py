@@ -40,6 +40,7 @@ def content_browser_service():
     service = MagicMock(spec=ContentBrowserService)
     service.search_content = AsyncMock(return_value={"results": [], "page": 1, "total_pages": 1})
     service.import_media = AsyncMock(return_value={"media_id": 1, "status": "imported"})
+    service.refresh_media = AsyncMock(return_value={"success": True, "media_id": 1, "status": "updated"})
     service.browse_content = AsyncMock(return_value={"streams": [{"name": "Stream 1", "infohash": "abc"}]})
     return service
 
@@ -128,3 +129,10 @@ async def test_get_media_streams(browser_controller, media_repo, content_browser
     assert "streams" in res
     assert len(res["streams"]) == 1
     content_browser_service.browse_content.assert_awaited_once_with("movie", "tt1375666", None, None)
+
+
+@pytest.mark.asyncio
+async def test_refresh_media_endpoint(browser_controller, content_browser_service):
+    res = await browser_controller.refresh_media(1)
+    assert res == {"success": True, "media_id": 1, "status": "updated"}
+    content_browser_service.refresh_media.assert_awaited_once_with(1)

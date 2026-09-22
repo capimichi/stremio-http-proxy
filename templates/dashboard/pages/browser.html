@@ -139,10 +139,16 @@ async function fetchAndRenderResults(query, type, page, append) {
         </div>
         <div class="mt-3">
           ${isAlreadyInLib ? `
-            <button type="button" class="action-btn w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 py-1.5 px-2.5 text-xs font-semibold transition-colors">
-              <i class="fa-solid fa-folder-open text-[11px]"></i>
-              <span>In libreria &bull; Apri</span>
-            </button>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button type="button" class="open-btn inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 py-1.5 px-2 text-xs font-semibold transition-colors">
+                <i class="fa-solid fa-folder-open text-[11px]"></i>
+                <span>Apri</span>
+              </button>
+              <button type="button" class="reimport-btn inline-flex items-center justify-center gap-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 py-1.5 px-2 text-xs font-semibold transition-colors" title="Aggiorna metadati ed episodi">
+                <i class="fa-solid fa-rotate text-[11px]"></i>
+                <span>Aggiorna</span>
+              </button>
+            </div>
           ` : `
             <button type="button" class="action-btn w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 px-2.5 text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]">
               <i class="fa-solid fa-cloud-arrow-down text-[11px]"></i>
@@ -152,16 +158,9 @@ async function fetchAndRenderResults(query, type, page, append) {
         </div>
       `;
 
-      const actionBtn = div.querySelector('.action-btn');
-      actionBtn.onclick = async (e) => {
-        e.stopPropagation();
-        if (isAlreadyInLib) {
-          goToDetail(r.local_media_id);
-          return;
-        }
-
-        actionBtn.disabled = true;
-        actionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Importazione...</span>';
+      const doImport = async (btn) => {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Salvataggio...</span>';
 
         try {
           const importResp = await fetch('/api/browser/import', {
@@ -173,16 +172,40 @@ async function fetchAndRenderResults(query, type, page, append) {
           if (importData.media_id) {
             goToDetail(importData.media_id);
           } else {
-            alert('Errore durante l\'importazione: ' + (importData.detail || 'Impossibile importare'));
-            actionBtn.disabled = false;
-            actionBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-[11px]"></i> <span>Importa</span>';
+            alert('Errore: ' + (importData.detail || 'Impossibile completare operazione'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-[11px]"></i> <span>Importa</span>';
           }
         } catch (err) {
           alert('Errore di connessione: ' + err);
-          actionBtn.disabled = false;
-          actionBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-[11px]"></i> <span>Importa</span>';
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-[11px]"></i> <span>Importa</span>';
         }
       };
+
+      const openBtn = div.querySelector('.open-btn');
+      if (openBtn) {
+        openBtn.onclick = (e) => {
+          e.stopPropagation();
+          goToDetail(r.local_media_id);
+        };
+      }
+
+      const reimportBtn = div.querySelector('.reimport-btn');
+      if (reimportBtn) {
+        reimportBtn.onclick = (e) => {
+          e.stopPropagation();
+          doImport(reimportBtn);
+        };
+      }
+
+      const actionBtn = div.querySelector('.action-btn');
+      if (actionBtn) {
+        actionBtn.onclick = (e) => {
+          e.stopPropagation();
+          doImport(actionBtn);
+        };
+      }
 
       resultsGrid.appendChild(div);
     }
@@ -202,11 +225,6 @@ async function doSearch() {
   const q = searchQuery.value.trim();
   const type = searchType.value;
   if (!q) return;
-
-  if (q.startsWith('tt')) {
-    await goToDetail(q, type);
-    return;
-  }
 
   lastQuery = q;
   lastSearchType = type;

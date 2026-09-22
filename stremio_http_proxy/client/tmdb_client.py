@@ -55,6 +55,21 @@ class TMDBClient:
                 return None
             return response.json().get("imdb_id")
 
+    async def get_tmdb_id_by_imdb_id(self, imdb_id: str, media_type: str) -> int | None:
+        if not self.is_available():
+            return None
+        tmdb_type = "tv" if media_type == "series" else "movie"
+        url = urljoin(self.BASE_URL + "/", f"find/{imdb_id}")
+        params = {"api_key": self.api_key, "external_source": "imdb_id", "language": "it-IT"}
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                return None
+            results = resp.json().get(f"{tmdb_type}_results", [])
+            if not results:
+                return None
+            return results[0]["id"]
+
     async def get_full_details_by_tmdb_id(self, tmdb_id: int, media_type: str) -> dict:
         if not self.is_available():
             return {}
