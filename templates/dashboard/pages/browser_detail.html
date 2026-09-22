@@ -1,6 +1,6 @@
 {% extends "dashboard/components/base.html" %}
 {% set active_page = "browser" %}
-{% block title %}{{ imdb_id }} - Dettaglio Media{% endblock %}
+{% block title %}{{ media.title }} - Dettaglio Media{% endblock %}
 {% block page_title %}Dettaglio Media{% endblock %}
 
 {% block content %}
@@ -12,7 +12,9 @@
       <i class="fa-solid fa-arrow-left text-[10px]"></i>
       <span>Torna alla ricerca</span>
     </a>
-    <span class="text-xs font-mono text-slate-500" id="top-imdb-id">IMDb: {{ imdb_id }}</span>
+    {% if media.imdb_id %}
+    <span class="text-xs font-mono text-slate-500" id="top-imdb-id">IMDb: {{ media.imdb_id }}</span>
+    {% endif %}
   </div>
 
   <!-- Notification Banner for Batch Caching -->
@@ -31,20 +33,12 @@
     <div class="flex flex-col md:flex-row gap-6 items-start">
       <!-- Poster -->
       <div class="relative w-36 sm:w-44 aspect-[2/3] rounded-xl overflow-hidden bg-slate-950 shrink-0 shadow-lg border border-slate-800 flex items-center justify-center">
-        <!-- Skeleton & Placeholder -->
-        <div id="detail-poster-skeleton" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center text-slate-500 animate-pulse z-0 {% if initial_media and initial_media.poster %}hidden{% endif %}">
-          <div class="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/50 flex items-center justify-center text-slate-400 mb-2 shadow-inner">
-            <i class="fa-solid fa-film text-xl"></i>
-          </div>
-          <span class="text-[11px] font-medium text-slate-400">Caricamento poster...</span>
-        </div>
-
-        <!-- Real Poster -->
         <img
           id="detail-poster"
-          src="{{ initial_media.poster if initial_media and initial_media.poster else '' }}"
-          alt="Poster"
-          class="w-full h-full object-cover relative z-10 transition-opacity duration-300 {% if not (initial_media and initial_media.poster) %}opacity-0{% endif %}"
+          src="{{ media.poster or '' }}"
+          alt="{{ media.title }}"
+          class="w-full h-full object-cover relative z-10 transition-opacity duration-300"
+          onerror="this.src=PLACEHOLDER_POSTER"
         >
       </div>
 
@@ -53,25 +47,19 @@
         <div>
           <div class="flex flex-wrap items-center gap-2 mb-2">
             <span id="detail-type-badge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              {{ "Film" if media_type == "movie" else "Serie TV" }}
+              {{ "Film" if media.type == "movie" else "Serie TV" }}
             </span>
-            <span id="detail-year" class="text-xs text-slate-400 font-mono">{{ initial_media.year if initial_media and initial_media.year else '' }}</span>
-            <span id="detail-genres" class="text-xs text-slate-500"></span>
+            {% if media.year %}
+            <span id="detail-year" class="text-xs text-slate-400 font-mono">{{ media.year }}</span>
+            {% endif %}
           </div>
 
-          <!-- Skeletons for title & overview when loading without initial media -->
-          <div id="detail-title-skeleton" class="{% if initial_media and initial_media.title %}hidden{% endif %} space-y-2 mb-3">
-            <div class="h-8 bg-slate-800 rounded-lg w-2/3 animate-pulse"></div>
-            <div class="h-4 bg-slate-800 rounded w-full animate-pulse"></div>
-            <div class="h-4 bg-slate-800 rounded w-4/5 animate-pulse"></div>
-          </div>
-
-          <div id="detail-title-container" class="{% if not (initial_media and initial_media.title) %}hidden{% endif %}">
+          <div id="detail-title-container">
             <h2 id="detail-title" class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              {{ initial_media.title if initial_media and initial_media.title else '' }}
+              {{ media.title }}
             </h2>
             <p id="detail-overview" class="text-xs sm:text-sm text-slate-400 mt-2 line-clamp-3 leading-relaxed">
-              {{ initial_media.overview if initial_media and initial_media.overview else '' }}
+              {{ media.overview or 'Nessuna descrizione disponibile.' }}
             </p>
           </div>
         </div>
@@ -79,7 +67,7 @@
         <div class="flex flex-wrap items-center gap-3 pt-4 mt-4 border-t border-slate-800">
           <a
             id="detail-stremio-link"
-            href="#"
+            href="stremio://detail/{{ media.type }}/{{ media.imdb_id or media.id }}"
             target="_blank"
             class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-orange-600/20 transition-all hover:scale-[1.02]"
           >
@@ -87,22 +75,25 @@
             <span>Apri in Stremio</span>
           </a>
 
+          {% if media.imdb_id %}
           <a
             id="detail-imdb-link"
-            href="https://www.imdb.com/title/{{ imdb_id }}"
+            href="https://www.imdb.com/title/{{ media.imdb_id }}"
             target="_blank"
             class="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3.5 py-2 text-xs font-semibold text-slate-300 transition-colors"
           >
             <i class="fa-brands fa-imdb text-amber-400 text-sm"></i>
             <span>Scheda IMDb</span>
           </a>
+          {% endif %}
         </div>
       </div>
     </div>
   </div>
 
   <!-- SERIES CONTROLS & EPISODES SECTION (Only for Series) -->
-  <div id="detail-series-section" class="hidden rounded-2xl bg-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl space-y-5">
+  {% if media.type == "series" %}
+  <div id="detail-series-section" class="rounded-2xl bg-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl space-y-5">
     
     <!-- Top Bar: Season Selector Dropdown & Batch Cache Action -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
@@ -113,6 +104,9 @@
           </label>
           <div class="relative">
             <select id="detail-season" class="w-full appearance-none rounded-xl bg-slate-950 border border-slate-700/80 pl-4 pr-10 py-2.5 text-xs font-bold text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors cursor-pointer shadow-inner">
+              {% for s in seasons %}
+              <option value="{{ s }}">Stagione {{ s }} ({{ episodes_by_season[s]|length }} episodi)</option>
+              {% endfor %}
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
               <i class="fa-solid fa-chevron-down text-xs"></i>
@@ -121,7 +115,9 @@
         </div>
 
         <div class="hidden sm:block pt-5 text-xs text-slate-500">
-          <span id="season-episodes-count" class="font-mono text-slate-400 font-semibold">0 episodi</span>
+          <span id="season-episodes-count" class="font-mono text-slate-400 font-semibold">
+            {% if seasons %}{{ episodes_by_season[seasons[0]]|length }} episodi{% else %}0 episodi{% endif %}
+          </span>
         </div>
       </div>
 
@@ -148,7 +144,7 @@
           </h3>
         </div>
         <span id="episodes-loading-indicator" class="hidden text-xs text-indigo-400 animate-pulse flex items-center gap-1.5 font-medium">
-          <i class="fa-solid fa-spinner fa-spin text-xs"></i> Caricamento episodi...
+          <i class="fa-solid fa-spinner fa-spin text-xs"></i> Caricamento flussi...
         </span>
       </div>
 
@@ -159,12 +155,12 @@
     </div>
 
   </div>
-
+  {% else %}
   <!-- MOVIE STREAM TRIGGER (Only for Movie) -->
-  <div id="detail-movie-section" class="hidden rounded-2xl bg-slate-900 border border-slate-800/80 p-5 shadow-xl flex items-center justify-between">
+  <div id="detail-movie-section" class="rounded-2xl bg-slate-900 border border-slate-800/80 p-5 shadow-xl flex items-center justify-between">
     <div>
       <h3 class="text-sm font-bold text-white">Stream & Flussi per questo Film</h3>
-      <p class="text-xs text-slate-400 mt-0.5">Visualizza i flussi trovati dall'addon o mettilo direttamente in download</p>
+      <p class="text-xs text-slate-400 mt-0.5">Visualizza i flussi trovati dall'addon o avvia il download in background</p>
     </div>
     <div class="flex items-center gap-2.5">
       <button
@@ -186,6 +182,7 @@
       </button>
     </div>
   </div>
+  {% endif %}
 
   <!-- STREAMS LIST SECTION -->
   <div id="streams-section" class="hidden rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden scroll-mt-6">
@@ -197,7 +194,7 @@
         </h3>
         <span id="streams-count-badge" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">0</span>
       </div>
-      <span class="text-xs text-slate-500">I flussi contrassegnati con 🔥 sono pronti o in Debrid</span>
+      <span class="text-xs text-slate-500">I flussi contrassegnati con 🔥 sono pronti in cache locale</span>
     </div>
 
     <div class="overflow-x-auto">
@@ -222,118 +219,70 @@
 
 {% block scripts %}
 <script>
+const mediaId = {{ media_id }};
 const mediaType = '{{ media_type }}';
 const imdbId = '{{ imdb_id }}';
+const seasonsList = {{ seasons | tojson }};
+const episodesBySeason = {{ episodes_by_season | tojson }};
 
 const PLACEHOLDER_POSTER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 220'%3E%3Crect fill='%231e293b' width='150' height='220'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='12'%3ENo Poster%3C/text%3E%3C/svg%3E";
+const PLACEHOLDER_EPISODE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 180'%3E%3Crect fill='%231e293b' width='320' height='180'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='14'%3ENessuna Immagine%3C/text%3E%3C/svg%3E";
 
-const detailPoster = document.getElementById('detail-poster');
-const posterSkeleton = document.getElementById('detail-poster-skeleton');
-const titleSkeleton = document.getElementById('detail-title-skeleton');
-const titleContainer = document.getElementById('detail-title-container');
-const detailTitle = document.getElementById('detail-title');
-const detailYear = document.getElementById('detail-year');
-const detailGenres = document.getElementById('detail-genres');
-const detailOverview = document.getElementById('detail-overview');
-const detailStremioLink = document.getElementById('detail-stremio-link');
 const detailSeason = document.getElementById('detail-season');
-const detailEpisode = document.getElementById('detail-episode');
-const detailSeriesSection = document.getElementById('detail-series-section');
-const detailMovieSection = document.getElementById('detail-movie-section');
-
-function setPosterImage(src) {
-  if (!detailPoster) return;
-  if (!src) {
-    detailPoster.src = PLACEHOLDER_POSTER;
-    detailPoster.classList.remove('opacity-0');
-    if (posterSkeleton) posterSkeleton.classList.add('hidden');
-    return;
-  }
-  detailPoster.onload = () => {
-    detailPoster.classList.remove('opacity-0');
-    if (posterSkeleton) posterSkeleton.classList.add('hidden');
-  };
-  detailPoster.onerror = () => {
-    detailPoster.src = PLACEHOLDER_POSTER;
-    detailPoster.classList.remove('opacity-0');
-    if (posterSkeleton) posterSkeleton.classList.add('hidden');
-  };
-  detailPoster.src = src;
-  if (detailPoster.complete && detailPoster.naturalWidth > 0) {
-    detailPoster.classList.remove('opacity-0');
-    if (posterSkeleton) posterSkeleton.classList.add('hidden');
-  }
-}
-
-const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
+const seasonEpisodesCount = document.getElementById('season-episodes-count');
 const cacheSeasonBtn = document.getElementById('cache-season-btn');
 const cacheSeasonLabel = document.getElementById('cache-season-label');
+const episodesLoadingIndicator = document.getElementById('episodes-loading-indicator');
+const episodesContainer = document.getElementById('episodes-container');
+const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
 const cacheMovieBtn = document.getElementById('cache-movie-btn');
 const streamsSection = document.getElementById('streams-section');
+const streamsTitle = document.getElementById('streams-title');
 const streamsTbody = document.getElementById('streams-tbody');
 const streamsCountBadge = document.getElementById('streams-count-badge');
-const episodesContainer = document.getElementById('episodes-container');
-const episodesLoadingIndicator = document.getElementById('episodes-loading-indicator');
-const seasonEpisodesCount = document.getElementById('season-episodes-count');
-const batchToast = document.getElementById('batch-toast');
-const batchToastMessage = document.getElementById('batch-toast-message');
 
-const PLACEHOLDER_EPISODE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 180'%3E%3Crect fill='%231e293b' width='320' height='180'/%3E%3Cpath d='M160 70 L140 100 L180 100 Z' fill='%23475569'/%3E%3Ctext x='50%25' y='75%25' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='12'%3EEpisodio%3C/text%3E%3C/svg%3E";
-
-let metadataStore = null;
 let currentSeason = null;
 let currentEpisode = null;
-let seasonCacheStore = {};
 
 function escapeHtml(str) {
-  if (!str) return "";
+  if (!str) return '';
   return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
-function showToast(msg) {
-  if (batchToast && batchToastMessage) {
-    batchToastMessage.textContent = msg;
-    batchToast.classList.remove('hidden');
+function showToast(message) {
+  const toast = document.getElementById('batch-toast');
+  const msg = document.getElementById('batch-toast-message');
+  if (toast && msg) {
+    msg.textContent = message;
+    toast.classList.remove('hidden');
     setTimeout(() => {
-      batchToast.classList.add('hidden');
+      toast.classList.add('hidden');
     }, 6000);
   }
 }
 
-function buildStremioUrl(type, id, season, episode) {
-  if (type === 'movie') {
-    return 'stremio://detail/movie/' + id;
-  } else if (season != null && episode != null) {
-    return 'stremio://detail/series/' + id + '/' + season + '/' + episode;
-  }
-  return 'stremio://detail/series/' + id;
-}
-
 async function fetchSeasonCache(season) {
+  if (!imdbId) return {};
   try {
     const resp = await fetch(`/api/hub/season-cache/${imdbId}/${season}`);
-    if (resp.ok) {
-      const data = await resp.json();
-      seasonCacheStore[season] = data.episodes || {};
-      return seasonCacheStore[season];
-    }
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    return data.episodes || {};
   } catch (e) {
-    console.error('Errore recupero cache stagione:', e);
+    console.error('Error fetching season cache:', e);
+    return {};
   }
-  return {};
 }
 
 async function refreshSeasonCache(season) {
   const cacheMap = await fetchSeasonCache(season);
-  if (metadataStore && metadataStore.videos) {
-    const eps = metadataStore.videos.filter(v => v.season === season && v.episode);
-    renderEpisodes(eps, cacheMap, season);
-  }
+  const eps = episodesBySeason[season] || [];
+  renderEpisodes(eps, cacheMap, season);
 }
 
 function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
@@ -342,19 +291,17 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
   if (!episodes || episodes.length === 0) {
     episodesContainer.innerHTML = `
       <div class="py-8 text-center text-xs text-slate-500 rounded-xl bg-slate-950/40 border border-slate-800/60">
-        Nessun episodio trovato per questa stagione.
+        Nessun episodio registrato per questa stagione nel database.
       </div>`;
     return;
   }
 
   episodesContainer.innerHTML = episodes.map(ep => {
     const epNum = ep.episode;
-    const epTitle = escapeHtml(ep.title || ep.name || `Episodio ${epNum}`);
+    const epTitle = escapeHtml(ep.title || `Episodio ${epNum}`);
     const epOverview = escapeHtml(ep.overview || 'Nessuna descrizione disponibile per questo episodio.');
     const epThumb = ep.thumbnail || PLACEHOLDER_EPISODE;
-    const airDate = ep.air_date ? `<span class="text-[10px] text-slate-500 font-mono">• ${ep.air_date}</span>` : '';
-    const runtime = ep.runtime ? `<span class="text-[10px] text-slate-500 font-mono">• ${ep.runtime} min</span>` : '';
-    const rating = ep.vote_average ? `<span class="text-[10px] text-amber-400 font-bold"><i class="fa-solid fa-star text-[9px] mr-0.5"></i>${ep.vote_average.toFixed(1)}</span>` : '';
+    const airDate = ep.release_date ? `<span class="text-[10px] text-slate-500 font-mono">• ${ep.release_date}</span>` : '';
 
     const cacheInfo = seasonCacheMap ? seasonCacheMap[epNum] : null;
     let cacheBadgeHtml = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60">Non in cache</span>';
@@ -371,7 +318,7 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
       }
     }
 
-    const stremioUrl = `stremio://detail/series/${imdbId}/${seasonNum}/${epNum}`;
+    const stremioUrl = imdbId ? `stremio://detail/series/${imdbId}/${seasonNum}/${epNum}` : '#';
     const isActive = currentSeason === seasonNum && currentEpisode === epNum;
 
     return `
@@ -379,19 +326,13 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
         
         <!-- Left: Thumbnail & Info -->
         <div class="flex flex-col sm:flex-row gap-3.5 sm:gap-4 items-start flex-1 min-w-0">
-          
-          <!-- Thumbnail with Skeleton Placeholder -->
           <div class="relative w-full sm:w-44 aspect-video rounded-lg overflow-hidden bg-slate-900 shrink-0 border border-slate-800 shadow flex items-center justify-center">
-            <div class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700 pointer-events-none">
-              <i class="fa-solid fa-film text-xl"></i>
-            </div>
             <img
               src="${epThumb}"
               alt="${epTitle}"
               class="w-full h-full object-cover relative z-0"
               loading="lazy"
-              onload="this.previousElementSibling && this.previousElementSibling.remove()"
-              onerror="this.src='${PLACEHOLDER_EPISODE}'; this.previousElementSibling && this.previousElementSibling.remove()"
+              onerror="this.src='${PLACEHOLDER_EPISODE}'"
             >
             <div class="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-black/80 backdrop-blur text-[10px] font-bold text-white shadow z-10 font-mono">
               E${epNum}
@@ -404,8 +345,6 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
               <h4 class="text-xs sm:text-sm font-bold text-white group-hover/ep:text-indigo-400 transition-colors">
                 ${epNum}. ${epTitle}
               </h4>
-              ${rating}
-              ${runtime}
               ${airDate}
             </div>
 
@@ -440,6 +379,7 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
             <span>Cache</span>
           </button>
 
+          ${imdbId ? `
           <a
             href="${stremioUrl}"
             class="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-white transition-colors"
@@ -447,7 +387,7 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
           >
             <i class="fa-solid fa-play text-orange-400 text-[10px]"></i>
             <span class="sm:hidden">Stremio</span>
-          </a>
+          </a>` : ''}
         </div>
 
       </div>`;
@@ -455,37 +395,16 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
 }
 
 async function loadSeasonEpisodes(seasonVal) {
-  if (episodesLoadingIndicator) episodesLoadingIndicator.classList.remove('hidden');
-
   if (cacheSeasonLabel) {
     cacheSeasonLabel.textContent = `Metti in cache tutta la Stagione ${seasonVal}`;
   }
 
-  let eps = (metadataStore?.videos || []).filter(v => v.season === seasonVal && v.episode && v.title);
-
-  if (eps.length === 0) {
-    try {
-      const params = new URLSearchParams({ type: 'series', id: imdbId, season: seasonVal, episode: '1' });
-      const resp = await fetch('/api/browser/content?' + params.toString());
-      const resData = await resp.json();
-      if (resData.meta && resData.meta.videos) {
-        const newVids = resData.meta.videos.filter(v => v.season === seasonVal && v.episode);
-        metadataStore.videos = (metadataStore.videos || []).filter(v => v.season !== seasonVal).concat(newVids);
-        eps = newVids;
-      }
-    } catch (e) {
-      console.error('Errore caricamento episodi stagione:', e);
-    }
-  }
-
-  eps.sort((a, b) => a.episode - b.episode);
-
+  const eps = episodesBySeason[seasonVal] || [];
   const cacheMap = await fetchSeasonCache(seasonVal);
 
   if (seasonEpisodesCount) {
     seasonEpisodesCount.textContent = `${eps.length} episodi`;
   }
-  if (episodesLoadingIndicator) episodesLoadingIndicator.classList.add('hidden');
 
   renderEpisodes(eps, cacheMap, seasonVal);
 }
@@ -495,11 +414,8 @@ async function triggerCacheSeason() {
   const seasonVal = parseInt(detailSeason.value);
   if (!seasonVal) return;
 
-  let totalEpisodes = 10;
-  if (metadataStore && metadataStore.videos) {
-    const eps = metadataStore.videos.filter(v => v.season === seasonVal && v.episode);
-    if (eps.length > 0) totalEpisodes = eps.length;
-  }
+  const eps = episodesBySeason[seasonVal] || [];
+  const totalEpisodes = eps.length || 10;
 
   cacheSeasonBtn.disabled = true;
   cacheSeasonBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Accodamento in corso...</span>';
@@ -526,10 +442,11 @@ async function triggerCacheSeason() {
     alert('Errore di connessione: ' + e);
   } finally {
     cacheSeasonBtn.disabled = false;
-    cacheSeasonBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-sm"></i> <span>Metti in cache tutta la Stagione</span>';
+    cacheSeasonBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-sm"></i> <span id="cache-season-label">Metti in cache tutta la Stagione ' + seasonVal + '</span>';
   }
 }
 
+// Single Episode Cache Action
 async function triggerCacheSingleEpisode(season, episode) {
   try {
     const resp = await fetch('/api/browser/cache-episode', {
@@ -583,10 +500,9 @@ window.loadStreams = loadStreams;
 window.triggerCacheSingleEpisode = triggerCacheSingleEpisode;
 
 async function loadStreams(season, episode) {
-  const params = new URLSearchParams({ type: mediaType, id: imdbId });
-  if (mediaType === 'series' && season != null) {
-    params.set('season', season);
-    params.set('episode', episode);
+  let url = `/api/browser/streams/${mediaId}`;
+  if (season != null && episode != null) {
+    url += `?season=${season}&episode=${episode}`;
   }
 
   const btn = mediaType === 'series' ? null : loadStreamsMovieBtn;
@@ -596,14 +512,8 @@ async function loadStreams(season, episode) {
   }
 
   try {
-    const resp = await fetch('/api/browser/content?' + params.toString());
+    const resp = await fetch(url);
     const data = await resp.json();
-
-    const meta = data.meta;
-    if (meta) {
-      setPosterImage(meta.poster || meta.background || '');
-      detailTitle.textContent = meta.name || meta.title || '';
-    }
 
     const tbody = streamsTbody;
     tbody.innerHTML = '';
@@ -646,6 +556,7 @@ async function loadStreams(season, episode) {
     }
 
     streamsSection.classList.remove('hidden');
+    streamsSection.scrollIntoView({ behavior: 'smooth' });
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -654,80 +565,24 @@ async function loadStreams(season, episode) {
   }
 }
 
-async function loadMeta() {
-  const resp = await fetch('/api/browser/content?type=' + mediaType + '&id=' + imdbId);
-  const data = await resp.json();
-  const meta = data.meta;
-  metadataStore = meta;
-
-  if (meta) {
-    setPosterImage(meta.poster || meta.background || '');
-    if (detailTitle) detailTitle.textContent = meta.name || meta.title || 'Titolo';
-    if (meta.year || meta.releaseInfo) detailYear.textContent = meta.year || meta.releaseInfo;
-    if (meta.genres && meta.genres.length) detailGenres.textContent = `• ${meta.genres.join(', ')}`;
-    if (meta.description) detailOverview.textContent = meta.description;
-  } else {
-    setPosterImage('');
-  }
-
-  if (titleSkeleton) titleSkeleton.classList.add('hidden');
-  if (titleContainer) titleContainer.classList.remove('hidden');
-
-  return data;
-}
-
 async function init() {
-  detailStremioLink.href = buildStremioUrl(mediaType, imdbId);
-
-  const initialSrc = detailPoster ? detailPoster.getAttribute('src') : '';
-  if (initialSrc) {
-    setPosterImage(initialSrc);
-  }
-
-  const data = await loadMeta();
-
   if (mediaType === 'movie') {
-    detailMovieSection.classList.remove('hidden');
-    loadStreamsMovieBtn.onclick = () => loadStreams(null, null);
-    cacheMovieBtn.onclick = triggerCacheMovie;
+    if (loadStreamsMovieBtn) loadStreamsMovieBtn.onclick = () => loadStreams(null, null);
+    if (cacheMovieBtn) cacheMovieBtn.onclick = triggerCacheMovie;
   } else {
-    detailSeriesSection.classList.remove('hidden');
-    const meta = data.meta;
-
-    if (meta && (meta.seasons || meta.videos)) {
-      let seasons = [];
-      if (meta.seasons && meta.seasons.length > 0) {
-        seasons = meta.seasons;
-      } else {
-        const seasonNums = [...new Set((meta.videos || []).filter(v => v.season).map(v => v.season))].sort((a,b) => a-b);
-        seasons = seasonNums.map(s => ({ season: s, name: `Stagione ${s}`, episode_count: 0 }));
+    if (seasonsList && seasonsList.length > 0) {
+      if (detailSeason) {
+        detailSeason.onchange = () => {
+          const val = parseInt(detailSeason.value);
+          loadSeasonEpisodes(val);
+        };
       }
+      if (cacheSeasonBtn) cacheSeasonBtn.onclick = triggerCacheSeason;
 
-      detailSeason.innerHTML = seasons.map(s => {
-        const countStr = s.episode_count ? ` (${s.episode_count} episodi)` : '';
-        return `<option value="${s.season}">${s.name || 'Stagione ' + s.season}${countStr}</option>`;
-      }).join('');
-
-      detailSeason.onchange = () => {
-        const val = parseInt(detailSeason.value);
-        loadSeasonEpisodes(val);
-      };
-
-      cacheSeasonBtn.onclick = triggerCacheSeason;
-
-      const firstSeason = seasons[0]?.season || 1;
+      const firstSeason = seasonsList[0] || 1;
       await loadSeasonEpisodes(firstSeason);
     }
   }
-
-  // Close menus on outside click
-  document.addEventListener('click', function(e) {
-    document.querySelectorAll('.wl-menu:not(.hidden)').forEach(menu => {
-      if (!menu.closest('.wl-dropdown-container')?.contains(e.target)) {
-        menu.classList.add('hidden');
-      }
-    });
-  });
 }
 
 init();

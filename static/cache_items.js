@@ -90,7 +90,7 @@ function renderTable(payload) {
       if (d.season != null && d.episode != null) {
         epBadge = `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">S${d.season}E${d.episode}</span>`;
       }
-      const browseLink = d.media_id ? `<a href="/dashboard/browser/${d.content_type || 'series'}/${d.media_id}" class="hover:text-indigo-300 transition-colors">${d.media_title}</a>` : d.media_title;
+      const browseLink = d.media_id ? `<a href="/dashboard/browser/media/${d.media_id}" class="hover:text-indigo-300 transition-colors">${d.media_title}</a>` : d.media_title;
       titleHtml = `
         <div class="flex flex-col min-w-0 max-w-xs sm:max-w-sm">
           <div class="flex items-center gap-1.5 flex-wrap">

@@ -17,5 +17,8 @@ class MediaItem(Base):
     season: Mapped[int | None] = mapped_column(Integer, nullable=True)
     episode: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    thumbnail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    release_date: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
     last_accessed_at: Mapped[float] = mapped_column(Float, nullable=False)

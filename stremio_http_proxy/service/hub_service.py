@@ -143,6 +143,7 @@ class HubService:
 
             results.append({
                 "id": record.id,
+                "media_id": media.id if media else None,
                 "content_id": record.content_id,
                 "imdb_id": imdb_id,
                 "season": season,

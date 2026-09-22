@@ -152,7 +152,7 @@ function renderMediaCard(item) {
         <!-- Hover Quick Actions Overlay -->
         <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-3 text-center">
           <a
-            href="/dashboard/browser/${item.type}/${item.id}"
+            href="/dashboard/browser/media/${item.id}"
             class="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white shadow-md transition-colors"
           >
             <i class="fa-solid fa-layer-group text-[10px]"></i>

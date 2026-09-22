@@ -72,6 +72,9 @@ class MediaItemRepository:
         season: int | None = None,
         episode: int | None = None,
         title: str | None = None,
+        overview: str | None = None,
+        thumbnail: str | None = None,
+        release_date: str | None = None,
         item_id: int | None = None,
     ) -> MediaItem:
         now = time.time()
@@ -97,6 +100,9 @@ class MediaItemRepository:
                     season=season,
                     episode=episode,
                     title=title,
+                    overview=overview,
+                    thumbnail=thumbnail,
+                    release_date=release_date,
                     created_at=now,
                     last_accessed_at=now,
                 )
@@ -104,6 +110,12 @@ class MediaItemRepository:
             else:
                 if title:
                     item.title = title
+                if overview:
+                    item.overview = overview
+                if thumbnail:
+                    item.thumbnail = thumbnail
+                if release_date:
+                    item.release_date = release_date
                 item.last_accessed_at = now
 
             session.flush()

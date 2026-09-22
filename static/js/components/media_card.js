@@ -44,7 +44,7 @@ export class MediaCard {
           <!-- Hover Quick Actions Overlay -->
           <div class="absolute inset-0 bg-slate-950/85 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-3 text-center z-20 pointer-events-none group-hover:pointer-events-auto">
             <a
-              href="/dashboard/browser/${item.type}/${item.id}"
+              href="/dashboard/browser/media/${item.id}"
               class="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-2 text-xs font-semibold text-white shadow-md transition-colors"
             >
               <i class="fa-solid fa-layer-group text-[10px]"></i>
@@ -72,7 +72,7 @@ export class MediaCard {
 
         <!-- Info Footer -->
         <div class="mt-2.5 px-1">
-          <a href="/dashboard/browser/${item.type}/${item.id}" class="block group/title">
+          <a href="/dashboard/browser/media/${item.id}" class="block group/title">
             <h4 class="text-xs font-bold text-white truncate group-hover/title:text-indigo-400 transition-colors" title="${title}">
               ${title}
             </h4>
@@ -104,8 +104,10 @@ export class MediaCard {
       statusDot = `<span class="h-2 w-2 rounded-full bg-amber-400"></span>`;
     }
 
+    const detailUrl = item.media_id ? `/dashboard/browser/media/${item.media_id}` : '#';
+
     return `
-      <a href="/dashboard/browser/${item.content_type}/${item.imdb_id}" class="group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-2 transition-all hover:scale-[1.02] flex flex-col justify-between shadow-md">
+      <a href="${detailUrl}" class="group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-2 transition-all hover:scale-[1.02] flex flex-col justify-between shadow-md">
         <!-- Poster container -->
         <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 flex items-center justify-center">
           <div class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700 pointer-events-none">

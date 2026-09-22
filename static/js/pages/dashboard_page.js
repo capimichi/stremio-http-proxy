@@ -270,7 +270,7 @@ function renderHeroNowPlaying(item) {
 
   const detailBtn = document.getElementById("hero-detail-btn");
   if (detailBtn) {
-    detailBtn.href = `/dashboard/browser/${item.content_type}/${item.imdb_id}`;
+    detailBtn.href = item.media_id ? `/dashboard/browser/media/${item.media_id}` : "#";
   }
 }
 

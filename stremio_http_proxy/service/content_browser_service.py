@@ -1,7 +1,11 @@
+import asyncio
 from injector import inject
 
 from stremio_http_proxy.client.tmdb_client import TMDBClient
 from stremio_http_proxy.client.upstream_client import UpstreamClient
+from stremio_http_proxy.manager.media_asset_manager import MediaAssetManager
+from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
+from stremio_http_proxy.repository.media_repository import MediaRepository
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 
 
@@ -12,10 +16,16 @@ class ContentBrowserService:
         upstream_client: UpstreamClient,
         tmdb_client: TMDBClient,
         stream_rewrite_service: StreamRewriteService,
+        media_repository: MediaRepository | None = None,
+        media_item_repository: MediaItemRepository | None = None,
+        media_asset_manager: MediaAssetManager | None = None,
     ):
         self.upstream_client = upstream_client
         self.tmdb_client = tmdb_client
         self.stream_rewrite_service = stream_rewrite_service
+        self.media_repository = media_repository
+        self.media_item_repository = media_item_repository
+        self.media_asset_manager = media_asset_manager
 
     async def search_content(self, query: str, content_type: str, page: int = 1) -> dict:
         if not self.tmdb_client.is_available():
@@ -27,6 +37,80 @@ class ContentBrowserService:
     async def resolve_content(self, tmdb_id: int, content_type: str) -> str | None:
         tmdb_type = "tv" if content_type == "series" else content_type
         return await self.tmdb_client.get_imdb_id(tmdb_id, tmdb_type)
+
+    async def import_media(self, tmdb_id: int, content_type: str) -> dict:
+        if not self.media_repository or not self.media_item_repository:
+            raise RuntimeError("Database repositories are not configured")
+
+        existing = self.media_repository.get_by_tmdb_id(str(tmdb_id))
+        if existing:
+            return {"media_id": existing.id, "status": "existing"}
+
+        details = await self.tmdb_client.get_full_details_by_tmdb_id(tmdb_id, content_type)
+        if not details:
+            raise ValueError(f"Could not fetch details for TMDB ID {tmdb_id}")
+
+        imdb_id = details.get("imdb_id")
+        if imdb_id:
+            existing_by_imdb = self.media_repository.get_by_imdb_id(imdb_id)
+            if existing_by_imdb:
+                return {"media_id": existing_by_imdb.id, "status": "existing"}
+
+        poster_url = details.get("poster")
+        backdrop_url = details.get("backdrop")
+        local_poster = poster_url
+        local_backdrop = backdrop_url
+
+        if self.media_asset_manager:
+            local_poster = await self.media_asset_manager.save_image_from_url(
+                poster_url, "posters", f"tmdb_{tmdb_id}_poster"
+            )
+            local_backdrop = await self.media_asset_manager.save_image_from_url(
+                backdrop_url, "backdrops", f"tmdb_{tmdb_id}_backdrop"
+            )
+
+        media = self.media_repository.upsert_media(
+            media_type=content_type,
+            title=details.get("title") or "Senza titolo",
+            imdb_id=imdb_id,
+            tmdb_id=str(tmdb_id),
+            year=details.get("year"),
+            poster=local_poster,
+            backdrop=local_backdrop,
+            overview=details.get("overview"),
+        )
+
+        episodes = details.get("episodes", [])
+        if content_type == "movie":
+            self.media_item_repository.upsert_media_item(
+                media_id=media.id,
+                season=None,
+                episode=None,
+                title=media.title,
+                overview=media.overview,
+                thumbnail=local_poster,
+                release_date=details.get("year"),
+            )
+        else:
+            async def process_episode(ep):
+                thumb = ep.get("thumbnail")
+                if self.media_asset_manager and thumb:
+                    thumb = await self.media_asset_manager.save_image_from_url(
+                        thumb, "episodes", f"media_{media.id}_s{ep['season']}_e{ep['episode']}"
+                    )
+                self.media_item_repository.upsert_media_item(
+                    media_id=media.id,
+                    season=ep.get("season"),
+                    episode=ep.get("episode"),
+                    title=ep.get("title"),
+                    overview=ep.get("overview"),
+                    thumbnail=thumb,
+                    release_date=ep.get("release_date"),
+                )
+
+            await asyncio.gather(*[process_episode(ep) for ep in episodes])
+
+        return {"media_id": media.id, "status": "imported"}
 
     async def browse_content(self, content_type: str, content_id: str, season: int | None = None, episode: int | None = None) -> dict:
         stream_id = content_id

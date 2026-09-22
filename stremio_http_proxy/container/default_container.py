@@ -14,6 +14,7 @@ from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
+from stremio_http_proxy.manager.media_asset_manager import MediaAssetManager
 
 import stremio_http_proxy.entity.playback_history  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.media  # noqa: F401 — ensure table creation
@@ -86,6 +87,7 @@ class DefaultContainer:
         self.cache_token_ttl_seconds = int(os.environ.get("CACHE_TOKEN_TTL_SECONDS", str(72 * 60 * 60)))
         self.log_dir = os.environ.get("LOG_DIR", "var/log")
         self.local_cache_dir = os.environ.get("LOCAL_CACHE_DIR", "var/cache")
+        self.media_dir = os.environ.get("MEDIA_DIR", "var/media")
         self.sqlite_path = os.environ.get("SQLITE_PATH", "var/db/cache.sqlite")
         self.database_url = os.environ.get("DATABASE_URL")
         self.local_cache_max_age_days = int(os.environ.get("LOCAL_CACHE_MAX_AGE_DAYS", "7"))
@@ -188,7 +190,15 @@ class DefaultContainer:
             tmdb_client=tmdb_client,
             logger_factory=logger_factory,
         )
-        content_browser_service = ContentBrowserService(upstream_client, tmdb_client, stream_rewrite_service)
+        media_asset_manager = MediaAssetManager(self.media_dir, logger_factory)
+        content_browser_service = ContentBrowserService(
+            upstream_client,
+            tmdb_client,
+            stream_rewrite_service,
+            media_repository=media_repository,
+            media_item_repository=media_item_repository,
+            media_asset_manager=media_asset_manager,
+        )
         download_queue_service = DownloadQueueService(
             cache_manager,
             self.download_max_attempts,
@@ -285,6 +295,7 @@ class DefaultContainer:
         self.injector.binder.bind(PlaybackController, to=playback_controller)
         self.injector.binder.bind(HubService, to=hub_service)
         self.injector.binder.bind(HubController, to=hub_controller)
+        self.injector.binder.bind(MediaAssetManager, to=media_asset_manager)
         self.injector.binder.bind(TMDBClient, to=tmdb_client)
         self.injector.binder.bind(ContentBrowserService, to=content_browser_service)
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)

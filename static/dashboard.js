@@ -290,7 +290,7 @@ function renderHeroNowPlaying(item) {
 
   const detailBtn = document.getElementById("hero-detail-btn");
   if (detailBtn) {
-    detailBtn.href = `/dashboard/browser/${item.content_type}/${item.imdb_id}`;
+    detailBtn.href = item.media_id ? `/dashboard/browser/media/${item.media_id}` : "#";
   }
 }
 
@@ -325,8 +325,10 @@ function renderRecentMediaGrid(items) {
       statusDot = `<span class="h-2 w-2 rounded-full bg-amber-400"></span>`;
     }
 
+    const detailUrl = item.media_id ? `/dashboard/browser/media/${item.media_id}` : "#";
+
     return `
-      <a href="/dashboard/browser/${item.content_type}/${item.imdb_id}" class="group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-2 transition-all hover:scale-[1.02] flex flex-col justify-between shadow-md">
+      <a href="${detailUrl}" class="group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 p-2 transition-all hover:scale-[1.02] flex flex-col justify-between shadow-md">
         <!-- Poster container -->
         <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-800">
           <img src="${poster}" alt="${displayTitle}" class="w-full h-full object-cover group-hover:opacity-90 transition-opacity" loading="lazy" onerror="this.src='${placeholderSvg}'">

@@ -30,6 +30,11 @@ app.include_router(default_container.get(HealthController).router)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+media_dir = getattr(default_container, "media_dir", "var/media")
+import os
+os.makedirs(media_dir, exist_ok=True)
+app.mount("/media", StaticFiles(directory=media_dir), name="media")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

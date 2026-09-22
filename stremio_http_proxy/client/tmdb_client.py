@@ -1,3 +1,4 @@
+import asyncio
 from urllib.parse import urljoin
 
 import httpx
@@ -53,6 +54,74 @@ class TMDBClient:
             if response.status_code != 200:
                 return None
             return response.json().get("imdb_id")
+
+    async def get_full_details_by_tmdb_id(self, tmdb_id: int, media_type: str) -> dict:
+        if not self.is_available():
+            return {}
+
+        tmdb_type = "tv" if media_type == "series" else "movie"
+        detail_url = urljoin(self.BASE_URL + "/", f"{tmdb_type}/{tmdb_id}")
+        ext_url = urljoin(self.BASE_URL + "/", f"{tmdb_type}/{tmdb_id}/external_ids")
+        params = {"api_key": self.api_key, "language": "it-IT"}
+
+        async with httpx.AsyncClient(timeout=15) as client:
+            detail_resp, ext_resp = await asyncio.gather(
+                client.get(detail_url, params=params),
+                client.get(ext_url, params={"api_key": self.api_key}),
+                return_exceptions=True,
+            )
+
+            if isinstance(detail_resp, Exception) or detail_resp.status_code != 200:
+                return {}
+
+            detail = detail_resp.json()
+            imdb_id = ext_resp.json().get("imdb_id") if not isinstance(ext_resp, Exception) and ext_resp.status_code == 200 else None
+
+            genres = [g.get("name") for g in detail.get("genres", []) if g.get("name")]
+            meta = {
+                "title": detail.get("title") or detail.get("name"),
+                "year": (detail.get("release_date") or detail.get("first_air_date") or "")[:4],
+                "poster": f"https://image.tmdb.org/t/p/w500{detail['poster_path']}" if detail.get("poster_path") else None,
+                "backdrop": f"https://image.tmdb.org/t/p/w1280{detail['backdrop_path']}" if detail.get("backdrop_path") else None,
+                "overview": detail.get("overview"),
+                "imdb_id": imdb_id,
+                "tmdb_id": str(tmdb_id),
+                "type": media_type,
+                "genres": genres,
+                "episodes": [],
+            }
+
+            if media_type == "series":
+                seasons = [s for s in detail.get("seasons", []) if s.get("season_number") is not None and s.get("season_number") > 0]
+                
+                async def fetch_season_episodes(s_num: int):
+                    s_url = urljoin(self.BASE_URL + "/", f"tv/{tmdb_id}/season/{s_num}")
+                    try:
+                        s_resp = await client.get(s_url, params=params)
+                        if s_resp.status_code == 200:
+                            s_data = s_resp.json()
+                            s_eps = []
+                            for ep in s_data.get("episodes", []):
+                                ep_num = ep.get("episode_number")
+                                ep_name = ep.get("name") or f"Episodio {ep_num}"
+                                s_eps.append({
+                                    "season": s_num,
+                                    "episode": ep_num,
+                                    "title": ep_name,
+                                    "overview": ep.get("overview") or "",
+                                    "thumbnail": f"https://image.tmdb.org/t/p/w500{ep['still_path']}" if ep.get("still_path") else None,
+                                    "release_date": ep.get("air_date"),
+                                })
+                            return s_eps
+                    except Exception:
+                        pass
+                    return []
+
+                season_results = await asyncio.gather(*[fetch_season_episodes(s["season_number"]) for s in seasons])
+                for s_eps in season_results:
+                    meta["episodes"].extend(s_eps)
+
+            return meta
 
     async def get_meta_by_imdb_id(self, imdb_id: str, media_type: str, season: int | None = None) -> dict:
         if not self.is_available():

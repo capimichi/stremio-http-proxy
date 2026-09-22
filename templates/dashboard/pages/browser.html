@@ -83,8 +83,8 @@ let totalPages = 1;
 let lastQuery = '';
 let lastSearchType = 'series';
 
-async function goToDetail(imdbId, type) {
-  window.location.href = '/dashboard/browser/' + type + '/' + imdbId;
+async function goToDetail(mediaId) {
+  window.location.href = '/dashboard/browser/media/' + mediaId;
 }
 
 async function fetchAndRenderResults(query, type, page, append) {
@@ -113,51 +113,74 @@ async function fetchAndRenderResults(query, type, page, append) {
 
     for (const r of results) {
       const div = document.createElement('div');
-      div.className = 'group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/60 p-2.5 transition-all hover:scale-[1.02] cursor-pointer flex flex-col justify-between shadow-md';
+      div.className = 'group relative rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/60 p-2.5 transition-all flex flex-col justify-between shadow-md';
       
       const poster = r.poster || PLACEHOLDER_POSTER;
       const year = r.year ? `<span class="text-[10px] text-slate-400 font-mono">${r.year}</span>` : '';
+      const isAlreadyInLib = Boolean(r.local_media_id);
       
       div.innerHTML = `
-        <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 flex items-center justify-center">
-          <div class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700">
-            <i class="fa-solid fa-film text-xl"></i>
+        <div>
+          <div class="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-slate-950 flex items-center justify-center">
+            <div class="absolute inset-0 bg-slate-900 animate-pulse flex items-center justify-center text-slate-700">
+              <i class="fa-solid fa-film text-xl"></i>
+            </div>
+            <img class="w-full h-full object-cover group-hover:opacity-90 transition-opacity relative z-0" src="${poster}" alt="" loading="lazy" onload="this.previousElementSibling && this.previousElementSibling.remove()" onerror="this.src='${PLACEHOLDER_POSTER}'; this.previousElementSibling && this.previousElementSibling.remove()">
+            <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[10px] font-bold text-slate-200 uppercase z-10">
+              ${type === 'movie' ? 'Film' : 'Serie'}
+            </div>
           </div>
-          <img class="w-full h-full object-cover group-hover:opacity-90 transition-opacity relative z-0" src="${poster}" alt="" loading="lazy" onload="this.previousElementSibling && this.previousElementSibling.remove()" onerror="this.src='${PLACEHOLDER_POSTER}'; this.previousElementSibling && this.previousElementSibling.remove()">
-          <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/75 backdrop-blur text-[10px] font-bold text-slate-200 uppercase z-10">
-            ${type === 'movie' ? 'Film' : 'Serie'}
+          <div class="mt-2.5 px-0.5">
+            <p class="text-xs font-semibold text-white truncate group-hover:text-indigo-400 transition-colors" title="${r.title}">${r.title}</p>
+            <div class="flex items-center justify-between mt-0.5">
+              ${year}
+            </div>
           </div>
         </div>
-        <div class="mt-2.5 px-0.5">
-          <p class="text-xs font-semibold text-white truncate group-hover:text-indigo-400 transition-colors" title="${r.title}">${r.title}</p>
-          <div class="flex items-center justify-between mt-0.5">
-            ${year}
-            <span class="text-[10px] text-indigo-400 font-semibold group-hover:translate-x-0.5 transition-transform">Apri &rarr;</span>
-          </div>
+        <div class="mt-3">
+          ${isAlreadyInLib ? `
+            <button type="button" class="action-btn w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 py-1.5 px-2.5 text-xs font-semibold transition-colors">
+              <i class="fa-solid fa-folder-open text-[11px]"></i>
+              <span>In libreria &bull; Apri</span>
+            </button>
+          ` : `
+            <button type="button" class="action-btn w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 px-2.5 text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]">
+              <i class="fa-solid fa-cloud-arrow-down text-[11px]"></i>
+              <span>Importa</span>
+            </button>
+          `}
         </div>
       `;
 
-      div.onclick = async () => {
-        div.style.pointerEvents = 'none';
-        const loadingOverlay = document.createElement('div');
-        loadingOverlay.className = 'absolute inset-0 bg-slate-950/80 backdrop-blur-xs rounded-xl flex flex-col items-center justify-center gap-2 z-30 text-indigo-400';
-        loadingOverlay.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xl"></i><span class="text-[11px] font-bold text-white tracking-wide">Apertura...</span>';
-        div.appendChild(loadingOverlay);
+      const actionBtn = div.querySelector('.action-btn');
+      actionBtn.onclick = async (e) => {
+        e.stopPropagation();
+        if (isAlreadyInLib) {
+          goToDetail(r.local_media_id);
+          return;
+        }
+
+        actionBtn.disabled = true;
+        actionBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Importazione...</span>';
 
         try {
-          const resolveResp = await fetch('/api/browser/resolve?tmdb_id=' + r.tmdb_id + '&type=' + type);
-          const resolveData = await resolveResp.json();
-          if (resolveData.imdb_id) {
-            await goToDetail(resolveData.imdb_id, type);
+          const importResp = await fetch('/api/browser/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tmdb_id: r.tmdb_id, type: type }),
+          });
+          const importData = await importResp.json();
+          if (importData.media_id) {
+            goToDetail(importData.media_id);
           } else {
-            alert('IMDb ID non trovato su TMDB per questo titolo');
-            loadingOverlay.remove();
-            div.style.pointerEvents = 'auto';
+            alert('Errore durante l\'importazione: ' + (importData.detail || 'Impossibile importare'));
+            actionBtn.disabled = false;
+            actionBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-[11px]"></i> <span>Importa</span>';
           }
-        } catch (e) {
-          alert('Errore durante la risoluzione del titolo: ' + e);
-          loadingOverlay.remove();
-          div.style.pointerEvents = 'auto';
+        } catch (err) {
+          alert('Errore di connessione: ' + err);
+          actionBtn.disabled = false;
+          actionBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-[11px]"></i> <span>Importa</span>';
         }
       };
 
