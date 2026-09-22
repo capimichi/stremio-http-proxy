@@ -15,7 +15,7 @@ class DownloadJob(BaseModel):
     trigger: str = "playback"
     content_type: str | None = None
     content_id: str | None = None
-    media_item_id: str | None = None
+    media_item_id: int | None = None
     enqueued_at: float
     available_at: float
     last_error: str | None = None

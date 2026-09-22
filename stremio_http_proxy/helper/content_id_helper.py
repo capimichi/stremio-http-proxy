@@ -8,6 +8,13 @@ def parse_content_id(
     if not content_id:
         return "", "", None, None, content_type or "movie"
 
+    if content_id.startswith("series:"):
+        content_type = "series"
+        content_id = content_id[len("series:"):]
+    elif content_id.startswith("movie:"):
+        content_type = "movie"
+        content_id = content_id[len("movie:"):]
+
     if ":" in content_id:
         parts = content_id.split(":")
         media_id = parts[0]

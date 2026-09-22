@@ -451,9 +451,9 @@ class PlaybackController:
             return
         try:
             infohash = extract_infohash(link)
-            media_item_id = content_id
-            media_id = content_id.split(":")[0] if ":" in content_id else content_id
-            if self.media_metadata_service:
+            media_item_id = None
+            media_id = None
+            if self.media_metadata_service and content_id:
                 try:
                     media, item = self.media_metadata_service.ensure_media_and_item(
                         content_id=content_id,
@@ -471,6 +471,8 @@ class PlaybackController:
             self.playback_history_repository.record_playback(
                 media_item_id=media_item_id,
                 media_id=media_id,
+                content_id=content_id,
+                content_type=content_type,
                 title=title,
                 poster=poster,
                 category=category,

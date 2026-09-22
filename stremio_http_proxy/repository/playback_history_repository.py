@@ -13,8 +13,10 @@ class PlaybackHistoryRepository:
 
     def record_playback(
         self,
-        media_item_id: str | None = None,
-        media_id: str | None = None,
+        media_item_id: int | None = None,
+        media_id: int | None = None,
+        content_id: str | None = None,
+        content_type: str | None = None,
         title: str | None = None,
         poster: str | None = None,
         category: str | None = None,
@@ -23,16 +25,13 @@ class PlaybackHistoryRepository:
         file_index: int | None = None,
         duration_seconds: float | None = None,
         progress_seconds: float | None = None,
-        # Backward compatibility if content_id keyword arg is passed
-        content_id: str | None = None,
-        content_type: str | None = None,
     ) -> PlaybackHistory:
-        item_id = media_item_id or content_id or ""
-        resolved_media_id = media_id or (item_id.split(":")[0] if item_id else "")
         with self.db_manager.session() as session:
             entry = PlaybackHistory(
-                media_item_id=item_id,
-                media_id=resolved_media_id,
+                media_item_id=media_item_id,
+                media_id=media_id,
+                content_id=content_id,
+                content_type=content_type,
                 title=title,
                 poster=poster,
                 category=category,
@@ -57,12 +56,13 @@ class PlaybackHistoryRepository:
             )
             all_records = list(session.scalars(query))
 
-            # Deduplicate by media_item_id preserving order (most recent first)
-            seen_item_ids = set()
+            # Deduplicate preserving order (most recent first)
+            seen_identifiers = set()
             unique_recent = []
             for record in all_records:
-                if record.media_item_id not in seen_item_ids:
-                    seen_item_ids.add(record.media_item_id)
+                key = record.media_item_id or record.content_id or record.title or record.id
+                if key not in seen_identifiers:
+                    seen_identifiers.add(key)
                     unique_recent.append(record)
                     if len(unique_recent) >= limit:
                         break

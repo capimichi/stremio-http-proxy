@@ -19,7 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "media",
-        sa.Column("id", sa.String(length=128), primary_key=True, nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
+        sa.Column("imdb_id", sa.String(length=64), nullable=True),
+        sa.Column("tmdb_id", sa.String(length=64), nullable=True),
         sa.Column("type", sa.String(length=32), nullable=False),
         sa.Column("title", sa.String(length=255), nullable=False),
         sa.Column("year", sa.String(length=16), nullable=True),
@@ -31,9 +33,13 @@ def upgrade() -> None:
     )
     op.create_index("ix_media_type", "media", ["type"])
     op.create_index("ix_media_last_accessed_at", "media", ["last_accessed_at"])
+    op.create_index("ix_media_imdb_id", "media", ["imdb_id"], unique=True)
+    op.create_index("ix_media_tmdb_id", "media", ["tmdb_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_media_tmdb_id", table_name="media")
+    op.drop_index("ix_media_imdb_id", table_name="media")
     op.drop_index("ix_media_last_accessed_at", table_name="media")
     op.drop_index("ix_media_type", table_name="media")
     op.drop_table("media")

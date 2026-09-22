@@ -129,7 +129,7 @@ class HubService:
                 if media_item:
                     media = self.media_repository.get_media(media_item.media_id)
                 elif imdb_id:
-                    media = self.media_repository.get_media(imdb_id)
+                    media = self.media_repository.get_by_imdb_id(imdb_id)
 
             clean_title = media.title if (media and media.title) else (record.title or "Senza titolo")
             clean_poster = (media.poster if (media and media.poster) else record.poster) or None
@@ -349,10 +349,11 @@ class HubService:
                 continue
 
             # Stremio direct url
-            stremio_url = f"stremio://detail/{m.type}/{m.id}"
+            stremio_url = f"stremio://detail/{m.type}/{m.imdb_id or m.id}"
 
             items.append({
                 "id": m.id,
+                "imdb_id": m.imdb_id,
                 "type": m.type,
                 "title": m.title,
                 "year": m.year,
@@ -375,10 +376,15 @@ class HubService:
             "total": len(items) if cached_only else total_count,
         }
 
-    def delete_media(self, media_id: str) -> dict[str, Any]:
+    def delete_media(self, media_id: int | str) -> dict[str, Any]:
         success = False
         if self.media_repository:
-            success = self.media_repository.delete_media(media_id)
+            if isinstance(media_id, int) or (isinstance(media_id, str) and media_id.isdigit()):
+                success = self.media_repository.delete_media(int(media_id))
+            else:
+                media = self.media_repository.get_by_imdb_id(str(media_id))
+                if media:
+                    success = self.media_repository.delete_media(media.id)
         return {"success": success, "media_id": media_id}
 
     def get_tasks(self, status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:

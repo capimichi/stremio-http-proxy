@@ -46,7 +46,7 @@ class BrowserController:
         initial_media = None
         if self.media_repository:
             try:
-                initial_media = self.media_repository.get_media(imdb_id)
+                initial_media = self.media_repository.get_by_imdb_id(imdb_id)
             except Exception:
                 initial_media = None
         return HTMLResponse(
@@ -72,7 +72,7 @@ class BrowserController:
                 meta = data.get("meta", {})
                 if meta and meta.get("name"):
                     self.media_repository.upsert_media(
-                        media_id=id,
+                        imdb_id=id,
                         media_type=type,
                         title=meta.get("name"),
                         year=meta.get("year"),

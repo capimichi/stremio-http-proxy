@@ -181,8 +181,21 @@ class DefaultContainer:
             mediaflow_client=mediaflow_client,
             http_streams_proxy_enabled=self.http_streams_proxy_enabled,
         )
+        media_repository = MediaRepository(db_manager)
+        media_item_repository = MediaItemRepository(db_manager)
+        media_metadata_service = MediaMetadataService(
+            media_repository=media_repository,
+            media_item_repository=media_item_repository,
+            tmdb_client=tmdb_client,
+            logger_factory=logger_factory,
+        )
         content_browser_service = ContentBrowserService(upstream_client, tmdb_client, stream_rewrite_service)
-        download_queue_service = DownloadQueueService(cache_manager, self.download_max_attempts, self.cache_enabled)
+        download_queue_service = DownloadQueueService(
+            cache_manager,
+            self.download_max_attempts,
+            self.cache_enabled,
+            media_metadata_service=media_metadata_service,
+        )
         next_episode_prefetch_service = NextEpisodePrefetchService(
             upstream_client=upstream_client,
             stream_rewrite_service=stream_rewrite_service,
@@ -193,14 +206,6 @@ class DefaultContainer:
             target_completed_per_episode=self.prefetch_target_completed_per_episode,
             skip_zero_seeders=self.prefetch_skip_zero_seeders,
             delay_seconds=self.prefetch_delay_seconds,
-        )
-        media_repository = MediaRepository(db_manager)
-        media_item_repository = MediaItemRepository(db_manager)
-        media_metadata_service = MediaMetadataService(
-            media_repository=media_repository,
-            media_item_repository=media_item_repository,
-            tmdb_client=tmdb_client,
-            logger_factory=logger_factory,
         )
 
         task_registry = TaskRegistry()

@@ -159,8 +159,8 @@ def test_dashboard_service_resolves_media_and_episode_info(tmp_path):
     db_manager = DbManager(str(tmp_path / "cache.sqlite"))
     media_repo = MediaRepository(db_manager)
     media_item_repo = MediaItemRepository(db_manager)
-    media_repo.upsert_media("tt0903747", "series", "Breaking Bad", "2008")
-    media_item_repo.upsert_media_item("tt0903747:1:2", "tt0903747", 1, 2, "Cat's in the Bag...")
+    media = media_repo.upsert_media(imdb_id="tt0903747", media_type="series", title="Breaking Bad", year="2008")
+    item = media_item_repo.upsert_media_item(media_id=media.id, season=1, episode=2, title="Cat's in the Bag...")
 
     cache_manager = CacheManager(
         str(tmp_path / "cache"),
@@ -175,7 +175,7 @@ def test_dashboard_service_resolves_media_and_episode_info(tmp_path):
         update={
             "status": CacheEntryStatusEnum.DOWNLOADING,
             "title": "Breaking.Bad.S01E02.720p.HDTV",
-            "media_item_id": "tt0903747:1:2",
+            "media_item_id": item.id,
             "content_type": "series",
         }
     )

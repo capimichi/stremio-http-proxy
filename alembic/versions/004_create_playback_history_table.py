@@ -22,16 +22,18 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
         sa.Column(
             "media_item_id",
-            sa.String(length=128),
+            sa.Integer(),
             sa.ForeignKey("media_items.id", ondelete="CASCADE"),
-            nullable=False,
+            nullable=True,
         ),
         sa.Column(
             "media_id",
-            sa.String(length=128),
+            sa.Integer(),
             sa.ForeignKey("media.id", ondelete="CASCADE"),
-            nullable=False,
+            nullable=True,
         ),
+        sa.Column("content_id", sa.String(length=128), nullable=True),
+        sa.Column("content_type", sa.String(length=32), nullable=True),
         sa.Column("title", sa.Text(), nullable=True),
         sa.Column("poster", sa.Text(), nullable=True),
         sa.Column("category", sa.String(length=64), nullable=True),
@@ -45,9 +47,11 @@ def upgrade() -> None:
     op.create_index("ix_playback_history_media_item_id", "playback_history", ["media_item_id"])
     op.create_index("ix_playback_history_media_id", "playback_history", ["media_id"])
     op.create_index("ix_playback_history_played_at", "playback_history", ["played_at"])
+    op.create_index("ix_playback_history_content_id", "playback_history", ["content_id"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_playback_history_content_id", table_name="playback_history")
     op.drop_index("ix_playback_history_played_at", table_name="playback_history")
     op.drop_index("ix_playback_history_media_id", table_name="playback_history")
     op.drop_index("ix_playback_history_media_item_id", table_name="playback_history")

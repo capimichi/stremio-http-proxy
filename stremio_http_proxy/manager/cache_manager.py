@@ -7,6 +7,9 @@ from sqlalchemy import func, or_, select, update
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.entity.cache_entry import CacheEntry as CacheEntryRecord
+from stremio_http_proxy.entity.media import Media
+from stremio_http_proxy.entity.media_item import MediaItem
+from stremio_http_proxy.helper.content_id_helper import parse_content_id
 from stremio_http_proxy.helper.hash_helper import extract_infohash, hash_url, normalize_infohash
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.db_manager import DbManager
@@ -205,35 +208,60 @@ class CacheManager:
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
 
-    def count_ready_for_content(self, content_id: str) -> int:
+    def count_ready_for_content(self, content_id: str | int) -> int:
         with self.db_manager.session() as session:
-            count = session.scalar(
+            if isinstance(content_id, int) or (isinstance(content_id, str) and content_id.isdigit()):
+                query = select(func.count()).select_from(CacheEntryRecord).where(
+                    CacheEntryRecord.media_item_id == int(content_id),
+                    CacheEntryRecord.status == CacheEntryStatusEnum.READY.value,
+                )
+                return int(session.scalar(query) or 0)
+
+            imdb_id, _, season, episode, _ = parse_content_id(str(content_id))
+            query = (
                 select(func.count())
                 .select_from(CacheEntryRecord)
+                .join(MediaItem, CacheEntryRecord.media_item_id == MediaItem.id)
+                .join(Media, MediaItem.media_id == Media.id)
                 .where(
-                    CacheEntryRecord.media_item_id == content_id,
+                    Media.imdb_id == imdb_id,
                     CacheEntryRecord.status == CacheEntryStatusEnum.READY.value,
                 )
             )
-            return int(count or 0)
+            if season is not None and episode is not None:
+                query = query.where(MediaItem.season == season, MediaItem.episode == episode)
+            return int(session.scalar(query) or 0)
 
-    def count_active_or_ready_for_content(self, content_id: str) -> int:
+    def count_active_or_ready_for_content(self, content_id: str | int) -> int:
         with self.db_manager.session() as session:
-            count = session.scalar(
+            active_statuses = [
+                CacheEntryStatusEnum.READY.value,
+                CacheEntryStatusEnum.DOWNLOADING.value,
+                CacheEntryStatusEnum.QUEUED.value,
+                CacheEntryStatusEnum.PROCESSING.value,
+                CacheEntryStatusEnum.OPTIMIZING.value,
+            ]
+            if isinstance(content_id, int) or (isinstance(content_id, str) and content_id.isdigit()):
+                query = select(func.count()).select_from(CacheEntryRecord).where(
+                    CacheEntryRecord.media_item_id == int(content_id),
+                    CacheEntryRecord.status.in_(active_statuses),
+                )
+                return int(session.scalar(query) or 0)
+
+            imdb_id, _, season, episode, _ = parse_content_id(str(content_id))
+            query = (
                 select(func.count())
                 .select_from(CacheEntryRecord)
+                .join(MediaItem, CacheEntryRecord.media_item_id == MediaItem.id)
+                .join(Media, MediaItem.media_id == Media.id)
                 .where(
-                    CacheEntryRecord.media_item_id == content_id,
-                    CacheEntryRecord.status.in_([
-                        CacheEntryStatusEnum.READY.value,
-                        CacheEntryStatusEnum.DOWNLOADING.value,
-                        CacheEntryStatusEnum.QUEUED.value,
-                        CacheEntryStatusEnum.PROCESSING.value,
-                        CacheEntryStatusEnum.OPTIMIZING.value,
-                    ]),
+                    Media.imdb_id == imdb_id,
+                    CacheEntryRecord.status.in_(active_statuses),
                 )
             )
-            return int(count or 0)
+            if season is not None and episode is not None:
+                query = query.where(MediaItem.season == season, MediaItem.episode == episode)
+            return int(session.scalar(query) or 0)
 
     def is_candidate_attempted(self, cache_key: str) -> bool:
         with self.db_manager.session() as session:
@@ -248,22 +276,47 @@ class CacheManager:
             ).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
 
-    def get_entries_for_content(self, content_id: str) -> list[tuple[str, CacheEntryModel]]:
+    def get_entries_for_content(self, content_id: str | int | None) -> list[tuple[str, CacheEntryModel]]:
+        if not content_id:
+            return []
         with self.db_manager.session() as session:
-            records = session.scalars(
-                select(CacheEntryRecord)
-                .where(CacheEntryRecord.media_item_id == content_id)
-                .order_by(CacheEntryRecord.created_at.desc())
-            ).all()
+            if isinstance(content_id, int) or (isinstance(content_id, str) and content_id.isdigit()):
+                records = session.scalars(
+                    select(CacheEntryRecord)
+                    .where(CacheEntryRecord.media_item_id == int(content_id))
+                    .order_by(CacheEntryRecord.created_at.desc())
+                ).all()
+            else:
+                imdb_id, _, season, episode, _ = parse_content_id(str(content_id))
+                query = (
+                    select(CacheEntryRecord)
+                    .join(MediaItem, CacheEntryRecord.media_item_id == MediaItem.id)
+                    .join(Media, MediaItem.media_id == Media.id)
+                    .where(Media.imdb_id == imdb_id)
+                )
+                if season is not None and episode is not None:
+                    query = query.where(MediaItem.season == season, MediaItem.episode == episode)
+                query = query.order_by(CacheEntryRecord.created_at.desc())
+                records = session.scalars(query).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
 
     def get_entries_for_content_prefix(self, prefix: str) -> list[tuple[str, CacheEntryModel]]:
+        if not prefix:
+            return []
         with self.db_manager.session() as session:
-            records = session.scalars(
+            parts = prefix.rstrip(":").split(":")
+            imdb_id = parts[0]
+            season = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else None
+            query = (
                 select(CacheEntryRecord)
-                .where(CacheEntryRecord.media_item_id.like(f"{prefix}%"))
-                .order_by(CacheEntryRecord.created_at.desc())
-            ).all()
+                .join(MediaItem, CacheEntryRecord.media_item_id == MediaItem.id)
+                .join(Media, MediaItem.media_id == Media.id)
+                .where(Media.imdb_id == imdb_id)
+            )
+            if season is not None:
+                query = query.where(MediaItem.season == season)
+            query = query.order_by(CacheEntryRecord.created_at.desc())
+            records = session.scalars(query).all()
         return [(record.cache_key, self._to_model(record)) for record in records]
 
 
@@ -519,7 +572,24 @@ class CacheManager:
             parent.rmdir()
         self.logger.info("Deleted cache entry %s (%s)", cache_key, reason)
 
+    def _resolve_content_id(self, media_item_id: int | None) -> str | None:
+        if not media_item_id:
+            return None
+        try:
+            with self.db_manager.session() as session:
+                item = session.get(MediaItem, media_item_id)
+                if item is not None:
+                    media = session.get(Media, item.media_id)
+                    if media and media.imdb_id:
+                        if item.season is not None and item.episode is not None:
+                            return f"{media.imdb_id}:{item.season}:{item.episode}"
+                        return media.imdb_id
+        except Exception:
+            pass
+        return None
+
     def _to_model(self, record: CacheEntryRecord) -> CacheEntryModel:
+        content_id = self._resolve_content_id(record.media_item_id)
         return CacheEntryModel(
             cache_key=record.cache_key,
             infohash=record.infohash,
@@ -545,7 +615,7 @@ class CacheManager:
             max_attempts=record.max_attempts or 3,
             trigger=record.trigger,
             content_type=record.content_type,
-            content_id=record.media_item_id,
+            content_id=content_id,
             media_item_id=record.media_item_id,
             available_at=record.available_at,
             claimed_at=record.claimed_at,
@@ -555,6 +625,7 @@ class CacheManager:
         )
 
     def _to_job(self, record: CacheEntryRecord) -> DownloadJob:
+        content_id = self._resolve_content_id(record.media_item_id)
         return DownloadJob(
             job_id=record.cache_key,
             cache_key=record.cache_key,
@@ -568,7 +639,8 @@ class CacheManager:
             max_attempts=record.max_attempts or 3,
             trigger=record.trigger or "playback",
             content_type=record.content_type,
-            content_id=record.media_item_id,
+            content_id=content_id,
+            media_item_id=record.media_item_id,
             enqueued_at=record.created_at or time.time(),
             available_at=record.available_at or time.time(),
             last_error=record.last_error,
@@ -610,12 +682,32 @@ class CacheManager:
         if not normalized:
             return None
         with self.db_manager.session() as session:
-            records = session.scalars(
-                select(CacheEntryRecord)
-                .where(CacheEntryRecord.infohash == normalized)
-                .where(CacheEntryRecord.media_item_id == content_id)
-                .where(CacheEntryRecord.status == CacheEntryStatusEnum.READY)
-            ).all()
+            if isinstance(content_id, int) or (isinstance(content_id, str) and content_id.isdigit()):
+                query = (
+                    select(CacheEntryRecord)
+                    .where(
+                        CacheEntryRecord.infohash == normalized,
+                        CacheEntryRecord.media_item_id == int(content_id),
+                        CacheEntryRecord.status == CacheEntryStatusEnum.READY,
+                    )
+                )
+                records = session.scalars(query).all()
+            else:
+                imdb_id, _, season, episode, _ = parse_content_id(str(content_id))
+                query = (
+                    select(CacheEntryRecord)
+                    .join(MediaItem, CacheEntryRecord.media_item_id == MediaItem.id)
+                    .join(Media, MediaItem.media_id == Media.id)
+                    .where(
+                        CacheEntryRecord.infohash == normalized,
+                        Media.imdb_id == imdb_id,
+                        CacheEntryRecord.status == CacheEntryStatusEnum.READY,
+                    )
+                )
+                if season is not None and episode is not None:
+                    query = query.where(MediaItem.season == season, MediaItem.episode == episode)
+                records = session.scalars(query).all()
+
         for r in records:
             if Path(r.file_path).exists():
                 return self._to_model(r)

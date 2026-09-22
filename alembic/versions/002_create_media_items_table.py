@@ -19,10 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.create_table(
         "media_items",
-        sa.Column("id", sa.String(length=128), primary_key=True, nullable=False),
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False),
         sa.Column(
             "media_id",
-            sa.String(length=128),
+            sa.Integer(),
             sa.ForeignKey("media.id", ondelete="CASCADE"),
             nullable=False,
         ),
@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("title", sa.Text(), nullable=True),
         sa.Column("created_at", sa.Float(), nullable=False),
         sa.Column("last_accessed_at", sa.Float(), nullable=False),
-        sa.UniqueConstraint("media_id", "season", "episode", name="uq_media_items_season_episode"),
+        sa.UniqueConstraint("media_id", "season", "episode", name="uq_media_items_media_season_episode"),
     )
     op.create_index("ix_media_items_media_id", "media_items", ["media_id"])
     op.create_index("ix_media_items_last_accessed_at", "media_items", ["last_accessed_at"])

@@ -37,8 +37,8 @@ class CacheEntry(Base):
     max_attempts: Mapped[int | None] = mapped_column(Integer, nullable=True, default=3)
     trigger: Mapped[str | None] = mapped_column(String(32), nullable=True)
     content_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    media_item_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("media_items.id", ondelete="SET NULL"), nullable=True
+    media_item_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("media_items.id", ondelete="SET NULL"), nullable=True
     )
     available_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     claimed_at: Mapped[float | None] = mapped_column(Float, nullable=True)

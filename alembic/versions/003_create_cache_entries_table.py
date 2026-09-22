@@ -45,7 +45,7 @@ def upgrade() -> None:
         sa.Column("content_type", sa.String(length=32), nullable=True),
         sa.Column(
             "media_item_id",
-            sa.String(length=128),
+            sa.Integer(),
             sa.ForeignKey("media_items.id", ondelete="SET NULL"),
             nullable=True,
         ),

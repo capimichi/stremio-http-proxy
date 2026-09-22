@@ -16,6 +16,7 @@ class EnrichMediaMetadataTask(AbstractTask):
         media_id = arguments.get("media_id")
         media_type = arguments.get("media_type", "movie")
         season = arguments.get("season")
-        if not media_id:
+        imdb_id = arguments.get("imdb_id")
+        if not media_id and not imdb_id:
             return False
-        return await self.media_metadata_service.enrich_from_tmdb(media_id, media_type, season)
+        return await self.media_metadata_service.enrich_from_tmdb(media_id or imdb_id, media_type, season=season, imdb_id=imdb_id)

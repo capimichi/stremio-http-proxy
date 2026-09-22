@@ -1,7 +1,6 @@
 from stremio_http_proxy.helper.content_id_helper import parse_content_id
 import pytest
 
-from stremio_http_proxy.entity.cache_entry import Base
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.repository.media_repository import MediaRepository
 from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
@@ -31,34 +30,39 @@ def metadata_service(media_repo, media_item_repo, tmp_path):
 
 def test_media_repository_upsert_and_get(media_repo, media_item_repo):
     media = media_repo.upsert_media(
-        media_id="tt0903747",
+        imdb_id="tt0903747",
         media_type="series",
         title="Breaking Bad",
         year="2008",
         poster="https://image.tmdb.org/t/p/w500/bb.jpg",
         overview="A high school chemistry teacher...",
     )
-    assert media.id == "tt0903747"
+    assert isinstance(media.id, int)
+    assert media.imdb_id == "tt0903747"
     assert media.title == "Breaking Bad"
 
-    # Fetch
-    fetched = media_repo.get_media("tt0903747")
+    # Fetch by id and by imdb_id
+    fetched = media_repo.get_media(media.id)
     assert fetched is not None
     assert fetched.year == "2008"
 
+    fetched_by_imdb = media_repo.get_by_imdb_id("tt0903747")
+    assert fetched_by_imdb is not None
+    assert fetched_by_imdb.id == media.id
+
     # Upsert item
     item = media_item_repo.upsert_media_item(
-        item_id="tt0903747:1:1",
-        media_id="tt0903747",
+        media_id=media.id,
         season=1,
         episode=1,
         title="Pilot",
     )
-    assert item.id == "tt0903747:1:1"
+    assert isinstance(item.id, int)
+    assert item.media_id == media.id
     assert item.season == 1
     assert item.episode == 1
 
-    items = media_item_repo.get_items_for_media("tt0903747")
+    items = media_item_repo.get_items_for_media(media.id)
     assert len(items) == 1
     assert items[0].title == "Pilot"
 
@@ -95,13 +99,15 @@ def test_media_metadata_ensure_media_and_item(metadata_service, media_repo):
         fallback_poster="https://example.com/poster.jpg",
         schedule_enrichment=False,
     )
-    assert media.id == "tt3749900"
-    assert item.id == "tt3749900:1:1"
+    assert isinstance(media.id, int)
+    assert media.imdb_id == "tt3749900"
+    assert isinstance(item.id, int)
+    assert item.media_id == media.id
     assert item.season == 1
     assert item.episode == 1
 
     # Check that repo has it
-    saved_media = media_repo.get_media("tt3749900")
+    saved_media = media_repo.get_by_imdb_id("tt3749900")
     assert saved_media is not None
     assert "Gotham" in saved_media.title
 
@@ -117,16 +123,16 @@ def test_media_repository_get_and_ensure_by_content_id_movie(media_item_repo, me
         fallback_title="Fight Club",
     )
     assert item is not None
-    assert item.id == "tt0137523"
-    assert item.media_id == "tt0137523"
+    assert isinstance(item.id, int)
+    assert item.media_id == media.id
     assert item.season is None
     assert item.episode is None
 
     # Now get_media_item_by_content_id should find it
     found = media_item_repo.get_by_content_id("tt0137523", "movie")
     assert found is not None
-    assert found.id == "tt0137523"
-    assert found.media_id == "tt0137523"
+    assert found.id == item.id
+    assert found.media_id == media.id
 
 
 def test_media_repository_get_and_ensure_by_content_id_series(media_item_repo, metadata_service):
@@ -140,14 +146,14 @@ def test_media_repository_get_and_ensure_by_content_id_series(media_item_repo, m
         fallback_title="Mr. Robot S02E11",
     )
     assert item is not None
-    assert item.id == "tt4158110:2:11"
-    assert item.media_id == "tt4158110"
+    assert isinstance(item.id, int)
+    assert item.media_id == media.id
     assert item.season == 2
     assert item.episode == 11
 
     # Now get_media_item_by_content_id should find it
     found = media_item_repo.get_by_content_id("tt4158110:2:11")
     assert found is not None
-    assert found.id == "tt4158110:2:11"
+    assert found.id == item.id
     assert found.season == 2
     assert found.episode == 11

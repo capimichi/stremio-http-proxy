@@ -98,4 +98,14 @@ def test_default_container_registers_optimize_media_task(monkeypatch):
     assert registry.has("optimize_media")
 
 
+def test_default_container_injects_media_metadata_service_into_download_queue_service(monkeypatch):
+    from stremio_http_proxy.service.download_queue_service import DownloadQueueService
+    from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
 
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    container = DefaultContainer()
+    dqs = container.get(DownloadQueueService)
+    assert dqs.media_metadata_service is not None
+    assert isinstance(dqs.media_metadata_service, MediaMetadataService)

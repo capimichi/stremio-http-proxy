@@ -28,7 +28,7 @@ class DashboardService:
         self.media_item_repository = media_item_repository
 
     def _resolve_media_info(self, entry: CacheEntry) -> dict[str, Any]:
-        content_id = entry.content_id or entry.media_item_id
+        content_id = entry.content_id
         title = entry.title
         media_title = None
         season = None
@@ -37,7 +37,23 @@ class DashboardService:
         content_type = entry.content_type
         media_id = None
 
-        if content_id:
+        if entry.media_item_id and self.media_item_repository and self.media_repository:
+            try:
+                item = self.media_item_repository.get_media_item(entry.media_item_id)
+                if item:
+                    media = self.media_repository.get_media(item.media_id)
+                    if media:
+                        media_title = media.title
+                        media_id = media.imdb_id or str(media.id)
+                        content_type = media.type
+                    season = item.season
+                    episode = item.episode
+                    if item.title and item.title != f"Episodio {item.episode}":
+                        episode_title = item.title
+            except Exception:
+                pass
+
+        if not media_title and content_id:
             clean_id = content_id
             if clean_id.startswith("series:"):
                 clean_id = clean_id[len("series:"):]
@@ -48,7 +64,7 @@ class DashboardService:
 
             parts = clean_id.split(":")
             if len(parts) >= 3:
-                media_id = parts[0]
+                imdb = parts[0]
                 try:
                     season = int(parts[1])
                     episode = int(parts[2])
@@ -56,7 +72,20 @@ class DashboardService:
                     pass
                 content_type = "series"
             elif len(parts) == 1:
-                media_id = parts[0]
+                imdb = parts[0]
+            else:
+                imdb = None
+
+            if imdb and self.media_repository:
+                try:
+                    media = self.media_repository.get_by_imdb_id(imdb)
+                    if media:
+                        media_title = media.title
+                        media_id = media.imdb_id or str(media.id)
+                        if not content_type:
+                            content_type = media.type
+                except Exception:
+                    pass
 
         if season is None and title:
             match = re.search(r"(?i)\bS(\d{1,2})[EX](\d{1,3})\b", title)
@@ -67,21 +96,6 @@ class DashboardService:
                     content_type = "series"
                 except ValueError:
                     pass
-
-        if media_id and self.media_repository:
-            try:
-                media = self.media_repository.get_media(media_id)
-                print('DEBUG GET_MEDIA', media_id, media)
-                if media:
-                    media_title = media.title
-                    if not content_type:
-                        content_type = media.type
-                if season is not None and episode is not None:
-                    item = self.media_item_repository.get_media_item_by_season_episode(media_id, season, episode) if self.media_item_repository else None
-                    if item and item.title and item.title != f"Episodio {episode}":
-                        episode_title = item.title
-            except Exception:
-                pass
 
         return {
             "media_title": media_title,

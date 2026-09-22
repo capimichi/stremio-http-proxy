@@ -34,4 +34,4 @@ class CacheEntry(BaseModel):
     claimed_by: str | None = None
     processing_expires_at: float | None = None
     last_error: str | None = None
-    media_item_id: str | None = None
+    media_item_id: int | None = None

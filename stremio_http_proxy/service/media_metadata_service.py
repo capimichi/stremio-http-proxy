@@ -48,14 +48,14 @@ class MediaMetadataService:
         fallback_poster: str | None = None,
         schedule_enrichment: bool = True,
     ) -> tuple[Media, MediaItem]:
-        media_id, item_id, season, episode, media_type = parse_content_id(content_id, content_type)
+        media_imdb_id, _, season, episode, media_type = parse_content_id(content_id, content_type)
 
-        # Check existing media
-        existing_media = self.media_repository.get_media(media_id)
+        # Check existing media by imdb_id
+        existing_media = self.media_repository.get_by_imdb_id(media_imdb_id)
         if existing_media is None:
             clean_fallback = self.clean_raw_title(fallback_title)
             media = self.media_repository.upsert_media(
-                media_id=media_id,
+                imdb_id=media_imdb_id,
                 media_type=media_type,
                 title=clean_fallback,
                 poster=fallback_poster,
@@ -65,25 +65,31 @@ class MediaMetadataService:
             media = existing_media
             should_enrich = not existing_media.poster or existing_media.title == "Senza titolo"
 
-        # Ensure MediaItem exists
+        # Ensure MediaItem exists with integer media_id
         item = self.media_item_repository.upsert_media_item(
-            item_id=item_id,
-            media_id=media_id,
+            media_id=media.id,
             season=season,
             episode=episode,
         )
 
-        # If enrichment needed, schedule background task or async task
+        # If enrichment needed, schedule background task
         if should_enrich and schedule_enrichment and self.tmdb_client.is_available():
-            self._schedule_enrichment(media_id, media_type, season)
+            self._schedule_enrichment(media.id, media_imdb_id, media_type, season)
 
         return media, item
 
-    def _schedule_enrichment(self, media_id: str, media_type: str, season: int | None = None) -> None:
+    def _schedule_enrichment(
+        self, media_id: int, imdb_id: str | None, media_type: str, season: int | None = None
+    ) -> None:
         if self.task_service and hasattr(self.task_service, "enqueue_task"):
             self.task_service.enqueue_task(
                 name="enrich_media_metadata",
-                arguments={"media_id": media_id, "media_type": media_type, "season": season},
+                arguments={
+                    "media_id": media_id,
+                    "imdb_id": imdb_id,
+                    "media_type": media_type,
+                    "season": season,
+                },
                 delay_seconds=0,
                 deduplicate=True,
             )
@@ -91,16 +97,34 @@ class MediaMetadataService:
             # Fallback fire-and-forget in current loop if available
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(self.enrich_from_tmdb(media_id, media_type, season))
+                loop.create_task(self.enrich_from_tmdb(media_id, media_type, season=season, imdb_id=imdb_id))
             except RuntimeError:
                 pass
 
-    async def enrich_from_tmdb(self, media_id: str, media_type: str, season: int | None = None) -> bool:
+    async def enrich_from_tmdb(
+        self,
+        media_id: int | str,
+        media_type: str,
+        season: int | None = None,
+        imdb_id: str | None = None,
+    ) -> bool:
         if not self.tmdb_client.is_available():
             return False
 
+        # Resolve media entity and effective imdb_id
+        resolved_media = None
+        if isinstance(media_id, int) or (isinstance(media_id, str) and media_id.isdigit()):
+            resolved_media = self.media_repository.get_media(int(media_id))
+        if resolved_media is None and (imdb_id or isinstance(media_id, str)):
+            target_imdb = imdb_id or str(media_id)
+            resolved_media = self.media_repository.get_by_imdb_id(target_imdb)
+
+        query_imdb_id = imdb_id or (resolved_media.imdb_id if resolved_media else (str(media_id) if str(media_id).startswith("tt") else None))
+        if not query_imdb_id:
+            return False
+
         try:
-            meta = await self.tmdb_client.get_meta_by_imdb_id(media_id, media_type, season=season)
+            meta = await self.tmdb_client.get_meta_by_imdb_id(query_imdb_id, media_type, season=season)
             if not meta:
                 return False
 
@@ -110,9 +134,12 @@ class MediaMetadataService:
             year = meta.get("year")
             overview = meta.get("overview")
 
+            mid = resolved_media.id if resolved_media else (int(media_id) if isinstance(media_id, int) or (isinstance(media_id, str) and media_id.isdigit()) else None)
+
             if name or poster:
-                self.media_repository.upsert_media(
-                    media_id=media_id,
+                saved_media = self.media_repository.upsert_media(
+                    media_id=mid,
+                    imdb_id=query_imdb_id,
                     media_type=media_type,
                     title=name or "Senza titolo",
                     year=year,
@@ -120,24 +147,24 @@ class MediaMetadataService:
                     backdrop=backdrop,
                     overview=overview,
                 )
+                mid = saved_media.id
 
-            # Also update episode names if provided in videos
-            for vid in meta.get("videos", []):
-                s = vid.get("season")
-                ep = vid.get("episode")
-                ep_title = vid.get("title")
-                if s is not None and ep is not None and ep_title:
-                    item_id = f"{media_id}:{s}:{ep}"
-                    self.media_item_repository.upsert_media_item(
-                        item_id=item_id,
-                        media_id=media_id,
-                        season=s,
-                        episode=ep,
-                        title=ep_title,
-                    )
+            # Update episode names if provided
+            if mid is not None:
+                for vid in meta.get("videos", []):
+                    s = vid.get("season")
+                    ep = vid.get("episode")
+                    ep_title = vid.get("title")
+                    if s is not None and ep is not None and ep_title:
+                        self.media_item_repository.upsert_media_item(
+                            media_id=mid,
+                            season=s,
+                            episode=ep,
+                            title=ep_title,
+                        )
 
-            self.logger.info("Successfully enriched metadata for %s (%s)", media_id, name)
+            self.logger.info("Successfully enriched metadata for %s (%s)", query_imdb_id, name)
             return True
         except Exception as e:
-            self.logger.warning("Failed to enrich metadata for %s from TMDB: %s", media_id, e)
+            self.logger.warning("Failed to enrich metadata for %s from TMDB: %s", query_imdb_id, e)
             return False

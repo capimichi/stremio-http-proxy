@@ -57,13 +57,21 @@ def test_cache_service_returns_cached_file_path_and_touches_entry(tmp_path):
 
 def test_cache_service_returns_cached_route_by_content_id_fallback(tmp_path):
     manager = build_manager(tmp_path)
+    from stremio_http_proxy.repository.media_repository import MediaRepository
+    from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
+
+    media_repo = MediaRepository(manager.db_manager)
+    media_item_repo = MediaItemRepository(manager.db_manager)
+    media = media_repo.upsert_media(imdb_id="tt3749900", media_type="series", title="Test Series")
+    item = media_item_repo.upsert_media_item(media_id=media.id, season=1, episode=2)
+
     # File is downloaded at index 9 for episode tt3749900:1:2
     cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 9)
     media_path = manager.prepare_download_path(cache_key)
     media_path.write_bytes(b"demo video")
     manager.finalize_download(cache_key)
     ready_entry = manager.mark_ready(cache_key, 10)
-    manager._write_entry(cache_key, ready_entry.model_copy(update={"media_item_id": "tt3749900:1:2"}))
+    manager._write_entry(cache_key, ready_entry.model_copy(update={"media_item_id": item.id}))
 
     service = CacheService(manager, "https://proxy.example.com", CacheTokenService("secret", 259200))
 
