@@ -105,7 +105,6 @@ class DefaultContainer:
         self.next_episode_prefetch_enabled = os.environ.get("NEXT_EPISODE_PREFETCH_ENABLED", "true").lower() == "true"
         self.next_episode_prefetch_stream_limit = int(os.environ.get("NEXT_EPISODE_PREFETCH_STREAM_LIMIT", "3"))
         self.prefetch_target_completed_per_episode = int(os.environ.get("PREFETCH_TARGET_COMPLETED_PER_EPISODE", "1"))
-        self.prefetch_skip_zero_seeders = os.environ.get("PREFETCH_SKIP_ZERO_SEEDERS", "false").lower() == "true"
         self.prefetch_delay_seconds = int(os.environ.get("PREFETCH_DELAY_SECONDS", "120"))
         self.prefetch_poll_seconds = int(os.environ.get("PREFETCH_POLL_SECONDS", "15"))
         self.log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -204,7 +203,6 @@ class DefaultContainer:
             enabled=self.next_episode_prefetch_enabled,
             stream_limit=self.next_episode_prefetch_stream_limit,
             target_completed_per_episode=self.prefetch_target_completed_per_episode,
-            skip_zero_seeders=self.prefetch_skip_zero_seeders,
             delay_seconds=self.prefetch_delay_seconds,
         )
 

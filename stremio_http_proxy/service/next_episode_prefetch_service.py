@@ -20,7 +20,6 @@ class NextEpisodePrefetchService:
         enabled: bool = True,
         stream_limit: int = 3,
         target_completed_per_episode: int = 1,
-        skip_zero_seeders: bool = False,
         delay_seconds: int = 120,
         task_service: Any = None,
     ):
@@ -31,7 +30,6 @@ class NextEpisodePrefetchService:
         self.enabled = enabled
         self.stream_limit = stream_limit
         self.target_completed_per_episode = target_completed_per_episode
-        self.skip_zero_seeders = skip_zero_seeders
         self.delay_seconds = delay_seconds
         self.task_service = task_service
 
@@ -130,10 +128,6 @@ class NextEpisodePrefetchService:
         candidates = self.stream_rewrite_service.extract_download_candidates(stream_payload)
         if not candidates:
             return False
-
-        # Filter out 0-seeder streams if skip_zero_seeders is True
-        if self.skip_zero_seeders:
-            candidates = [c for c in candidates if c.get("seeders") != 0]
 
         enqueued_count = 0
         for candidate in candidates:

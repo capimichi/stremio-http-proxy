@@ -46,7 +46,6 @@ def test_next_episode_prefetch_enqueues_first_three_streams():
         StreamRewriteService("http://localhost:8691", FakeCacheManager()),
         queue,
         target_completed_per_episode=3,
-        skip_zero_seeders=False,
     )
 
     asyncio.run(service.enqueue_next_episode("series", "tt123:1:1", "tv"))
@@ -148,16 +147,15 @@ def test_prefetch_skips_zero_seeders_and_picks_single_highest_seeder():
         cache_manager=cache_mgr,
         enabled=True,
         target_completed_per_episode=1,
-        skip_zero_seeders=True,
     )
 
     asyncio.run(service.enqueue_next_episode("series", "tt123:1:1", "tv"))
 
     # Must only enqueue ONE candidate (target_completed_per_episode=1)
     assert len(queue.calls) == 1
-    # Must have chosen candidate with 15 seeders ("1" * 40), skipping 0 seeders ("0" * 40)
-    assert queue.calls[0]["link"] == "1" * 40
-    assert queue.calls[0]["title"].startswith("15 seeds")
+    # Must have chosen the first candidate ("0" * 40)
+    assert queue.calls[0]["link"] == "0" * 40
+    assert queue.calls[0]["title"].startswith("zero seeds")
 
 
 def test_prefetch_on_download_failed_cascades_to_next_candidate():
@@ -171,15 +169,14 @@ def test_prefetch_on_download_failed_cascades_to_next_candidate():
         cache_manager=cache_mgr,
         enabled=True,
         target_completed_per_episode=1,
-        skip_zero_seeders=True,
     )
 
     asyncio.run(service.on_download_failed("series", "tt123:1:2", "tv"))
 
-    # Must enqueue the next best candidate (5 seeders: "2" * 40)
+    # Must enqueue the next best candidate (which is now the first one since it's not filtered out: "0" * 40)
     assert len(queue.calls) == 1
-    assert queue.calls[0]["link"] == "2" * 40
-    assert queue.calls[0]["title"].startswith("5 seeds")
+    assert queue.calls[0]["link"] == "0" * 40
+    assert queue.calls[0]["title"].startswith("zero seeds")
 
 
 def test_prefetch_skips_if_target_completed_already_reached():
@@ -193,7 +190,6 @@ def test_prefetch_skips_if_target_completed_already_reached():
         cache_manager=cache_mgr,
         enabled=True,
         target_completed_per_episode=1,
-        skip_zero_seeders=True,
     )
 
     asyncio.run(service.enqueue_next_episode("series", "tt123:1:1", "tv"))
