@@ -1,8 +1,8 @@
 """Create task_entry table
 
 Revision ID: 005_create_task_entry_table
-Revises: 004_create_playback_history_table
-Create Date: 2026-09-20 18:54:00.000000
+Revises: 004_create_playback_history
+Create Date: 2026-09-21 12:00:00.000000
 
 """
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "005_create_task_entry_table"
-down_revision: Union[str, None] = "004_create_playback_history_table"
+down_revision: Union[str, None] = "004_create_playback_history"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

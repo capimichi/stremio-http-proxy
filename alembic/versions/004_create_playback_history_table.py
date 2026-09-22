@@ -1,6 +1,6 @@
 """Create playback_history table
 
-Revision ID: 004_create_playback_history_table
+Revision ID: 004_create_playback_history
 Revises: 003_create_cache_entries_table
 Create Date: 2026-09-20 18:53:00.000000
 
@@ -10,7 +10,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "004_create_playback_history_table"
+revision: str = "004_create_playback_history"
 down_revision: Union[str, None] = "003_create_cache_entries_table"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
