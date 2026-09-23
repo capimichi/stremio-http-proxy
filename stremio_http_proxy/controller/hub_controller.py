@@ -50,6 +50,7 @@ class HubController:
         self.router.add_api_route("/api/browser/cache-season", self.cache_season, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/browser/cache-episode", self.cache_episode, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/hub/streams/{cache_key:path}", self.delete_stream, methods=["DELETE"], dependencies=auth)
+        self.router.add_api_route("/api/hub/streams/{cache_key:path}", self.retry_stream, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/hub/tasks", self.get_tasks, methods=["GET"], dependencies=auth)
 
     async def get_tasks(
@@ -108,3 +109,6 @@ class HubController:
 
     async def delete_stream(self, cache_key: str) -> dict[str, Any]:
         return self.hub_service.delete_stream(cache_key)
+
+    async def retry_stream(self, cache_key: str) -> dict[str, Any]:
+        return await self.hub_service.retry_stream(cache_key)

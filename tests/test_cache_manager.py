@@ -1,3 +1,5 @@
+import pytest
+
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
@@ -141,6 +143,32 @@ def test_write_entry_fallback_on_invalid_media_item_id(tmp_path):
     manager._write_entry(key, entry)
     saved = manager.get_entry(key)
     assert saved.status == CacheEntryStatusEnum.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_reenqueue_entry(tmp_path):
+    manager = build_manager(tmp_path)
+    key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 1)
+
+    # Re-enqueuing non-existent entry returns False
+    assert await manager.reenqueue_entry("nonexistent:1") is False
+
+    # Mark failed
+    manager.mark_failed(key, "Network timeout", attempt=3)
+    entry = manager.get_entry(key)
+    assert entry.status == CacheEntryStatusEnum.FAILED
+    assert entry.attempt == 3
+    assert entry.last_error == "Network timeout"
+
+    # Reenqueue
+    success = await manager.reenqueue_entry(key)
+    assert success is True
+
+    reenqueued = manager.get_entry(key)
+    assert reenqueued.status == CacheEntryStatusEnum.QUEUED
+    assert reenqueued.attempt == 0
+    assert reenqueued.last_error is None
+    assert reenqueued.downloaded_bytes == 0
 
 
 

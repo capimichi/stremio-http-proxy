@@ -134,8 +134,12 @@ function renderActiveDownloadsTable(items, isActive) {
           </div>
         </td>
         <td class="px-5 py-3 text-right whitespace-nowrap">
-          <a href="/dashboard/cache-entry/${d.infohash}/${d.index}" class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors">
-            Dettagli
+          <a
+            href="/dashboard/cache-entry/${d.infohash}/${d.index}"
+            class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white p-1.5 transition-colors"
+            title="Dettagli elemento"
+          >
+            <i class="fa-solid fa-eye text-[11px]"></i>
           </a>
         </td>
       </tr>`;

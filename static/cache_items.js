@@ -131,10 +131,22 @@ function renderTable(payload) {
       <td class="px-5 py-3 text-slate-500 whitespace-nowrap font-mono text-[11px]">${formatTime(d.created_at)}</td>
       <td class="px-5 py-3 text-slate-500 font-mono text-[11px] whitespace-nowrap" title="${d.infohash}">${shortHash}</td>
       <td class="px-5 py-3 text-right whitespace-nowrap">
-        <div class="flex items-center justify-end gap-2">
-          <a href="/dashboard/cache-entry/${d.infohash}/${d.index}" class="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors">
-            Dettagli
+        <div class="flex items-center justify-end gap-1.5">
+          <a
+            href="/dashboard/cache-entry/${d.infohash}/${d.index}"
+            class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white p-1.5 transition-colors"
+            title="Dettagli elemento"
+          >
+            <i class="fa-solid fa-eye text-[11px]"></i>
           </a>
+          <button
+            class="retry-stream-btn inline-flex items-center justify-center rounded-lg border border-sky-900/40 bg-sky-950/20 hover:bg-sky-900/40 text-sky-400 hover:text-sky-300 p-1.5 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+            data-key="${d.cache_key}"
+            title="Rimetti in coda / Riprova download"
+            ${["queued", "downloading", "processing", "optimizing"].includes(d.status) ? "disabled" : ""}
+          >
+            <i class="fa-solid fa-arrows-rotate text-[11px]"></i>
+          </button>
           <button
             class="delete-stream-btn inline-flex items-center justify-center rounded-lg border border-rose-900/40 bg-rose-950/20 hover:bg-rose-900/40 text-rose-400 hover:text-rose-300 p-1.5 transition-colors"
             data-key="${d.cache_key}"
@@ -146,6 +158,33 @@ function renderTable(payload) {
       </td>
     </tr>`;
   }).join("");
+
+  document.querySelectorAll(".retry-stream-btn").forEach((btn) => {
+    btn.addEventListener("click", async function () {
+      const key = this.dataset.key;
+      const icon = this.querySelector("i");
+      if (icon) icon.classList.add("fa-spin");
+      this.disabled = true;
+
+      try {
+        const resp = await fetch(`/api/hub/streams/${encodeURIComponent(key)}`, {
+          method: "POST",
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.success) {
+          refresh();
+        } else {
+          alert("Impossibile rimettere in coda il download (il flusso potrebbe essere già in elaborazione).");
+          if (icon) icon.classList.remove("fa-spin");
+          this.disabled = false;
+        }
+      } catch (err) {
+        alert("Errore di rete: " + err);
+        if (icon) icon.classList.remove("fa-spin");
+        this.disabled = false;
+      }
+    });
+  });
 
   document.querySelectorAll(".delete-stream-btn").forEach((btn) => {
     btn.addEventListener("click", async function () {

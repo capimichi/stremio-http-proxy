@@ -240,3 +240,23 @@ def test_hub_service_get_tasks(playback_history_repo):
     assert tasks[0]["remaining_seconds"] > 0
 
 
+@pytest.mark.asyncio
+async def test_hub_service_retry_stream(playback_history_repo):
+    from unittest.mock import AsyncMock
+
+    mock_cache_manager = MagicMock()
+    mock_cache_manager.reenqueue_entry = AsyncMock(return_value=True)
+
+    service = HubService(
+        playback_history_repository=playback_history_repo,
+        cache_manager=mock_cache_manager,
+        next_episode_prefetch_service=MagicMock(),
+        task_service=MagicMock(),
+    )
+
+    res = await service.retry_stream("hash:1")
+    assert res["success"] is True
+    assert res["cache_key"] == "hash:1"
+    mock_cache_manager.reenqueue_entry.assert_awaited_once_with("hash:1")
+
+

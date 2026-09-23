@@ -301,6 +301,10 @@ class HubService:
         self.cache_manager.delete_entry(cache_key, reason="manual_user_request")
         return {"success": True, "cache_key": cache_key}
 
+    async def retry_stream(self, cache_key: str) -> dict[str, Any]:
+        success = await self.cache_manager.reenqueue_entry(cache_key)
+        return {"success": success, "cache_key": cache_key}
+
     def get_library(
         self,
         media_type: str | None = None,

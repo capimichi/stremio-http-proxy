@@ -91,6 +91,18 @@ def test_delete_stream_endpoint(client, mock_hub_service):
     assert resp.json()["cache_key"] == "abc:1"
 
 
+@pytest.mark.asyncio
+async def test_retry_stream_endpoint(client, mock_hub_service):
+    async def fake_retry(key):
+        return {"success": True, "cache_key": key}
+
+    mock_hub_service.retry_stream.side_effect = fake_retry
+    resp = client.post("/api/hub/streams/abc:1")
+    assert resp.status_code == 200
+    assert resp.json()["cache_key"] == "abc:1"
+    assert resp.json()["success"] is True
+
+
 def test_get_season_cache_endpoint(client, mock_hub_service):
     mock_hub_service.get_season_cache_status.return_value = {
         1: {"status": "ready", "progress_percent": 100.0, "cache_key": "k1"},

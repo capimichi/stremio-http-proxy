@@ -363,6 +363,39 @@ class CacheManager:
         self.logger.info("Enqueued job %s for %s", job.job_id, job.cache_key)
         return True
 
+    async def reenqueue_entry(self, cache_key: str) -> bool:
+        with self.db_manager.session() as session:
+            record = session.get(CacheEntryRecord, cache_key)
+            if record is None:
+                return False
+
+        entry = self.get_entry(cache_key)
+        self.cleanup_partial(cache_key)
+        media_path = Path(entry.file_path)
+        if media_path.is_file():
+            media_path.unlink(missing_ok=True)
+
+        now = time.time()
+        job = DownloadJob(
+            job_id=cache_key,
+            cache_key=cache_key,
+            link=entry.source_link or entry.infohash,
+            title=entry.title,
+            poster=entry.poster,
+            category=entry.category,
+            index=entry.cache_index,
+            priority=entry.priority or 100,
+            attempt=0,
+            max_attempts=entry.max_attempts or 3,
+            trigger=entry.trigger or "manual",
+            content_type=entry.content_type,
+            content_id=entry.content_id,
+            media_item_id=entry.media_item_id,
+            enqueued_at=now,
+            available_at=now,
+        )
+        return await self.enqueue_download(job)
+
     async def claim_next_download(self, worker_id: str, lease_seconds: int = 180) -> DownloadJob | None:
         now = time.time()
         with self.db_manager.session() as session:
