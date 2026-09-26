@@ -457,3 +457,158 @@ def test_extract_download_candidates_extracts_seeders():
     assert candidates[1]["seeders"] == 0
     assert candidates[2]["seeders"] is None
 
+
+@pytest.mark.asyncio
+async def test_rewrite_injects_cached_stream_when_missing_from_upstream():
+    from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
+    from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
+
+    hash1 = "a" * 40
+    hash_other = "b" * 40
+    cache_manager = MagicMock()
+    cache_manager.build_cache_key.return_value = None
+    cache_manager.get_ready_entry_by_content.return_value = None
+    cache_manager.is_content_ready.return_value = False
+
+    cached_entry = CacheEntryModel(
+        cache_key=f"{hash1}:1",
+        infohash=hash1,
+        cache_index=1,
+        status=CacheEntryStatusEnum.READY.value,
+        title="Breaking.Bad.S01E01.1080p.mkv",
+        source_link=f"magnet:?xt=urn:btih:{hash1}",
+        file_path="/var/cache/hash1_1.mkv",
+        tmp_path="/var/cache/hash1_1.tmp",
+        size_bytes=2 * 1024 * 1024 * 1024,
+    )
+    cache_manager.get_ready_entries_by_content.return_value = [cached_entry]
+
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=cache_manager,
+        cache_enabled=True,
+    )
+
+    upstream_payload = {
+        "streams": [
+            {
+                "name": "Torrentio 720p",
+                "title": "Breaking Bad S01E01 720p",
+                "infoHash": hash_other,
+                "fileIdx": 0,
+            }
+        ]
+    }
+
+    result = await service.rewrite(
+        upstream_payload,
+        category="tv",
+        content_type="series",
+        content_id="tt0903747:1:1",
+    )
+
+    streams = result.get("streams", [])
+    assert len(streams) == 2
+    first_stream = streams[0]
+    assert first_stream["name"] == "🔥 [Cache Locale]"
+    assert "Breaking.Bad.S01E01.1080p.mkv" in first_stream["title"]
+    assert "2.00 GB" in first_stream["title"]
+    assert first_stream["_meta"]["cached"] is True
+    assert first_stream["_meta"]["infohash"] == hash1
+    assert first_stream["_meta"]["cache_index"] == 1
+    assert "link=magnet" in first_stream["url"]
+    assert "index=1" in first_stream["url"]
+
+
+@pytest.mark.asyncio
+async def test_rewrite_does_not_duplicate_when_upstream_already_has_cached_stream():
+    from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
+    from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
+
+    hash1 = "a" * 40
+    cache_manager = MagicMock()
+    cache_manager.build_cache_key.return_value = f"{hash1}:1"
+    cache_manager.is_ready.return_value = True
+    cache_manager.parse_cache_key.return_value = (hash1, 1)
+
+    cached_entry = CacheEntryModel(
+        cache_key=f"{hash1}:1",
+        infohash=hash1,
+        cache_index=1,
+        status=CacheEntryStatusEnum.READY.value,
+        title="Breaking.Bad.S01E01.1080p.mkv",
+        source_link=f"magnet:?xt=urn:btih:{hash1}",
+        file_path="/var/cache/hash1_1.mkv",
+        tmp_path="/var/cache/hash1_1.tmp",
+        size_bytes=2 * 1024 * 1024 * 1024,
+    )
+    cache_manager.get_ready_entries_by_content.return_value = [cached_entry]
+
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=cache_manager,
+        cache_enabled=True,
+    )
+
+    upstream_payload = {
+        "streams": [
+            {
+                "name": "Torrentio 1080p",
+                "title": "Breaking Bad S01E01 1080p",
+                "infoHash": hash1,
+                "fileIdx": 0,
+            }
+        ]
+    }
+
+    result = await service.rewrite(
+        upstream_payload,
+        category="tv",
+        content_type="series",
+        content_id="tt0903747:1:1",
+    )
+
+    streams = result.get("streams", [])
+    assert len(streams) == 1
+    assert streams[0]["name"] == "🔥 Torrentio 1080p"
+
+
+@pytest.mark.asyncio
+async def test_rewrite_empty_upstream_injects_cached_stream():
+    from stremio_http_proxy.model.cache_entry import CacheEntry as CacheEntryModel
+    from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
+
+    hash1 = "a" * 40
+    cache_manager = MagicMock()
+    cached_entry = CacheEntryModel(
+        cache_key=f"{hash1}:0",
+        infohash=hash1,
+        cache_index=0,
+        status=CacheEntryStatusEnum.READY.value,
+        title="Movie.1080p.mkv",
+        source_link=f"magnet:?xt=urn:btih:{hash1}",
+        file_path="/var/cache/hash1_0.mkv",
+        tmp_path="/var/cache/hash1_0.tmp",
+        size_bytes=1024 * 1024 * 1024,
+    )
+    cache_manager.get_ready_entries_by_content.return_value = [cached_entry]
+
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=cache_manager,
+        cache_enabled=True,
+    )
+
+    result = await service.rewrite(
+        {"streams": []},
+        category="movie",
+        content_type="movie",
+        content_id="tt0111161",
+    )
+
+    streams = result.get("streams", [])
+    assert len(streams) == 1
+    assert streams[0]["name"] == "🔥 [Cache Locale]"
+    assert streams[0]["_meta"]["cached"] is True
+
+

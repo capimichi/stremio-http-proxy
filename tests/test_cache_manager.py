@@ -171,5 +171,84 @@ async def test_reenqueue_entry(tmp_path):
     assert reenqueued.downloaded_bytes == 0
 
 
+def test_get_ready_entries_by_content_series_and_movie(tmp_path):
+    manager = build_manager(tmp_path)
+    from stremio_http_proxy.repository.media_repository import MediaRepository
+    from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
+
+    media_repo = MediaRepository(manager.db_manager)
+    media_item_repo = MediaItemRepository(manager.db_manager)
+
+    media = media_repo.upsert_media(imdb_id="tt0903747", media_type="series", title="Breaking Bad")
+    item = media_item_repo.upsert_media_item(media_id=media.id, season=1, episode=1, title="Pilot")
+
+    file_path = tmp_path / "test_ep1.mkv"
+    file_path.write_bytes(b"video content")
+
+    key1 = "1111111111111111111111111111111111111111:0"
+    entry1 = manager.get_entry(key1).model_copy(
+        update={
+            "infohash": "1111111111111111111111111111111111111111",
+            "cache_index": 0,
+            "status": CacheEntryStatusEnum.READY.value,
+            "title": "Breaking.Bad.S01E01.720p.mkv",
+            "file_path": str(file_path),
+            "size_bytes": len(b"video content"),
+            "media_item_id": item.id,
+            "content_type": "series",
+        }
+    )
+    manager._write_entry(key1, entry1)
+
+    ready = manager.get_ready_entries_by_content("tt0903747:1:1")
+    assert len(ready) == 1
+    assert ready[0].infohash == "1111111111111111111111111111111111111111"
+    assert ready[0].cache_index == 0
+
+    assert len(manager.get_ready_entries_by_content("tt0903747:1:2")) == 0
+
+
+def test_get_ready_entries_excludes_missing_file_or_non_ready(tmp_path):
+    manager = build_manager(tmp_path)
+    from stremio_http_proxy.repository.media_repository import MediaRepository
+    from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
+
+    media_repo = MediaRepository(manager.db_manager)
+    media_item_repo = MediaItemRepository(manager.db_manager)
+
+    media = media_repo.upsert_media(imdb_id="tt0111161", media_type="movie", title="The Shawshank Redemption")
+    item = media_item_repo.upsert_media_item(media_id=media.id, season=None, episode=None, title="The Shawshank Redemption")
+
+    key1 = "2222222222222222222222222222222222222222:0"
+    entry1 = manager.get_entry(key1).model_copy(
+        update={
+            "infohash": "2222222222222222222222222222222222222222",
+            "cache_index": 0,
+            "status": CacheEntryStatusEnum.DOWNLOADING.value,
+            "title": "Movie Downloading",
+            "file_path": str(tmp_path / "nonexistent1.mkv"),
+            "media_item_id": item.id,
+        }
+    )
+    manager._write_entry(key1, entry1)
+
+    key2 = "3333333333333333333333333333333333333333:0"
+    entry2 = manager.get_entry(key2).model_copy(
+        update={
+            "infohash": "3333333333333333333333333333333333333333",
+            "cache_index": 0,
+            "status": CacheEntryStatusEnum.READY.value,
+            "title": "Movie Missing File",
+            "file_path": str(tmp_path / "missing.mkv"),
+            "media_item_id": item.id,
+        }
+    )
+    manager._write_entry(key2, entry2)
+
+    ready = manager.get_ready_entries_by_content("tt0111161")
+    assert len(ready) == 0
+
+
+
 
 

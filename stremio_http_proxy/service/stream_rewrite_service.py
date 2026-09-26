@@ -5,6 +5,7 @@ import re
 from injector import inject
 
 from stremio_http_proxy.client.mediaflow_client import MediaflowClient
+from stremio_http_proxy.helper.format_helper import format_bytes
 from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
@@ -48,6 +49,7 @@ class StreamRewriteService:
 
         rewritten_streams = []
         link_to_entries: dict[str, list[dict]] = {}
+        seen_cached_keys: set[tuple[str, int | None]] = set()
 
         for stream in streams:
             if not isinstance(stream, dict):
@@ -132,6 +134,12 @@ class StreamRewriteService:
                             is_cached=is_cached,
                         )
 
+                if isinstance(updated.get("_meta"), dict):
+                    m_hash = updated["_meta"].get("infohash")
+                    m_idx = updated["_meta"].get("cache_index")
+                    if m_hash:
+                        seen_cached_keys.add((normalize_infohash(m_hash), m_idx))
+
                 rewritten_streams.append(updated)
                 continue
             updated = dict(stream)
@@ -145,6 +153,20 @@ class StreamRewriteService:
                 if isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cache_index") is not None
                 else index
             )
+            raw_infohash = extract_infohash(torrent_link)
+            if raw_infohash:
+                norm_hash = normalize_infohash(raw_infohash)
+                seen_cached_keys.add((norm_hash, index))
+                seen_cached_keys.add((norm_hash, effective_index))
+                raw_idx = updated.get("fileIdx") if updated.get("fileIdx") is not None else updated.get("fileIndex")
+                if isinstance(raw_idx, int):
+                    seen_cached_keys.add((norm_hash, raw_idx))
+            if isinstance(updated.get("_meta"), dict):
+                m_hash = updated["_meta"].get("infohash")
+                m_idx = updated["_meta"].get("cache_index")
+                if m_hash:
+                    seen_cached_keys.add((normalize_infohash(m_hash), m_idx))
+
             updated["url"] = self._build_playback_url(
                 torrent_link,
                 title,
@@ -183,6 +205,41 @@ class StreamRewriteService:
                             updated_meta = dict(meta)
                             updated_meta["seeders"] = seeders
                             entry["_meta"] = updated_meta
+
+        # Inject missing ready cached streams for this content_id
+        if self.cache_enabled and content_id and hasattr(self.cache_manager, "get_ready_entries_by_content"):
+            ready_entries = self.cache_manager.get_ready_entries_by_content(content_id)
+            for entry in ready_entries:
+                entry_hash = normalize_infohash(entry.infohash) if entry.infohash else ""
+                if (entry_hash, entry.cache_index) in seen_cached_keys or (entry_hash, None) in seen_cached_keys:
+                    continue
+                formatted_sz = format_bytes(entry.size_bytes)
+                syn_title = f"{entry.title or 'Video'}\n💾 {formatted_sz}" if formatted_sz != "N/A" else (entry.title or "Video")
+                syn_link = entry.source_link or f"magnet:?xt=urn:btih:{entry.infohash}"
+                syn_stream = {
+                    "name": f"{self.CACHED_NAME_PREFIX}[Cache Locale]",
+                    "title": syn_title,
+                    "url": self._build_playback_url(
+                        link=syn_link,
+                        title=entry.title,
+                        poster=entry.poster,
+                        category=category,
+                        index=entry.cache_index,
+                        content_type=content_type,
+                        content_id=content_id,
+                        is_cached=True,
+                    ),
+                    "behaviorHints": {
+                        "notWebReady": False,
+                    },
+                    "_meta": {
+                        "cached": True,
+                        "infohash": entry.infohash,
+                        "cache_index": entry.cache_index,
+                    },
+                }
+                rewritten_streams.append(syn_stream)
+                seen_cached_keys.add((entry_hash, entry.cache_index))
 
         # Prioritize cached streams at the very top, preserving relative order of other streams
         rewritten_streams.sort(

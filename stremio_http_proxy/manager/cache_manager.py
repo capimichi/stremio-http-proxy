@@ -749,4 +749,49 @@ class CacheManager:
     def is_content_ready(self, infohash: str, content_id: str | None) -> bool:
         return self.get_ready_entry_by_content(infohash, content_id) is not None
 
+    def get_ready_entries_by_content(self, content_id: str | int | None) -> list[CacheEntryModel]:
+        if not content_id:
+            return []
+        with self.db_manager.session() as session:
+            if isinstance(content_id, int) or (isinstance(content_id, str) and content_id.isdigit()):
+                query = (
+                    select(CacheEntryRecord)
+                    .where(
+                        CacheEntryRecord.media_item_id == int(content_id),
+                        CacheEntryRecord.status == CacheEntryStatusEnum.READY.value,
+                    )
+                    .order_by(
+                        CacheEntryRecord.last_accessed_at.desc(),
+                        CacheEntryRecord.completed_at.desc(),
+                        CacheEntryRecord.created_at.desc(),
+                    )
+                )
+                records = session.scalars(query).all()
+            else:
+                imdb_id, _, season, episode, _ = parse_content_id(str(content_id))
+                query = (
+                    select(CacheEntryRecord)
+                    .join(MediaItem, CacheEntryRecord.media_item_id == MediaItem.id)
+                    .join(Media, MediaItem.media_id == Media.id)
+                    .where(
+                        Media.imdb_id == imdb_id,
+                        CacheEntryRecord.status == CacheEntryStatusEnum.READY.value,
+                    )
+                )
+                if season is not None and episode is not None:
+                    query = query.where(MediaItem.season == season, MediaItem.episode == episode)
+                query = query.order_by(
+                    CacheEntryRecord.last_accessed_at.desc(),
+                    CacheEntryRecord.completed_at.desc(),
+                    CacheEntryRecord.created_at.desc(),
+                )
+                records = session.scalars(query).all()
+
+        ready_entries: list[CacheEntryModel] = []
+        for r in records:
+            if Path(r.file_path).exists():
+                ready_entries.append(self._to_model(r))
+        return ready_entries
+
+
 
