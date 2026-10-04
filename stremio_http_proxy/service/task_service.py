@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from typing import Any
@@ -64,7 +65,7 @@ class TaskService:
             self.logger.info("Enqueued task %s (id=%s) scheduled at %s", name, task_id, scheduled_at)
             return task_id
 
-    async def claim_next_task(self, worker_id: str, lease_seconds: int = 180) -> TaskJob | None:
+    async def claim_next_task(self, worker_id: str, lease_seconds: int = 1800) -> TaskJob | None:
         now = time.time()
         with self.db_manager.session() as session:
             # 1. Requeue expired processing tasks
@@ -169,6 +170,7 @@ class TaskService:
             return True
 
         self.logger.info("Worker %s executing task %s (id=%s)", worker_id, job.name, job.id)
+        heartbeat_task = asyncio.create_task(self._task_heartbeat(job.id, worker_id))
         try:
             success = await task_handler.run(job.arguments)
             if success:
@@ -193,6 +195,31 @@ class TaskService:
                 retry_delay_seconds=60 * job.attempt,
             )
             return True
+        finally:
+            heartbeat_task.cancel()
+
+    async def _task_heartbeat(self, task_id: int, worker_id: str, interval: int = 30, lease_extension: int = 1800) -> None:
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                now = time.time()
+                with self.db_manager.session() as session:
+                    session.execute(
+                        update(TaskEntry)
+                        .where(
+                            TaskEntry.id == task_id,
+                            TaskEntry.status == "processing",
+                            TaskEntry.claimed_by == worker_id,
+                        )
+                        .values(
+                            processing_expires_at=now + lease_extension,
+                            updated_at=now,
+                        )
+                    )
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            self.logger.warning("Heartbeat update failed for task id=%s", task_id, exc_info=True)
 
     def list_tasks(
         self,

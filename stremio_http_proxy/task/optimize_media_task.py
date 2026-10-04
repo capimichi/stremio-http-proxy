@@ -215,6 +215,7 @@ class OptimizeMediaTask(AbstractTask):
             cmd.extend(["-c:v", "copy"])
         elif use_gpu:
             cmd.extend([
+                "-vf", "scale_vaapi=format=nv12",
                 "-c:v", "h264_vaapi",
                 "-low_power", "1",
                 "-quality", "7",

@@ -126,6 +126,8 @@ async def test_transcodes_hevc_via_gpu_when_vaapi_available(tmp_path):
     assert media_file.read_bytes() == b"MP4_GPU_ENCODED"
     assert "-c:v" in executed_cmd
     assert executed_cmd[executed_cmd.index("-c:v") + 1] == "h264_vaapi"
+    assert "-vf" in executed_cmd
+    assert executed_cmd[executed_cmd.index("-vf") + 1] == "scale_vaapi=format=nv12"
     assert "-hwaccel" in executed_cmd
 
 
