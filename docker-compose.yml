@@ -47,6 +47,9 @@ services:
       - .env
     volumes:
       - app-var:/app/var
+    # Optional GPU hardware acceleration (Intel VA-API / QuickSync)
+    # devices:
+    #   - /dev/dri:/dev/dri
     restart: unless-stopped
     depends_on:
       db:

@@ -124,6 +124,11 @@ class DefaultContainer:
             os.environ.get("HTTP_STREAMS_PROXY_ENABLED", "true").lower() == "true"
             and not self.http_streams_passthrough
         )
+        self.optimize_media_enabled = os.environ.get("OPTIMIZE_MEDIA_ENABLED", "true").lower() == "true"
+        self.optimize_media_target = os.environ.get("OPTIMIZE_MEDIA_TARGET", "web_ready_mp4").lower()
+        self.optimize_media_gpu_enabled = os.environ.get("OPTIMIZE_MEDIA_GPU_ENABLED", "true").lower() == "true"
+        self.optimize_media_vaapi_device = os.environ.get("OPTIMIZE_MEDIA_VAAPI_DEVICE", "/dev/dri/renderD128")
+        self.optimize_media_preset = os.environ.get("OPTIMIZE_MEDIA_PRESET", "ultrafast")
         if not self.app_secret or not self.app_secret.strip():
             raise ValueError("APP_SECRET environment variable is required")
 
@@ -219,7 +224,15 @@ class DefaultContainer:
         task_registry = TaskRegistry()
         fetch_next_episode_task = FetchNextEpisodeTask(next_episode_prefetch_service)
         fetch_media_task = FetchMediaTask(next_episode_prefetch_service)
-        optimize_media_task = OptimizeMediaTask(cache_manager, logger_factory)
+        optimize_media_task = OptimizeMediaTask(
+            cache_manager,
+            logger_factory,
+            optimize_media_enabled=self.optimize_media_enabled,
+            optimize_media_target=self.optimize_media_target,
+            gpu_enabled=self.optimize_media_gpu_enabled,
+            vaapi_device=self.optimize_media_vaapi_device,
+            preset=self.optimize_media_preset,
+        )
         enrich_media_metadata_task = EnrichMediaMetadataTask(media_metadata_service)
         task_registry.register(fetch_next_episode_task)
         task_registry.register(fetch_media_task)

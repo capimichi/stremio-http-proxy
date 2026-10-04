@@ -4,6 +4,7 @@ from stremio_http_proxy.container.default_container import DefaultContainer
 
 
 def test_default_container_requires_app_secret(monkeypatch):
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.delenv("APP_SECRET", raising=False)
     DefaultContainer.instance = None
 

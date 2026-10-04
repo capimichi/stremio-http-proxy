@@ -348,6 +348,13 @@ class StreamRewriteService:
         if isinstance(name, str) and name.strip() and not name.startswith(self.CACHED_NAME_PREFIX):
             stream["name"] = f"{self.CACHED_NAME_PREFIX}{name}"
 
+        if "behaviorHints" in stream and isinstance(stream["behaviorHints"], dict):
+            updated_bh = dict(stream["behaviorHints"])
+            updated_bh["notWebReady"] = False
+            stream["behaviorHints"] = updated_bh
+        elif "behaviorHints" not in stream:
+            stream["behaviorHints"] = {"notWebReady": False}
+
     def extract_download_candidates(self, payload: dict) -> list[dict[str, str | int | None]]:
         streams = payload.get("streams")
         if not isinstance(streams, list):

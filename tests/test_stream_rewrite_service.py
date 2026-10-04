@@ -610,5 +610,40 @@ async def test_rewrite_empty_upstream_injects_cached_stream():
     assert len(streams) == 1
     assert streams[0]["name"] == "🔥 [Cache Locale]"
     assert streams[0]["_meta"]["cached"] is True
+    assert streams[0]["behaviorHints"]["notWebReady"] is False
+
+
+@pytest.mark.asyncio
+async def test_upstream_stream_marked_cached_updates_not_web_ready_to_false():
+    cache_manager = MagicMock()
+    torrent_hash = "d" * 40
+    cache_manager.build_cache_key.return_value = f"{torrent_hash}:0"
+    cache_manager.is_ready.return_value = True
+    cache_manager.parse_cache_key.return_value = (torrent_hash, 0)
+
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=cache_manager,
+        cache_enabled=True,
+    )
+
+    payload = {
+        "streams": [
+            {
+                "name": "Corsaro 1080p",
+                "infoHash": torrent_hash,
+                "fileIdx": 0,
+                "behaviorHints": {"notWebReady": True},
+            }
+        ]
+    }
+
+    result = await service.rewrite(payload, category="movie", content_type="movie", content_id="tt0111161")
+    streams = result.get("streams", [])
+    assert len(streams) == 1
+    assert streams[0]["name"] == "🔥 Corsaro 1080p"
+    assert streams[0]["_meta"]["cached"] is True
+    assert streams[0]["behaviorHints"]["notWebReady"] is False
+
 
 
