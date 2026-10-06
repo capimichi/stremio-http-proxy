@@ -49,11 +49,40 @@ def test_add_torrent_posts_expected_payload():
     )
 
     assert response["action"] == "add"
-    assert response["link"] == "magnet:?xt=urn:btih:abc"
+    assert response["link"].startswith("magnet:?xt=urn:btih:abc&tr=")
+    assert "opentrackr.org" in response["link"]
     assert response["title"] == "Demo"
     assert response["poster"] == "https://image.invalid/poster.jpg"
     assert response["category"] == "movie"
     assert response["save_to_db"] is False
+
+
+def test_add_torrent_preserves_existing_trackers():
+    transport = httpx.MockTransport(_handler)
+    client = TorrServerClient("http://localhost:8090", 20, transport=transport)
+
+    magnet_with_tr = "magnet:?xt=urn:btih:abc&tr=udp%3A%2F%2Fcustom.tracker%3A6969"
+    response = asyncio.run(
+        client.add_torrent(
+            magnet_with_tr,
+            title="Demo",
+        )
+    )
+
+    assert response["link"] == magnet_with_tr
+
+
+def test_enrich_link_adds_trackers_to_bare_infohash():
+    raw_hash = "0123456789abcdef0123456789abcdef01234567"
+    enriched = TorrServerClient.enrich_link(raw_hash)
+    assert enriched.startswith(f"magnet:?xt=urn:btih:{raw_hash}&tr=")
+    assert "opentrackr.org" in enriched
+
+
+def test_enrich_link_ignores_non_torrent_link():
+    http_link = "https://example.com/video.mp4"
+    assert TorrServerClient.enrich_link(http_link) == http_link
+    assert TorrServerClient.enrich_link("") == ""
 
 
 def test_preload_hits_stream_endpoint_with_preload_flag():

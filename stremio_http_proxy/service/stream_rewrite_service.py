@@ -4,7 +4,6 @@ import re
 
 from injector import inject
 
-from stremio_http_proxy.client.mediaflow_client import MediaflowClient
 from stremio_http_proxy.helper.format_helper import format_bytes
 from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.manager.cache_manager import CacheManager
@@ -24,8 +23,7 @@ class StreamRewriteService:
         torrent_health_service: TorrentHealthService | None = None,
         torrserver_health_check_enabled: bool = False,
         torrserver_health_check_timeout: int = 15,
-        mediaflow_client: MediaflowClient | None = None,
-        http_streams_proxy_enabled: bool = True,
+        optimize_media_target: str = "web_ready_mp4",
     ):
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_manager = cache_manager
@@ -33,8 +31,7 @@ class StreamRewriteService:
         self.torrent_health_service = torrent_health_service
         self.torrserver_health_check_enabled = torrserver_health_check_enabled
         self.torrserver_health_check_timeout = torrserver_health_check_timeout
-        self.mediaflow_client = mediaflow_client
-        self.http_streams_proxy_enabled = http_streams_proxy_enabled
+        self.optimize_media_target = optimize_media_target
 
     async def rewrite(
         self,
@@ -57,82 +54,29 @@ class StreamRewriteService:
                 continue
             torrent_link = self._extract_torrent_link(stream)
             if torrent_link is None:
-                if not self.http_streams_proxy_enabled:
-                    updated = dict(stream)
-                    raw_url = updated.get("url")
-                    if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")):
-                        title = self._extract_title(updated)
-                        poster = self._extract_poster(updated)
-                        index = self._extract_index(updated)
-                        updated["url"] = self._build_playback_url(
-                            raw_url,
-                            title,
-                            poster,
-                            category,
-                            index,
-                            content_type,
-                            content_id,
-                            is_cached=False,
-                            force_play_route=True,
-                        )
-                    rewritten_streams.append(updated)
-                    continue
-
                 updated = dict(stream)
                 raw_url = updated.get("url")
                 if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")):
-                    is_mediaflow = False
-                    if self.mediaflow_client and self.mediaflow_client.is_available():
-                        if self.mediaflow_client.is_mediaflow_url(raw_url):
-                            hint = None
-                            bh = updated.get("behaviorHints")
-                            if isinstance(bh, dict) and bh.get("filename"):
-                                hint = bh.get("filename")
-                            elif updated.get("description") and ".m3u8" in updated.get("description"):
-                                hint = ".m3u8"
-                            updated["url"] = self.mediaflow_client.fix_mediaflow_url(raw_url, destination_hint=hint)
-                            is_mediaflow = True
-                        elif self._needs_mediaflow_proxy(updated):
-                            proxy_headers = self._extract_proxy_headers(updated)
-                            filename = self._extract_filename(updated)
-                            updated["url"] = await self.mediaflow_client.generate_proxy_url(
-                                destination_url=raw_url,
-                                request_headers=proxy_headers,
-                                filename=filename,
-                            )
-                            if "behaviorHints" in updated and isinstance(updated["behaviorHints"], dict):
-                                updated_bh = dict(updated["behaviorHints"])
-                                updated_bh.pop("proxyHeaders", None)
-                                updated["behaviorHints"] = updated_bh
-                            is_mediaflow = True
-
-                    if is_mediaflow:
-                        if "behaviorHints" in updated and isinstance(updated["behaviorHints"], dict):
-                            updated_bh = dict(updated["behaviorHints"])
-                            updated_bh.pop("notWebReady", None)
-                            updated["behaviorHints"] = updated_bh
-
-                        http_link = updated["url"]
-                        title = self._extract_title(updated)
-                        poster = self._extract_poster(updated)
-                        index = self._extract_index(updated)
-                        self._mark_cached_if_ready(updated, http_link, index, content_id)
-                        is_cached = bool(isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cached"))
-                        effective_http_index = (
-                            updated["_meta"].get("cache_index")
-                            if isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cache_index") is not None
-                            else index
-                        )
-                        updated["url"] = self._build_playback_url(
-                            http_link,
-                            title,
-                            poster,
-                            category,
-                            effective_http_index,
-                            content_type,
-                            content_id,
-                            is_cached=is_cached,
-                        )
+                    title = self._extract_title(updated)
+                    poster = self._extract_poster(updated)
+                    index = self._extract_index(updated)
+                    self._mark_cached_if_ready(updated, raw_url, index, content_id)
+                    is_cached = bool(isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cached"))
+                    effective_http_index = (
+                        updated["_meta"].get("cache_index")
+                        if isinstance(updated.get("_meta"), dict) and updated["_meta"].get("cache_index") is not None
+                        else index
+                    )
+                    updated["url"] = self._build_playback_url(
+                        raw_url,
+                        title,
+                        poster,
+                        category,
+                        effective_http_index,
+                        content_type,
+                        content_id,
+                        is_cached=is_cached,
+                    )
 
                 if isinstance(updated.get("_meta"), dict):
                     m_hash = updated["_meta"].get("infohash")
@@ -216,6 +160,7 @@ class StreamRewriteService:
                 formatted_sz = format_bytes(entry.size_bytes)
                 syn_title = f"{entry.title or 'Video'}\n💾 {formatted_sz}" if formatted_sz != "N/A" else (entry.title or "Video")
                 syn_link = entry.source_link or f"magnet:?xt=urn:btih:{entry.infohash}"
+                is_web_ready = self._is_web_ready(entry_hash, entry.cache_index)
                 syn_stream = {
                     "name": f"{self.CACHED_NAME_PREFIX}[Cache Locale]",
                     "title": syn_title,
@@ -230,7 +175,7 @@ class StreamRewriteService:
                         is_cached=True,
                     ),
                     "behaviorHints": {
-                        "notWebReady": False,
+                        "notWebReady": not is_web_ready,
                     },
                     "_meta": {
                         "cached": True,
@@ -251,27 +196,21 @@ class StreamRewriteService:
         updated_payload["streams"] = rewritten_streams
         return updated_payload
 
-    def _needs_mediaflow_proxy(self, stream: dict) -> bool:
-        bh = stream.get("behaviorHints")
-        if isinstance(bh, dict) and bh.get("proxyHeaders"):
+    def _is_web_ready(self, infohash: str | None, index: int | None) -> bool:
+        if self.optimize_media_target == "web_ready_mp4":
             return True
+        if not infohash:
+            return False
+        try:
+            if hasattr(self.cache_manager, "_media_path"):
+                media_path = self.cache_manager._media_path(infohash, index or 0)
+                if media_path and media_path.exists():
+                    from stremio_http_proxy.helper.media_type_helper import detect_media_type
+                    _, ext = detect_media_type(media_path)
+                    return ext in ("mp4", "webm")
+        except Exception:
+            pass
         return False
-
-    def _extract_proxy_headers(self, stream: dict) -> dict[str, str] | None:
-        bh = stream.get("behaviorHints")
-        if isinstance(bh, dict):
-            ph = bh.get("proxyHeaders")
-            if isinstance(ph, dict):
-                req = ph.get("request")
-                if isinstance(req, dict):
-                    return req
-        return None
-
-    def _extract_filename(self, stream: dict) -> str | None:
-        bh = stream.get("behaviorHints")
-        if isinstance(bh, dict) and bh.get("filename"):
-            return bh.get("filename")
-        return None
 
     def _extract_infohash_from_stream(self, stream: dict) -> str | None:
         link = self._extract_torrent_link(stream)
@@ -348,12 +287,20 @@ class StreamRewriteService:
         if isinstance(name, str) and name.strip() and not name.startswith(self.CACHED_NAME_PREFIX):
             stream["name"] = f"{self.CACHED_NAME_PREFIX}{name}"
 
+        effective_hash = normalized or (infohash if infohash else None)
+        effective_idx = cache_index if cache_index is not None else index
+        is_web_ready = self._is_web_ready(effective_hash, effective_idx)
+
         if "behaviorHints" in stream and isinstance(stream["behaviorHints"], dict):
             updated_bh = dict(stream["behaviorHints"])
-            updated_bh["notWebReady"] = False
+            if is_web_ready:
+                updated_bh["notWebReady"] = False
+            else:
+                if "notWebReady" not in updated_bh:
+                    updated_bh["notWebReady"] = True
             stream["behaviorHints"] = updated_bh
-        elif "behaviorHints" not in stream:
-            stream["behaviorHints"] = {"notWebReady": False}
+        else:
+            stream["behaviorHints"] = {"notWebReady": not is_web_ready}
 
     def extract_download_candidates(self, payload: dict) -> list[dict[str, str | int | None]]:
         streams = payload.get("streams")
@@ -490,7 +437,6 @@ class StreamRewriteService:
         content_type: str | None,
         content_id: str | None,
         is_cached: bool = False,
-        force_play_route: bool = False,
     ) -> str:
         params = {"link": link}
         if title:
@@ -505,6 +451,4 @@ class StreamRewriteService:
             params["content_type"] = content_type
         if content_id:
             params["content_id"] = content_id
-        is_hls = (".m3u8" in link or "/proxy/hls" in link) and not is_cached and not force_play_route
-        path = "/play/manifest.m3u8" if is_hls else "/play"
-        return f"{self.public_base_url}{path}?{urlencode(params)}"
+        return f"{self.public_base_url}/play?{urlencode(params)}"

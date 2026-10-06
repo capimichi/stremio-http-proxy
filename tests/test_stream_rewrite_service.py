@@ -52,9 +52,9 @@ async def test_stream_rewrite_uses_local_playback_url_for_torrent_streams():
 
 
 @pytest.mark.asyncio
-async def test_stream_rewrite_leaves_non_torrent_streams_unchanged():
+async def test_stream_rewrite_leaves_non_torrent_non_http_streams_unchanged():
     service = StreamRewriteService("http://localhost:8691", FakeCacheManager())
-    payload = {"streams": [{"title": "demo", "url": "https://upstream.invalid/video.mp4"}]}
+    payload = {"streams": [{"title": "demo", "url": "custom://unknown/stream"}]}
 
     rewritten = await service.rewrite(payload, category="movie")
 
@@ -317,55 +317,20 @@ async def test_stream_rewrite_marks_cached_stream_using_content_id_fallback_when
 
 
 @pytest.mark.asyncio
-async def test_stream_rewrite_fixes_misconfigured_mediaflow_hls_stream():
-    from stremio_http_proxy.client.mediaflow_client import MediaflowClient
-
-    mediaflow_client = MediaflowClient("https://mediaflow.example.com", "secret")
+async def test_stream_rewrite_http_streams():
     service = StreamRewriteService(
         "http://localhost:8691",
         FakeCacheManager(),
-        mediaflow_client=mediaflow_client,
     )
-    payload = {
-        "streams": [
-            {
-                "name": "Toastflix 720p",
-                "url": "https://mediaflow.example.com/_token_123/proxy/stream/Gotham.mp4",
-                "description": "manifest.m3u8 stream",
-                "behaviorHints": {"filename": "Gotham.m3u8", "notWebReady": True},
-            }
-        ]
-    }
-    rewritten = await service.rewrite(payload, category="tv", content_id="tt3749900:1:1")
-    from urllib.parse import urlparse, parse_qs
-    parsed = urlparse(rewritten["streams"][0]["url"])
-    assert parsed.path == "/play/manifest.m3u8"
-    assert "notWebReady" not in rewritten["streams"][0].get("behaviorHints", {})
-    params = parse_qs(parsed.query)
-    assert params["link"] == ["https://mediaflow.example.com/_token_123/proxy/hls/manifest.m3u8"]
-
-
-@pytest.mark.asyncio
-async def test_stream_rewrite_passes_http_streams_as_is_when_http_streams_proxy_disabled():
-    from stremio_http_proxy.client.mediaflow_client import MediaflowClient
-
-    mediaflow_client = MediaflowClient("https://mediaflow.example.com", "secret")
-    service = StreamRewriteService(
-        "http://localhost:8691",
-        FakeCacheManager(),
-        mediaflow_client=mediaflow_client,
-        http_streams_proxy_enabled=False,
-    )
-    raw_toastflix_url = "https://mediaflow.example.com/_token_123/proxy/stream/Gotham.mp4"
-    direct_hls_url = "https://toastflix.example.com/manifest.m3u8"
+    http_video_url = "https://example.com/video.mp4"
+    direct_hls_url = "https://example.com/manifest.m3u8"
     torrent_hash = "c" * 40
 
     payload = {
         "streams": [
             {
-                "name": "Toastflix 1080p",
-                "url": raw_toastflix_url,
-                "behaviorHints": {"notWebReady": True},
+                "name": "Direct MP4",
+                "url": http_video_url,
             },
             {
                 "name": "Direct HLS",
@@ -380,17 +345,12 @@ async def test_stream_rewrite_passes_http_streams_as_is_when_http_streams_proxy_
 
     rewritten = await service.rewrite(payload, category="tv", content_id="tt3749900:1:1")
 
-    # HTTP streams are routed through /play trampoline (never /play/manifest.m3u8)
     assert rewritten["streams"][0]["url"].startswith("http://localhost:8691/play?")
-    assert "link=" + urllib.parse.quote(raw_toastflix_url, safe="") in rewritten["streams"][0]["url"]
-    assert rewritten["streams"][0]["behaviorHints"]["notWebReady"] is True
+    assert "link=" + urllib.parse.quote(http_video_url, safe="") in rewritten["streams"][0]["url"]
 
     assert rewritten["streams"][1]["url"].startswith("http://localhost:8691/play?")
     assert "link=" + urllib.parse.quote(direct_hls_url, safe="") in rewritten["streams"][1]["url"]
-    # Even though direct_hls_url contains .m3u8, force_play_route ensures it uses /play and NOT /play/manifest.m3u8
-    assert "/play/manifest.m3u8" not in rewritten["streams"][1]["url"]
 
-    # Torrent stream must still be rewritten through the proxy
     assert "http://localhost:8691/play?" in rewritten["streams"][2]["url"]
 
 
@@ -403,7 +363,6 @@ async def test_stream_rewrite_puts_cached_streams_at_the_top():
     service = StreamRewriteService(
         public_base_url="http://localhost:8691",
         cache_manager=cache_manager,
-        http_streams_proxy_enabled=True,
     )
 
     payload = {
@@ -424,7 +383,8 @@ async def test_stream_rewrite_puts_cached_streams_at_the_top():
 
     # Other streams retain their relative order
     assert streams[1]["infoHash"] == other_hash
-    assert streams[2]["url"] == "https://example.com/stream.mp4"
+    assert "link=https%3A%2F%2Fexample.com%2Fstream.mp4" in streams[2]["url"]
+    assert streams[2]["url"].startswith("http://localhost:8691/play?")
 
 
 def test_extract_download_candidates_extracts_seeders():
@@ -644,6 +604,87 @@ async def test_upstream_stream_marked_cached_updates_not_web_ready_to_false():
     assert streams[0]["name"] == "🔥 Corsaro 1080p"
     assert streams[0]["_meta"]["cached"] is True
     assert streams[0]["behaviorHints"]["notWebReady"] is False
+
+
+@pytest.mark.asyncio
+async def test_upstream_stream_marked_cached_preserves_not_web_ready_when_target_is_mkv(tmp_path):
+    cache_manager = MagicMock()
+    torrent_hash = "d" * 40
+    cache_manager.build_cache_key.return_value = f"{torrent_hash}:0"
+    cache_manager.is_ready.return_value = True
+    cache_manager.parse_cache_key.return_value = (torrent_hash, 0)
+
+    # Simulate MKV file on disk
+    mkv_file = tmp_path / "video.media"
+    # Write MKV signature (EBML with matroska doctype)
+    mkv_file.write_bytes(b"\x1a\x45\xdf\xa3\x93\x42\x82\x88matroska")
+    cache_manager._media_path.return_value = mkv_file
+
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=cache_manager,
+        cache_enabled=True,
+        optimize_media_target="mkv",
+    )
+
+    payload = {
+        "streams": [
+            {
+                "name": "Corsaro 1080p",
+                "infoHash": torrent_hash,
+                "fileIdx": 0,
+                "behaviorHints": {"notWebReady": True},
+            }
+        ]
+    }
+
+    result = await service.rewrite(payload, category="movie", content_type="movie", content_id="tt0111161")
+    streams = result.get("streams", [])
+    assert len(streams) == 1
+    assert streams[0]["name"] == "🔥 Corsaro 1080p"
+    assert streams[0]["_meta"]["cached"] is True
+    # For MKV under mkv target, notWebReady must stay True!
+    assert streams[0]["behaviorHints"]["notWebReady"] is True
+
+
+@pytest.mark.asyncio
+async def test_synthetic_cached_stream_sets_not_web_ready_true_for_mkv_target(tmp_path):
+    cache_manager = MagicMock()
+    torrent_hash = "e" * 40
+
+    mkv_file = tmp_path / "video.media"
+    mkv_file.write_bytes(b"\x1a\x45\xdf\xa3\x93\x42\x82\x88matroska")
+    cache_manager._media_path.return_value = mkv_file
+
+    ready_entry = MagicMock()
+    ready_entry.infohash = torrent_hash
+    ready_entry.cache_index = 0
+    ready_entry.title = "Matrix.mkv"
+    ready_entry.poster = "http://example.com/poster.jpg"
+    ready_entry.source_link = f"magnet:?xt=urn:btih:{torrent_hash}"
+    ready_entry.size_bytes = 104857600
+    cache_manager.get_ready_entries_by_content.return_value = [ready_entry]
+
+    service = StreamRewriteService(
+        public_base_url="http://localhost:8691",
+        cache_manager=cache_manager,
+        cache_enabled=True,
+        optimize_media_target="mkv",
+    )
+
+    payload = {"streams": []}
+    result = await service.rewrite(
+        payload,
+        category="movie",
+        content_type="movie",
+        content_id="tt0133093",
+    )
+
+    streams = result.get("streams", [])
+    assert len(streams) == 1
+    assert streams[0]["name"] == "🔥 [Cache Locale]"
+    assert streams[0]["_meta"]["cached"] is True
+    assert streams[0]["behaviorHints"]["notWebReady"] is True
 
 
 

@@ -93,6 +93,22 @@ class MediaMetadataService:
                 delay_seconds=0,
                 deduplicate=True,
             )
+            return
+
+        try:
+            from stremio_http_proxy.task.enrich_media_metadata_task import enrich_media_metadata_task
+            enrich_media_metadata_task.apply_async(
+                kwargs={
+                    "media_id": media_id,
+                    "imdb_id": imdb_id,
+                    "media_type": media_type,
+                    "season": season,
+                },
+                queue="default",
+            )
+            return
+        except Exception:
+            pass
         else:
             # Fallback fire-and-forget in current loop if available
             try:

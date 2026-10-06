@@ -22,6 +22,18 @@ services:
       retries: 15
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: stremio-http-proxy-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   stremio-http-proxy:
     build:
       context: .
@@ -37,12 +49,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   stremio-http-proxy-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["python", "-m", "stremio_http_proxy.cli", "worker"]
+    command: ["python", "-m", "stremio_http_proxy.cli", "worker", "-Q", "downloads,transcode,default", "-c", "4"]
     env_file:
       - .env
     volumes:
@@ -54,7 +68,26 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  stremio-http-proxy-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "stremio_http_proxy.cli", "beat"]
+    env_file:
+      - .env
+    volumes:
+      - app-var:/app/var
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   app-var:
   mariadb_data:
+  redis_data:

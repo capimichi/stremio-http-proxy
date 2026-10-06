@@ -3,15 +3,12 @@ import socket
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
-
 import httpx
 from injector import inject
 
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
-from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.model.download_job import DownloadJob
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 
@@ -30,7 +27,6 @@ class DownloadWorkerService:
         min_progress_window_seconds: int,
         max_total_seconds: int,
         progress_log_interval_seconds: int,
-        hls_chunk_manager: HlsChunkManager | None = None,
         prefetch_min_progress_bytes: int = 1048576,
         next_episode_prefetch_service: NextEpisodePrefetchService | None = None,
         prefetch_poll_seconds: int = 15,
@@ -38,7 +34,6 @@ class DownloadWorkerService:
     ):
         self.torrserver_client = torrserver_client
         self.cache_manager = cache_manager
-        self.hls_chunk_manager = hls_chunk_manager
         self.prefetch_min_progress_bytes = prefetch_min_progress_bytes
         self.next_episode_prefetch_service = next_episode_prefetch_service
         self.task_service = task_service
@@ -277,171 +272,7 @@ class DownloadWorkerService:
         self.logger.info("Worker %s completed job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
 
     async def _download_hls(self, job: DownloadJob, url: str) -> None:
-        if self.hls_chunk_manager is not None:
-            try:
-                await self._download_hls_chunks(job, url)
-                return
-            except Exception as e:
-                if self._is_permanent_error(e):
-                    self.logger.error("HLS chunk download encountered permanent error for %s: %s", job.cache_key, e)
-                    raise
-                self.logger.warning("Chunk-based HLS download failed for %s (%s), falling back to ffmpeg direct stream", job.cache_key, e)
-
         await self._download_hls_ffmpeg(job, url)
-
-    async def _resolve_hls_chunks(self, url: str) -> list[str]:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=self.connect_timeout_seconds) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            content = resp.text
-            base_url = str(resp.url)
-            lines = content.splitlines()
-
-            if any(l.strip().startswith("#EXT-X-STREAM-INF") for l in lines):
-                variant_url = None
-                expect_variant = False
-                for line in lines:
-                    stripped = line.strip()
-                    if stripped.startswith("#EXT-X-STREAM-INF"):
-                        expect_variant = True
-                        continue
-                    if expect_variant and not stripped.startswith("#") and stripped:
-                        variant_url = urljoin(base_url, stripped)
-                        if variant_url.startswith("http://") and base_url.startswith("https://"):
-                            variant_url = "https://" + variant_url[7:]
-                        break
-                if not variant_url:
-                    return []
-                resp = await client.get(variant_url)
-                resp.raise_for_status()
-                content = resp.text
-                base_url = str(resp.url)
-                lines = content.splitlines()
-
-            chunk_urls: list[str] = []
-            expect_chunk = False
-            for line in lines:
-                stripped = line.strip()
-                if stripped.startswith("#EXTINF"):
-                    expect_chunk = True
-                    continue
-                if expect_chunk and not stripped.startswith("#") and stripped:
-                    chunk_url = urljoin(base_url, stripped)
-                    if chunk_url.startswith("http://") and base_url.startswith("https://"):
-                        chunk_url = "https://" + chunk_url[7:]
-                    chunk_urls.append(chunk_url)
-                    expect_chunk = False
-
-            return chunk_urls
-
-    async def _download_hls_chunks(self, job: DownloadJob, url: str) -> None:
-        chunk_urls = self.hls_chunk_manager.get_playlist_metadata(job.cache_key)
-        if not chunk_urls:
-            chunk_urls = await self._resolve_hls_chunks(url)
-            if chunk_urls:
-                self.hls_chunk_manager.save_playlist_metadata(job.cache_key, chunk_urls)
-
-        if not chunk_urls:
-            raise RuntimeError(f"Could not resolve any HLS chunks from {url}")
-
-        total_chunks = len(chunk_urls)
-        self.logger.info("Starting chunk-based HLS download for %s: %d total chunks", job.cache_key, total_chunks)
-
-        started_at = time.time()
-        last_progress_log_at = started_at
-        window_started_at = started_at
-        bytes_at_window_start = self.hls_chunk_manager.get_chunks_total_bytes(job.cache_key)
-
-        async with httpx.AsyncClient(follow_redirects=True, timeout=self.no_progress_timeout_seconds) as client:
-            for i, chunk_url in enumerate(chunk_urls):
-                now = time.time()
-                if now - started_at > self.max_total_seconds:
-                    raise TimeoutError("HLS chunk download exceeded maximum duration")
-
-                if not self.hls_chunk_manager.has_chunk(job.cache_key, i):
-                    await self.hls_chunk_manager.get_or_download_chunk(
-                        job.cache_key,
-                        i,
-                        chunk_url,
-                        client=client,
-                        timeout=self.no_progress_timeout_seconds,
-                    )
-                    await asyncio.sleep(0.02)
-
-                now = time.time()
-                downloaded_indices = self.hls_chunk_manager.get_downloaded_indices(job.cache_key)
-                downloaded_count = len(downloaded_indices)
-                downloaded_bytes = self.hls_chunk_manager.get_chunks_total_bytes(job.cache_key)
-                elapsed_seconds = max(now - started_at, 0.001)
-                speed_bytes_per_second = downloaded_bytes / elapsed_seconds
-                progress_percent = (downloaded_count / total_chunks) * 100.0
-
-                if now - window_started_at >= self.min_progress_window_seconds:
-                    if downloaded_bytes - bytes_at_window_start < self._required_min_progress_bytes(job):
-                        raise TimeoutError("HLS chunk download progress stayed below threshold")
-                    window_started_at = now
-                    bytes_at_window_start = downloaded_bytes
-
-                if now - last_progress_log_at >= self.progress_log_interval_seconds or i == total_chunks - 1:
-                    self.cache_manager.mark_progress(
-                        job.cache_key,
-                        downloaded_bytes,
-                        None,
-                        progress_percent,
-                        speed_bytes_per_second,
-                    )
-                    self.cache_manager.touch_processing_lease(job.cache_key, self.worker_id)
-                    self.progress_logger.info(
-                        "worker=%s job=%s cache_key=%s chunks=%d/%d (%.1f%%) downloaded_mb=%.2f speed_mbps=%.2f elapsed_s=%.0f",
-                        self.worker_id,
-                        job.job_id,
-                        job.cache_key,
-                        downloaded_count,
-                        total_chunks,
-                        progress_percent,
-                        downloaded_bytes / (1024 * 1024),
-                        speed_bytes_per_second / (1024 * 1024),
-                        elapsed_seconds,
-                    )
-                    last_progress_log_at = now
-
-        tmp_path = self.cache_manager.prepare_download_path(job.cache_key)
-        if tmp_path.exists():
-            tmp_path.unlink()
-
-        merged = await self.hls_chunk_manager.merge_chunks_to_media(job.cache_key, total_chunks, tmp_path)
-        if not merged:
-            raise RuntimeError(f"Failed to merge {total_chunks} chunks into {tmp_path}")
-
-        downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
-        min_size_bytes = self.cache_manager.get_min_cache_size()
-        if downloaded_bytes < min_size_bytes:
-            raise RuntimeError(
-                f"Download rifiutato: il file è troppo piccolo ({downloaded_bytes} byte). "
-                f"Soglia minima: {min_size_bytes} byte."
-            )
-
-        self.cache_manager.mark_progress(
-            job.cache_key,
-            downloaded_bytes,
-            downloaded_bytes,
-            100.0,
-            downloaded_bytes / max(time.time() - started_at, 0.001),
-        )
-
-        size_bytes = self.cache_manager.finalize_download(job.cache_key)
-        self._on_download_completed(job.cache_key, size_bytes)
-        self.logger.info("Worker %s completed HLS job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
-
-        asyncio.create_task(self._delayed_chunks_cleanup(job.cache_key, delay_seconds=1800))
-
-    async def _delayed_chunks_cleanup(self, cache_key: str, delay_seconds: int = 1800) -> None:
-        try:
-            await asyncio.sleep(delay_seconds)
-            if self.hls_chunk_manager:
-                self.hls_chunk_manager.cleanup_chunks(cache_key)
-        except Exception:
-            pass
 
     async def _download_hls_ffmpeg(self, job: DownloadJob, url: str) -> None:
         tmp_path = self.cache_manager.prepare_download_path(job.cache_key)
@@ -456,10 +287,12 @@ class DownloadWorkerService:
             "error",
             "-i",
             url,
+            "-map",
+            "0",
             "-c",
             "copy",
             "-f",
-            "mp4",
+            "matroska",
             str(tmp_path),
         ]
 

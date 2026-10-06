@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any
+from celery import shared_task
 from injector import inject
 
 from stremio_http_proxy.helper.media_type_helper import detect_media_type
@@ -15,6 +16,7 @@ COMPATIBLE_EXTENSIONS = {"mp4", "mkv", "webm"}
 
 
 class OptimizeMediaTask(AbstractTask):
+    task_name = "stremio_http_proxy.task.optimize_media_task"
     name = "optimize_media"
 
     @inject
@@ -36,8 +38,17 @@ class OptimizeMediaTask(AbstractTask):
         self.vaapi_device = vaapi_device
         self.preset = preset
 
-    async def run(self, arguments: dict[str, Any]) -> bool:
-        cache_key = arguments.get("cache_key")
+    async def run(self, arguments: dict[str, Any] | str | None = None, *args: Any, **kwargs: Any) -> bool:
+        cache_key = None
+        if isinstance(arguments, str):
+            cache_key = arguments
+        elif isinstance(arguments, dict):
+            cache_key = arguments.get("cache_key")
+        elif args:
+            cache_key = args[0]
+        elif kwargs.get("cache_key"):
+            cache_key = kwargs.get("cache_key")
+
         if not cache_key:
             self.logger.warning("OptimizeMediaTask called without cache_key")
             return True
@@ -321,3 +332,16 @@ class OptimizeMediaTask(AbstractTask):
         except Exception as e:
             self.logger.exception("Exception running ffmpeg command: %s", e)
             return False
+
+
+@shared_task(name="stremio_http_proxy.task.optimize_media_task", bind=True, max_retries=2)
+def optimize_media_task(self, cache_key: str):
+    from stremio_http_proxy.container.default_container import DefaultContainer
+
+    container = DefaultContainer.getInstance()
+    try:
+        task: OptimizeMediaTask = container.get(OptimizeMediaTask)
+        return asyncio.run(task.run(cache_key))
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=30)
+

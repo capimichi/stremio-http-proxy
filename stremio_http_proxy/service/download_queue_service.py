@@ -72,4 +72,11 @@ class DownloadQueueService:
             enqueued_at=now,
             available_at=now,
         )
-        return await self.cache_manager.enqueue_download(job)
+        enqueued = await self.cache_manager.enqueue_download(job)
+        if enqueued:
+            try:
+                from stremio_http_proxy.task.download_media_task import download_media_task
+                download_media_task.apply_async(args=[job.cache_key], queue="downloads")
+            except Exception:
+                pass
+        return enqueued

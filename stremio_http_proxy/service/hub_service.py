@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Any
 from injector import inject
@@ -10,6 +11,8 @@ from stremio_http_proxy.repository.playback_history_repository import PlaybackHi
 from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
 from stremio_http_proxy.service.task_service import TaskService
+
+logger = logging.getLogger(__name__)
 
 
 class HubService:
@@ -303,6 +306,12 @@ class HubService:
 
     async def retry_stream(self, cache_key: str) -> dict[str, Any]:
         success = await self.cache_manager.reenqueue_entry(cache_key)
+        if success:
+            try:
+                from stremio_http_proxy.task.download_media_task import download_media_task
+                download_media_task.apply_async(args=[cache_key], queue="downloads")
+            except Exception:
+                pass
         return {"success": success, "cache_key": cache_key}
 
     def get_library(
@@ -392,10 +401,112 @@ class HubService:
                     success = self.media_repository.delete_media(media.id)
         return {"success": success, "media_id": media_id}
 
+    def _inspect_celery_tasks(self) -> list[dict[str, Any]]:
+        tasks = []
+        try:
+            from stremio_http_proxy.worker import celery_app
+            insp = celery_app.control.inspect(timeout=0.5)
+            if not insp:
+                return []
+
+            active = insp.active() or {}
+            reserved = insp.reserved() or {}
+            scheduled = insp.scheduled() or {}
+            now = time.time()
+
+            # 1. Processing / Active tasks
+            for worker_host, task_list in active.items():
+                for t in task_list:
+                    task_name = t.get("name", "")
+                    short_name = task_name.split(".")[-1]
+                    args = t.get("kwargs") or {}
+                    if not args and t.get("args"):
+                        args = {"args": t.get("args")}
+                    tasks.append({
+                        "id": t.get("id"),
+                        "name": short_name,
+                        "status": "processing",
+                        "arguments": args,
+                        "created_at": t.get("time_start") or now,
+                        "scheduled_at": t.get("time_start") or now,
+                        "updated_at": now,
+                        "claimed_by": worker_host,
+                        "attempt": 1,
+                        "max_attempts": 3,
+                        "last_error": None,
+                    })
+
+            # 2. Pending / Reserved tasks
+            for worker_host, task_list in reserved.items():
+                for t in task_list:
+                    task_name = t.get("name", "")
+                    short_name = task_name.split(".")[-1]
+                    args = t.get("kwargs") or {}
+                    if not args and t.get("args"):
+                        args = {"args": t.get("args")}
+                    tasks.append({
+                        "id": t.get("id"),
+                        "name": short_name,
+                        "status": "pending",
+                        "arguments": args,
+                        "created_at": now,
+                        "scheduled_at": now,
+                        "updated_at": now,
+                        "claimed_by": worker_host,
+                        "attempt": 0,
+                        "max_attempts": 3,
+                        "last_error": None,
+                    })
+
+            # 3. Scheduled / Countdown tasks
+            for worker_host, task_list in scheduled.items():
+                for t in task_list:
+                    req = t.get("request", {})
+                    task_name = req.get("name", "")
+                    short_name = task_name.split(".")[-1]
+                    args = req.get("kwargs") or {}
+                    if not args and req.get("args"):
+                        args = {"args": req.get("args")}
+                    eta_str = t.get("eta")
+                    eta_ts = now
+                    if eta_str:
+                        try:
+                            from datetime import datetime
+                            eta_ts = datetime.fromisoformat(eta_str).timestamp()
+                        except Exception:
+                            eta_ts = now
+                    tasks.append({
+                        "id": req.get("id") or t.get("id"),
+                        "name": short_name,
+                        "status": "pending",
+                        "arguments": args,
+                        "created_at": now,
+                        "scheduled_at": eta_ts,
+                        "updated_at": now,
+                        "claimed_by": worker_host,
+                        "attempt": 0,
+                        "max_attempts": 3,
+                        "last_error": None,
+                    })
+        except Exception as exc:
+            logger.debug("Celery inspect exception: %s", exc)
+
+        return tasks
+
     def get_tasks(self, status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
-        if not self.task_service:
-            return []
-        raw_tasks = self.task_service.list_tasks(status=status, limit=limit)
+        raw_tasks = self._inspect_celery_tasks()
+
+        if self.task_service:
+            try:
+                db_tasks = self.task_service.list_tasks(status=status, limit=limit)
+                raw_tasks.extend(db_tasks)
+            except Exception:
+                pass
+
+        if status:
+            raw_tasks = [t for t in raw_tasks if t.get("status") == status]
+
+        raw_tasks = raw_tasks[:limit]
         results = []
         now = time.time()
         for t in raw_tasks:
@@ -404,6 +515,19 @@ class HubService:
             media_title = None
             season = None
             episode = None
+
+            # Look up cache entry title if cache_key argument is present
+            cache_key = args.get("cache_key") or (args.get("args")[0] if isinstance(args.get("args"), list) and args.get("args") else None)
+            if cache_key and self.cache_manager:
+                try:
+                    entry = self.cache_manager.get_entry(str(cache_key))
+                    if entry:
+                        if entry.title:
+                            media_title = entry.title
+                        if entry.content_id:
+                            content_id = entry.content_id
+                except Exception:
+                    pass
 
             if content_id:
                 parts = content_id.split(":")
@@ -414,7 +538,7 @@ class HubService:
                         episode = int(parts[2])
                     except ValueError:
                         pass
-                if self.media_repository:
+                if self.media_repository and not media_title:
                     try:
                         media = self.media_repository.get_media(media_id)
                         if media:
@@ -423,10 +547,18 @@ class HubService:
                         pass
 
             display_name = {
+                "download_media_task": "Download Flusso Media",
+                "download_media": "Download Flusso Media",
+                "optimize_media_task": "Ottimizzazione Web-Ready GPU",
+                "optimize_media": "Ottimizzazione Web-Ready GPU",
+                "fetch_next_episode_task": "Smart Prefetch Episodio",
                 "fetch_next_episode": "Smart Prefetch Episodio",
+                "fetch_media_task": "Recupero Flussi Media",
                 "fetch_media": "Recupero Flussi Media",
-                "enrich_media_metadata": "Arricchimento Metadati",
-                "optimize_media": "Ottimizzazione Media (MKV/MP4)",
+                "enrich_media_metadata_task": "Arricchimento Metadati TMDB",
+                "enrich_media_metadata": "Arricchimento Metadati TMDB",
+                "cleanup_cache_task": "Pulizia Periodica Cache",
+                "cleanup_cache": "Pulizia Periodica Cache",
             }.get(t["name"], t["name"])
 
             results.append({
@@ -439,14 +571,14 @@ class HubService:
                 "media_title": media_title,
                 "season": season,
                 "episode": episode,
-                "scheduled_at": t["scheduled_at"],
-                "created_at": t["created_at"],
-                "updated_at": t["updated_at"],
-                "remaining_seconds": max(0, int(t["scheduled_at"] - now)) if t["status"] == "pending" and t["scheduled_at"] > now else 0,
-                "attempt": t["attempt"],
-                "max_attempts": t["max_attempts"],
-                "last_error": t["last_error"],
-                "claimed_by": t["claimed_by"],
+                "scheduled_at": t.get("scheduled_at", now),
+                "created_at": t.get("created_at", now),
+                "updated_at": t.get("updated_at", now),
+                "remaining_seconds": max(0, int(t.get("scheduled_at", now) - now)) if t["status"] == "pending" and t.get("scheduled_at", now) > now else 0,
+                "attempt": t.get("attempt", 0),
+                "max_attempts": t.get("max_attempts", 3),
+                "last_error": t.get("last_error"),
+                "claimed_by": t.get("claimed_by"),
             })
         return results
 

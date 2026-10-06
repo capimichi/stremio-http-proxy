@@ -2,10 +2,23 @@ import asyncio
 import logging
 import os
 import re
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 from injector import inject
+
+from stremio_http_proxy.helper.hash_helper import extract_infohash
+
+DEFAULT_TRACKERS = [
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://tracker.bittor.pw:1337/announce",
+    "udp://public.popcorn-tracker.org:6969/announce",
+    "udp://tracker.dler.org:6969/announce",
+    "udp://exodus.desync.com:6969/announce",
+    "udp://open.demonii.com:1337/announce",
+]
 
 VIDEO_EXTENSIONS = {
     ".mkv",
@@ -42,7 +55,29 @@ class TorrServerClient:
         self.transport = transport
         self.logger = logging.getLogger(__name__)
 
+    @classmethod
+    def enrich_link(cls, link: str) -> str:
+        if not link:
+            return link
+        text = link.strip()
+        if text.startswith("magnet:?"):
+            parsed = urlparse(text)
+            query_params = parse_qs(parsed.query)
+            if query_params.get("tr"):
+                return text
+            trackers_query = urlencode([("tr", tr) for tr in DEFAULT_TRACKERS])
+            delimiter = "&" if parsed.query else ""
+            return f"{text}{delimiter}{trackers_query}"
+
+        infohash = extract_infohash(text)
+        if infohash and len(text) in (32, 40):
+            trackers_query = urlencode([("tr", tr) for tr in DEFAULT_TRACKERS])
+            return f"magnet:?xt=urn:btih:{infohash}&{trackers_query}"
+
+        return text
+
     async def add_and_get_status(self, link: str, timeout: float | None = None) -> dict | None:
+        link = self.enrich_link(link)
         payload = {"action": "add", "link": link, "save_to_db": False}
         try:
             async with httpx.AsyncClient(
@@ -65,6 +100,7 @@ class TorrServerClient:
         poster: str | None = None,
         category: str | None = None,
     ) -> dict:
+        link = self.enrich_link(link)
         payload = {
             "action": "add",
             "link": link,
@@ -89,6 +125,7 @@ class TorrServerClient:
         category: str | None = None,
         index: int | None = None,
     ) -> None:
+        link = self.enrich_link(link)
         params = {
             "link": link,
             "preload": "true",
@@ -134,6 +171,7 @@ class TorrServerClient:
         category: str | None = None,
         index: int | None = None,
     ) -> str:
+        link = self.enrich_link(link)
         params = {
             "link": link,
             "play": "true",

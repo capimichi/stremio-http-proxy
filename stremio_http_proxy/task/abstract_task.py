@@ -3,12 +3,22 @@ from typing import Any
 
 
 class AbstractTask(ABC):
-    name: str
+    name: str = ""
+    task_name: str = ""
 
     @abstractmethod
-    async def run(self, arguments: dict[str, Any]) -> bool:
+    def run(self, *args: Any, **kwargs: Any) -> Any:
         """
         Execute the task.
-        Return True if completed successfully, or False / raise Exception if failed.
         """
+        raise NotImplementedError
+
+
+class AbstractPeriodicTask(AbstractTask):
+    """Base class for Celery tasks scheduled periodically by Celery Beat."""
+
+    @classmethod
+    @abstractmethod
+    def get_schedule(cls, container: Any) -> Any:
+        """Return the schedule interval (in seconds) or crontab schedule."""
         raise NotImplementedError

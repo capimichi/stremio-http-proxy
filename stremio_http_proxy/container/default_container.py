@@ -4,7 +4,6 @@ import os
 from dotenv import load_dotenv
 from injector import Injector
 
-from stremio_http_proxy.client.mediaflow_client import MediaflowClient
 from stremio_http_proxy.client.tmdb_client import TMDBClient
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.client.upstream_client import UpstreamClient
@@ -12,7 +11,6 @@ from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
-from stremio_http_proxy.manager.hls_chunk_manager import HlsChunkManager
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
 from stremio_http_proxy.manager.media_asset_manager import MediaAssetManager
 
@@ -42,6 +40,8 @@ from stremio_http_proxy.task.task_registry import TaskRegistry
 from stremio_http_proxy.task.fetch_media_task import FetchMediaTask
 from stremio_http_proxy.task.fetch_next_episode_task import FetchNextEpisodeTask
 from stremio_http_proxy.task.optimize_media_task import OptimizeMediaTask
+from stremio_http_proxy.task.download_media_task import DownloadMediaTask
+from stremio_http_proxy.task.cleanup_cache_task import CleanupCacheTask
 from stremio_http_proxy.controller.playback_controller import PlaybackController
 
 
@@ -113,17 +113,6 @@ class DefaultContainer:
         self.request_timeout_seconds = int(os.environ.get("REQUEST_TIMEOUT_SECONDS", "20"))
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
         self.tmdb_api_key = os.environ.get("TMDB_API_KEY")
-        self.mediaflow_base_url = os.environ.get("MEDIAFLOW_BASE_URL", "").rstrip("/")
-        self.mediaflow_api_password = os.environ.get("MEDIAFLOW_API_PASSWORD")
-        self.mediaflow_enabled = (
-            os.environ.get("MEDIAFLOW_ENABLED", "true").lower() == "true"
-            and bool(self.mediaflow_base_url)
-        )
-        self.http_streams_passthrough = os.environ.get("HTTP_STREAMS_PASSTHROUGH", "false").lower() == "true"
-        self.http_streams_proxy_enabled = (
-            os.environ.get("HTTP_STREAMS_PROXY_ENABLED", "true").lower() == "true"
-            and not self.http_streams_passthrough
-        )
         self.optimize_media_enabled = os.environ.get("OPTIMIZE_MEDIA_ENABLED", "true").lower() == "true"
         self.optimize_media_target = os.environ.get("OPTIMIZE_MEDIA_TARGET", "web_ready_mp4").lower()
         self.optimize_media_gpu_enabled = os.environ.get("OPTIMIZE_MEDIA_GPU_ENABLED", "true").lower() == "true"
@@ -153,10 +142,6 @@ class DefaultContainer:
             self.local_cache_max_size_gb,
             logger_factory,
         )
-        hls_chunk_manager = HlsChunkManager(
-            self.local_cache_dir,
-            logger_factory,
-        )
         basic_auth_service = BasicAuthService(
             self.dashboard_basic_auth_user,
             self.dashboard_basic_auth_password,
@@ -171,12 +156,6 @@ class DefaultContainer:
         )
         torrent_health_service = TorrentHealthService(torrserver_client)
         tmdb_client = TMDBClient(self.tmdb_api_key)
-        mediaflow_client = MediaflowClient(
-            self.mediaflow_base_url,
-            self.mediaflow_api_password,
-            self.request_timeout_seconds,
-            self.mediaflow_enabled,
-        )
         stream_rewrite_service = StreamRewriteService(
             self.public_base_url,
             cache_manager,
@@ -184,8 +163,7 @@ class DefaultContainer:
             torrent_health_service,
             self.torrserver_health_check_enabled,
             self.torrserver_health_check_timeout_seconds,
-            mediaflow_client=mediaflow_client,
-            http_streams_proxy_enabled=self.http_streams_proxy_enabled,
+            optimize_media_target=self.optimize_media_target,
         )
         media_repository = MediaRepository(db_manager)
         media_item_repository = MediaItemRepository(db_manager)
@@ -234,10 +212,26 @@ class DefaultContainer:
             preset=self.optimize_media_preset,
         )
         enrich_media_metadata_task = EnrichMediaMetadataTask(media_metadata_service)
+        download_media_task = DownloadMediaTask(
+            torrserver_client,
+            cache_manager,
+            logger_factory,
+            connect_timeout_seconds=self.download_connect_timeout_seconds,
+            no_progress_timeout_seconds=self.download_no_progress_timeout_seconds,
+            min_progress_bytes=self.download_min_progress_bytes,
+            min_progress_window_seconds=self.download_min_progress_window_seconds,
+            max_total_seconds=self.download_max_total_seconds,
+            progress_log_interval_seconds=self.download_progress_log_interval_seconds,
+            prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
+        )
+        cleanup_cache_task = CleanupCacheTask(cache_manager)
+
         task_registry.register(fetch_next_episode_task)
         task_registry.register(fetch_media_task)
         task_registry.register(optimize_media_task)
         task_registry.register(enrich_media_metadata_task)
+        task_registry.register(download_media_task)
+        task_registry.register(cleanup_cache_task)
         task_service = TaskService(db_manager, task_registry, logger_factory)
         next_episode_prefetch_service.task_service = task_service
         media_metadata_service.task_service = task_service
@@ -255,7 +249,6 @@ class DefaultContainer:
             self.download_min_progress_window_seconds,
             self.download_max_total_seconds,
             self.download_progress_log_interval_seconds,
-            hls_chunk_manager=hls_chunk_manager,
             prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
             next_episode_prefetch_service=next_episode_prefetch_service,
             prefetch_poll_seconds=self.prefetch_poll_seconds,
@@ -268,8 +261,6 @@ class DefaultContainer:
             download_queue_service,
             next_episode_prefetch_service,
             logger_factory,
-            hls_chunk_manager=hls_chunk_manager,
-            http_streams_proxy_enabled=self.http_streams_proxy_enabled,
             playback_history_repository=playback_history_repository,
             media_metadata_service=media_metadata_service,
         )
@@ -288,11 +279,9 @@ class DefaultContainer:
         self.injector.binder.bind(LoggerFactory, to=logger_factory)
         self.injector.binder.bind(TorrServerClient, to=torrserver_client)
         self.injector.binder.bind(UpstreamClient, to=upstream_client)
-        self.injector.binder.bind(MediaflowClient, to=mediaflow_client)
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
         self.injector.binder.bind(DbManager, to=db_manager)
         self.injector.binder.bind(CacheManager, to=cache_manager)
-        self.injector.binder.bind(HlsChunkManager, to=hls_chunk_manager)
         self.injector.binder.bind(BasicAuthService, to=basic_auth_service)
         self.injector.binder.bind(CacheTokenService, to=cache_token_service)
         self.injector.binder.bind(CacheService, to=cache_service)
@@ -312,6 +301,12 @@ class DefaultContainer:
         self.injector.binder.bind(TMDBClient, to=tmdb_client)
         self.injector.binder.bind(ContentBrowserService, to=content_browser_service)
         self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
+        self.injector.binder.bind(DownloadMediaTask, to=download_media_task)
+        self.injector.binder.bind(CleanupCacheTask, to=cleanup_cache_task)
+        self.injector.binder.bind(OptimizeMediaTask, to=optimize_media_task)
+        self.injector.binder.bind(FetchMediaTask, to=fetch_media_task)
+        self.injector.binder.bind(FetchNextEpisodeTask, to=fetch_next_episode_task)
+        self.injector.binder.bind(EnrichMediaMetadataTask, to=enrich_media_metadata_task)
         self.injector.binder.bind(JinjaManager, to=jinja_manager)
         self.injector.binder.bind(ServeCommand, to=serve_command)
 
