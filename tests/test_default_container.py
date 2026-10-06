@@ -106,3 +106,34 @@ def test_default_container_injects_media_metadata_service_into_download_queue_se
     dqs = container.get(DownloadQueueService)
     assert dqs.media_metadata_service is not None
     assert isinstance(dqs.media_metadata_service, MediaMetadataService)
+
+
+def test_default_container_injects_upstream_cached_client_when_enabled(monkeypatch):
+    from stremio_http_proxy.client.upstream_client import UpstreamClient
+    from stremio_http_proxy.client.upstream_cached_client import UpstreamCachedClient
+    from stremio_http_proxy.manager.redis_cache_manager import RedisCacheManager
+
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    monkeypatch.setenv("UPSTREAM_CACHE_ENABLED", "true")
+    container = DefaultContainer()
+
+    upstream_client = container.get(UpstreamClient)
+    assert isinstance(upstream_client, UpstreamCachedClient)
+    assert container.get(RedisCacheManager) is not None
+
+
+def test_default_container_injects_plain_upstream_client_when_disabled(monkeypatch):
+    from stremio_http_proxy.client.upstream_client import UpstreamClient
+    from stremio_http_proxy.client.upstream_cached_client import UpstreamCachedClient
+
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    monkeypatch.setenv("UPSTREAM_CACHE_ENABLED", "false")
+    container = DefaultContainer()
+
+    upstream_client = container.get(UpstreamClient)
+    assert type(upstream_client) is UpstreamClient
+

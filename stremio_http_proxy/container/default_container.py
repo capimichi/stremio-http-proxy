@@ -7,12 +7,14 @@ from injector import Injector
 from stremio_http_proxy.client.tmdb_client import TMDBClient
 from stremio_http_proxy.client.torrserver_client import TorrServerClient
 from stremio_http_proxy.client.upstream_client import UpstreamClient
+from stremio_http_proxy.client.upstream_cached_client import UpstreamCachedClient
 from stremio_http_proxy.command.serve_command import ServeCommand
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.manager.db_manager import DbManager
 from stremio_http_proxy.manager.jinja_manager import JinjaManager
 from stremio_http_proxy.manager.media_asset_manager import MediaAssetManager
+from stremio_http_proxy.manager.redis_cache_manager import RedisCacheManager
 
 import stremio_http_proxy.entity.playback_history  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.media  # noqa: F401 — ensure table creation
@@ -118,6 +120,9 @@ class DefaultContainer:
         self.optimize_media_gpu_enabled = os.environ.get("OPTIMIZE_MEDIA_GPU_ENABLED", "true").lower() == "true"
         self.optimize_media_vaapi_device = os.environ.get("OPTIMIZE_MEDIA_VAAPI_DEVICE", "/dev/dri/renderD128")
         self.optimize_media_preset = os.environ.get("OPTIMIZE_MEDIA_PRESET", "ultrafast")
+        self.redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        self.upstream_cache_enabled = os.environ.get("UPSTREAM_CACHE_ENABLED", "true").lower() == "true"
+        self.upstream_cache_ttl_seconds = int(os.environ.get("UPSTREAM_CACHE_TTL_SECONDS", "172800"))
         if not self.app_secret or not self.app_secret.strip():
             raise ValueError("APP_SECRET environment variable is required")
 
@@ -126,7 +131,21 @@ class DefaultContainer:
 
     def _init_bindings(self) -> None:
         logger_factory = LoggerFactory(self.log_dir, self.log_level)
-        upstream_client = UpstreamClient(self.upstream_base_url, self.request_timeout_seconds)
+        redis_cache_manager = RedisCacheManager(
+            redis_url=self.redis_url,
+            logger_factory=logger_factory,
+            enabled=self.upstream_cache_enabled,
+            default_ttl_seconds=self.upstream_cache_ttl_seconds,
+        )
+        if self.upstream_cache_enabled:
+            upstream_client = UpstreamCachedClient(
+                base_url=self.upstream_base_url,
+                timeout_seconds=self.request_timeout_seconds,
+                cache_manager=redis_cache_manager,
+                cache_ttl_seconds=self.upstream_cache_ttl_seconds,
+            )
+        else:
+            upstream_client = UpstreamClient(self.upstream_base_url, self.request_timeout_seconds)
         torrserver_client = TorrServerClient(
             self.torrserver_base_url,
             self.request_timeout_seconds,
@@ -277,6 +296,7 @@ class DefaultContainer:
         serve_command = ServeCommand(self.api_host, self.api_port)
 
         self.injector.binder.bind(LoggerFactory, to=logger_factory)
+        self.injector.binder.bind(RedisCacheManager, to=redis_cache_manager)
         self.injector.binder.bind(TorrServerClient, to=torrserver_client)
         self.injector.binder.bind(UpstreamClient, to=upstream_client)
         self.injector.binder.bind(StreamRewriteService, to=stream_rewrite_service)
