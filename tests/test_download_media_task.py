@@ -103,3 +103,39 @@ async def test_download_media_task_handles_torrent_and_triggers_optimize(fake_lo
         assert result is True
         cache_manager.mark_optimizing.assert_called_once_with("hash123:1", 52428800)
         mock_opt.assert_called_once_with(args=["hash123:1"], queue="transcode")
+
+
+@pytest.mark.asyncio
+async def test_download_media_task_cascades_on_prefetch_failure(fake_logger_factory):
+    torrserver_client = MagicMock()
+    cache_manager = MagicMock()
+    cache_manager.is_ready.return_value = False
+    entry = CacheEntry(
+        cache_key="hash123:1",
+        infohash="hash123",
+        cache_index=1,
+        source_link="magnet:?xt=urn:btih:hash123",
+        title="Sample",
+        content_id="tt123:1:2",
+        content_type="series",
+        category="tv",
+        trigger="next_episode_prefetch",
+        file_path="/tmp/test",
+        tmp_path="/tmp/test.tmp",
+    )
+    cache_manager.get_entry.return_value = entry
+    mock_prefetch_service = AsyncMock()
+
+    task = DownloadMediaTask(
+        torrserver_client,
+        cache_manager,
+        fake_logger_factory,
+        next_episode_prefetch_service=mock_prefetch_service,
+    )
+    task._download_torrent = AsyncMock(side_effect=RuntimeError("swarm dead"))
+
+    with pytest.raises(RuntimeError):
+        await task.execute("hash123:1")
+
+    cache_manager.mark_failed.assert_called_once()
+    mock_prefetch_service.on_download_failed.assert_awaited_once_with("series", "tt123:1:2", "tv")

@@ -34,6 +34,7 @@ class DownloadMediaTask(AbstractTask):
         max_total_seconds: int = 7200,
         progress_log_interval_seconds: int = 5,
         prefetch_min_progress_bytes: int = 1048576,
+        next_episode_prefetch_service: Any = None,
     ):
         self.torrserver_client = torrserver_client
         self.cache_manager = cache_manager
@@ -47,6 +48,7 @@ class DownloadMediaTask(AbstractTask):
         self.max_total_seconds = max_total_seconds
         self.progress_log_interval_seconds = progress_log_interval_seconds
         self.prefetch_min_progress_bytes = prefetch_min_progress_bytes
+        self.next_episode_prefetch_service = next_episode_prefetch_service
 
     def run(self, *args: Any, **kwargs: Any) -> bool:
         cache_key = args[0] if args else kwargs.get("cache_key")
@@ -86,6 +88,13 @@ class DownloadMediaTask(AbstractTask):
             self.logger.exception("Download failed for %s: %s", cache_key, exc)
             self.cache_manager.cleanup_partial(cache_key)
             self.cache_manager.mark_failed(cache_key, str(exc), attempt)
+            if self.next_episode_prefetch_service and getattr(entry, "trigger", None) == "next_episode_prefetch":
+                try:
+                    await self.next_episode_prefetch_service.on_download_failed(
+                        entry.content_type, entry.content_id, entry.category
+                    )
+                except Exception:
+                    self.logger.exception("Error triggering fallback for prefetch cache_key %s", cache_key)
             raise
 
     async def _download_hls(self, cache_key: str, url: str) -> None:

@@ -242,6 +242,7 @@ class DefaultContainer:
             max_total_seconds=self.download_max_total_seconds,
             progress_log_interval_seconds=self.download_progress_log_interval_seconds,
             prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
+            next_episode_prefetch_service=next_episode_prefetch_service,
         )
         cleanup_cache_task = CleanupCacheTask(cache_manager)
 
