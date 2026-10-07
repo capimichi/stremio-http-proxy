@@ -81,20 +81,6 @@ class MediaMetadataService:
     def _schedule_enrichment(
         self, media_id: int, imdb_id: str | None, media_type: str, season: int | None = None
     ) -> None:
-        if self.task_service and hasattr(self.task_service, "enqueue_task"):
-            self.task_service.enqueue_task(
-                name="enrich_media_metadata",
-                arguments={
-                    "media_id": media_id,
-                    "imdb_id": imdb_id,
-                    "media_type": media_type,
-                    "season": season,
-                },
-                delay_seconds=0,
-                deduplicate=True,
-            )
-            return
-
         try:
             from stremio_http_proxy.task.enrich_media_metadata_task import enrich_media_metadata_task
             enrich_media_metadata_task.apply_async(
@@ -109,6 +95,20 @@ class MediaMetadataService:
             return
         except Exception:
             pass
+
+        if self.task_service and hasattr(self.task_service, "enqueue_task"):
+            self.task_service.enqueue_task(
+                name="enrich_media_metadata",
+                arguments={
+                    "media_id": media_id,
+                    "imdb_id": imdb_id,
+                    "media_type": media_type,
+                    "season": season,
+                },
+                delay_seconds=0,
+                deduplicate=True,
+            )
+            return
         else:
             # Fallback fire-and-forget in current loop if available
             try:

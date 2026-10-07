@@ -232,7 +232,22 @@ class HubService:
 
         for ep in range(1, total_episodes + 1):
             ep_content_id = f"{clean_id}:{season}:{ep}"
-            if self.task_service and hasattr(self.task_service, "enqueue_task"):
+            dispatched = False
+            try:
+                from stremio_http_proxy.task.fetch_media_task import fetch_media_task
+                fetch_media_task.apply_async(
+                    kwargs={
+                        "content_type": "series",
+                        "content_id": ep_content_id,
+                        "category": category,
+                    },
+                    queue="default",
+                )
+                dispatched = True
+            except Exception:
+                pass
+
+            if not dispatched and self.task_service and hasattr(self.task_service, "enqueue_task"):
                 self.task_service.enqueue_task(
                     name="fetch_media",
                     arguments={
@@ -242,14 +257,17 @@ class HubService:
                     },
                     delay_seconds=0,
                 )
-                enqueued_count += 1
-            else:
+                dispatched = True
+            elif not dispatched:
                 self.prefetch_service.schedule_prefetch(
                     content_type="series",
                     content_id=ep_content_id,
                     category=category,
                     delay_seconds=0,
                 )
+                dispatched = True
+
+            if dispatched:
                 enqueued_count += 1
 
         return {
@@ -276,7 +294,22 @@ class HubService:
             full_content_id = clean_id
             cat = category or ("movie" if content_type == "movie" else "tv")
 
-        if self.task_service and hasattr(self.task_service, "enqueue_task"):
+        job_id = None
+        try:
+            from stremio_http_proxy.task.fetch_media_task import fetch_media_task
+            res = fetch_media_task.apply_async(
+                kwargs={
+                    "content_type": content_type,
+                    "content_id": full_content_id,
+                    "category": cat,
+                },
+                queue="default",
+            )
+            job_id = getattr(res, "id", None) or str(res)
+        except Exception:
+            pass
+
+        if not job_id and self.task_service and hasattr(self.task_service, "enqueue_task"):
             job_id = self.task_service.enqueue_task(
                 name="fetch_media",
                 arguments={
@@ -286,7 +319,7 @@ class HubService:
                 },
                 delay_seconds=0,
             )
-        else:
+        elif not job_id:
             job_id = self.prefetch_service.schedule_prefetch(
                 content_type=content_type,
                 content_id=full_content_id,

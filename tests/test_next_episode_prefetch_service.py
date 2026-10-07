@@ -198,6 +198,8 @@ def test_prefetch_skips_if_target_completed_already_reached():
 
 
 def test_schedule_prefetch_validates_and_delegates():
+    from unittest.mock import patch, MagicMock
+
     class FakeSchedulingCacheManager:
         def __init__(self):
             self.scheduled = []
@@ -225,13 +227,19 @@ def test_schedule_prefetch_validates_and_delegates():
     assert service.schedule_prefetch("series", "tt12345", "tv") is False
     assert len(cache_mgr.scheduled) == 0
 
-    # 3. Valid series episode is scheduled
-    assert service.schedule_prefetch("series", "tt123:1:1", "tv") is True
-    assert cache_mgr.scheduled == [("series", "tt123:1:1", "tv", 120)]
+    # 3. Valid series episode is scheduled via Celery
+    with patch("stremio_http_proxy.task.fetch_next_episode_task.fetch_next_episode_task.apply_async") as mock_celery:
+        assert service.schedule_prefetch("series", "tt123:1:1", "tv") is True
+        mock_celery.assert_called_once_with(
+            kwargs={"content_type": "series", "content_id": "tt123:1:1", "category": "tv"},
+            countdown=120,
+            queue="default",
+        )
 
-    # 4. Custom delay is respected
-    assert service.schedule_prefetch("series", "tt123:1:2", "tv", delay_seconds=300) is True
-    assert cache_mgr.scheduled[1] == ("series", "tt123:1:2", "tv", 300)
+    # 4. Custom delay is respected and fallback to cache_manager works if Celery fails
+    with patch("stremio_http_proxy.task.fetch_next_episode_task.fetch_next_episode_task.apply_async", side_effect=Exception("celery down")):
+        assert service.schedule_prefetch("series", "tt123:1:2", "tv", delay_seconds=300) is True
+        assert cache_mgr.scheduled == [("series", "tt123:1:2", "tv", 300)]
 
 
 def test_prefetch_preserves_exact_upstream_order_and_allows_zero_seeders():

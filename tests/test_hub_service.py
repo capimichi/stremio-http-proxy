@@ -94,6 +94,7 @@ def test_hub_service_get_recent_media(playback_history_repo):
 
 
 def test_hub_service_cache_season(playback_history_repo):
+    from unittest.mock import patch
     mock_cache_manager = MagicMock()
     mock_prefetch_service = MagicMock()
     mock_task_service = MagicMock()
@@ -105,13 +106,24 @@ def test_hub_service_cache_season(playback_history_repo):
         task_service=mock_task_service,
     )
 
-    res = service.cache_season(content_id="tt999", season=2, total_episodes=5, category="tv")
-    assert res["success"] is True
-    assert res["enqueued_count"] == 5
-    assert mock_task_service.enqueue_task.call_count == 5
+    # 1. With Celery available
+    with patch("stremio_http_proxy.task.fetch_media_task.fetch_media_task.apply_async") as mock_celery:
+        res = service.cache_season(content_id="tt999", season=2, total_episodes=5, category="tv")
+        assert res["success"] is True
+        assert res["enqueued_count"] == 5
+        assert mock_celery.call_count == 5
+        assert mock_task_service.enqueue_task.call_count == 0
+
+    # 2. Fallback to task_service when Celery fails
+    with patch("stremio_http_proxy.task.fetch_media_task.fetch_media_task.apply_async", side_effect=Exception("celery down")):
+        res = service.cache_season(content_id="tt999", season=2, total_episodes=5, category="tv")
+        assert res["success"] is True
+        assert res["enqueued_count"] == 5
+        assert mock_task_service.enqueue_task.call_count == 5
 
 
 def test_hub_service_cache_episode(playback_history_repo):
+    from unittest.mock import patch
     mock_cache_manager = MagicMock()
     mock_prefetch_service = MagicMock()
     mock_task_service = MagicMock()
@@ -123,10 +135,24 @@ def test_hub_service_cache_episode(playback_history_repo):
         task_service=mock_task_service,
     )
 
-    res = service.cache_episode(content_id="tt999", season=2, episode=4, content_type="series")
-    assert res["success"] is True
-    assert res["content_id"] == "tt999:2:4"
-    mock_task_service.enqueue_task.assert_called_once()
+    # 1. With Celery available
+    with patch("stremio_http_proxy.task.fetch_media_task.fetch_media_task.apply_async") as mock_celery:
+        mock_celery.return_value = MagicMock(id="celery-job-123")
+        res = service.cache_episode(content_id="tt999", season=2, episode=4, content_type="series")
+        assert res["success"] is True
+        assert res["content_id"] == "tt999:2:4"
+        assert res["job_id"] == "celery-job-123"
+        mock_celery.assert_called_once()
+        assert mock_task_service.enqueue_task.call_count == 0
+
+    # 2. Fallback to task_service
+    mock_task_service.enqueue_task.return_value = "db-job-456"
+    with patch("stremio_http_proxy.task.fetch_media_task.fetch_media_task.apply_async", side_effect=Exception("celery down")):
+        res = service.cache_episode(content_id="tt999", season=2, episode=4, content_type="series")
+        assert res["success"] is True
+        assert res["content_id"] == "tt999:2:4"
+        assert res["job_id"] == "db-job-456"
+        mock_task_service.enqueue_task.assert_called_once()
 
 
 def test_hub_service_library(db_manager, playback_history_repo):
@@ -206,6 +232,7 @@ def test_hub_service_get_season_cache_status(playback_history_repo):
 
 
 def test_hub_service_get_tasks(playback_history_repo):
+    from unittest.mock import patch
     mock_cache_manager = MagicMock()
     mock_prefetch_service = MagicMock()
     mock_task_service = MagicMock()
@@ -232,7 +259,8 @@ def test_hub_service_get_tasks(playback_history_repo):
         task_service=mock_task_service,
     )
 
-    tasks = service.get_tasks()
+    with patch.object(service, "_inspect_celery_tasks", return_value=[]):
+        tasks = service.get_tasks()
     assert len(tasks) == 1
     assert tasks[0]["display_name"] == "Smart Prefetch Episodio"
     assert tasks[0]["season"] == 1
@@ -242,7 +270,7 @@ def test_hub_service_get_tasks(playback_history_repo):
 
 @pytest.mark.asyncio
 async def test_hub_service_retry_stream(playback_history_repo):
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, patch
 
     mock_cache_manager = MagicMock()
     mock_cache_manager.reenqueue_entry = AsyncMock(return_value=True)
@@ -254,9 +282,11 @@ async def test_hub_service_retry_stream(playback_history_repo):
         task_service=MagicMock(),
     )
 
-    res = await service.retry_stream("hash:1")
-    assert res["success"] is True
-    assert res["cache_key"] == "hash:1"
+    with patch("stremio_http_proxy.task.download_media_task.download_media_task.apply_async") as mock_apply:
+        res = await service.retry_stream("hash:1")
+        assert res["success"] is True
+        assert res["cache_key"] == "hash:1"
+        mock_apply.assert_called_once_with(args=["hash:1"], queue="downloads")
     mock_cache_manager.reenqueue_entry.assert_awaited_once_with("hash:1")
 
 

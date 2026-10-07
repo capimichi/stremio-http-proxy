@@ -48,17 +48,6 @@ class NextEpisodePrefetchService:
             return False
         if delay_seconds is None:
             delay_seconds = self.delay_seconds
-        if self.task_service and hasattr(self.task_service, "enqueue_task"):
-            job_id = self.task_service.enqueue_task(
-                name="fetch_next_episode",
-                arguments={
-                    "content_type": content_type,
-                    "content_id": content_id,
-                    "category": category,
-                },
-                delay_seconds=delay_seconds,
-            )
-            return job_id is not None
         try:
             from stremio_http_proxy.task.fetch_next_episode_task import fetch_next_episode_task
             fetch_next_episode_task.apply_async(
@@ -73,6 +62,17 @@ class NextEpisodePrefetchService:
             return True
         except Exception:
             pass
+        if self.task_service and hasattr(self.task_service, "enqueue_task"):
+            job_id = self.task_service.enqueue_task(
+                name="fetch_next_episode",
+                arguments={
+                    "content_type": content_type,
+                    "content_id": content_id,
+                    "category": category,
+                },
+                delay_seconds=delay_seconds,
+            )
+            return job_id is not None
         if self.cache_manager and hasattr(self.cache_manager, "schedule_prefetch_job"):
             return self.cache_manager.schedule_prefetch_job(
                 content_type=content_type,

@@ -157,3 +157,29 @@ def test_media_repository_get_and_ensure_by_content_id_series(media_item_repo, m
     assert found.id == item.id
     assert found.season == 2
     assert found.episode == 11
+
+
+def test_media_metadata_service_schedule_enrichment(metadata_service):
+    from unittest.mock import MagicMock, patch
+
+    mock_task_service = MagicMock()
+    metadata_service.task_service = mock_task_service
+
+    # 1. Celery available
+    with patch("stremio_http_proxy.task.enrich_media_metadata_task.enrich_media_metadata_task.apply_async") as mock_celery:
+        metadata_service._schedule_enrichment(media_id=1, imdb_id="tt123", media_type="movie")
+        mock_celery.assert_called_once_with(
+            kwargs={"media_id": 1, "imdb_id": "tt123", "media_type": "movie", "season": None},
+            queue="default",
+        )
+        assert mock_task_service.enqueue_task.call_count == 0
+
+    # 2. Celery fails -> fallback to task_service
+    with patch("stremio_http_proxy.task.enrich_media_metadata_task.enrich_media_metadata_task.apply_async", side_effect=Exception("celery down")):
+        metadata_service._schedule_enrichment(media_id=2, imdb_id="tt456", media_type="series", season=3)
+        mock_task_service.enqueue_task.assert_called_once_with(
+            name="enrich_media_metadata",
+            arguments={"media_id": 2, "imdb_id": "tt456", "media_type": "series", "season": 3},
+            delay_seconds=0,
+            deduplicate=True,
+        )
