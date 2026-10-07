@@ -196,7 +196,13 @@ class DownloadMediaTask(AbstractTask):
         window_started_at = started_at
         bytes_at_window_start = 0
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=self.no_progress_timeout_seconds, auth=auth) as client:
+        timeout = httpx.Timeout(
+            connect=self.connect_timeout_seconds,
+            read=self.connect_timeout_seconds,
+            write=30.0,
+            pool=30.0,
+        )
+        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout, auth=auth) as client:
             async with client.stream("GET", url) as response:
                 response.raise_for_status()
                 content_len = response.headers.get("content-length")
