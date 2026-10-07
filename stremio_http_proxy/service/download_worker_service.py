@@ -194,12 +194,17 @@ class DownloadWorkerService:
                 job.index = 1
             build_url = getattr(self.torrserver_client, "build_download_url", self.torrserver_client.build_play_url)
             download_url = build_url(job.link, job.title, job.poster, job.category, file_index)
-            await self._download_http_stream(job, download_url)
+            try:
+                await self._download_http_stream(job, download_url, auth=getattr(self.torrserver_client, "auth", None))
+            except TypeError:
+                await self._download_http_stream(job, download_url)
 
     def _is_hls_stream(self, url: str) -> bool:
         return "/proxy/hls" in url or ".m3u8" in url
 
-    async def _download_http_stream(self, job: DownloadJob, download_url: str) -> None:
+    async def _download_http_stream(
+        self, job: DownloadJob, download_url: str, auth: httpx.Auth | tuple[str, str] | None = None
+    ) -> None:
         timeout = httpx.Timeout(connect=self.connect_timeout_seconds, read=self.no_progress_timeout_seconds, write=30, pool=30)
         tmp_path = self.cache_manager.prepare_download_path(job.cache_key)
 
@@ -209,7 +214,7 @@ class DownloadWorkerService:
         bytes_at_window_start = 0
         last_progress_log_at = started_at
 
-        async with httpx.AsyncClient(timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout, auth=auth) as client:
             async with client.stream("GET", download_url) as response:
                 response.raise_for_status()
                 expected_bytes = self._expected_bytes(response)

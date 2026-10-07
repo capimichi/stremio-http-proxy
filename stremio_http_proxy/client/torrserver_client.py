@@ -51,6 +51,8 @@ class TorrServerClient:
         self.base_url = base_url.rstrip("/")
         self.internal_base_url = (internal_base_url or base_url).rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.basic_auth_user = basic_auth_user
+        self.basic_auth_password = basic_auth_password
         self.auth = httpx.BasicAuth(basic_auth_user, basic_auth_password or "") if basic_auth_user else None
         self.transport = transport
         self.logger = logging.getLogger(__name__)
@@ -171,6 +173,12 @@ class TorrServerClient:
         category: str | None = None,
         index: int | None = None,
     ) -> str:
+        parsed = urlparse(base_url)
+        if self.basic_auth_user and not parsed.username:
+            user = self.basic_auth_user
+            pwd = self.basic_auth_password or ""
+            netloc = f"{user}:{pwd}@{parsed.netloc}"
+            base_url = parsed._replace(netloc=netloc).geturl()
         link = self.enrich_link(link)
         params = {
             "link": link,

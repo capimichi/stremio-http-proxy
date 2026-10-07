@@ -188,7 +188,7 @@ class DownloadMediaTask(AbstractTask):
             downloaded_bytes / max(time.time() - started_at, 0.001),
         )
 
-    async def _download_http(self, cache_key: str, url: str) -> None:
+    async def _download_http(self, cache_key: str, url: str, auth: httpx.Auth | tuple[str, str] | None = None) -> None:
         tmp_path = self.cache_manager.prepare_download_path(cache_key)
         downloaded_bytes = 0
         started_at = time.time()
@@ -196,7 +196,7 @@ class DownloadMediaTask(AbstractTask):
         window_started_at = started_at
         bytes_at_window_start = 0
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=self.no_progress_timeout_seconds) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=self.no_progress_timeout_seconds, auth=auth) as client:
             async with client.stream("GET", url) as response:
                 response.raise_for_status()
                 content_len = response.headers.get("content-length")
@@ -244,7 +244,7 @@ class DownloadMediaTask(AbstractTask):
             category=entry.category,
             index=entry.cache_index,
         )
-        await self._download_http(cache_key, download_url)
+        await self._download_http(cache_key, download_url, auth=self.torrserver_client.auth)
 
     def _on_download_completed(self, cache_key: str, size_bytes: int) -> None:
         self.cache_manager.mark_optimizing(cache_key, size_bytes)
