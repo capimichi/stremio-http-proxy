@@ -1,0 +1,431 @@
+{% extends "dashboard/components/base.html" %}
+{% set active_page = "library" %}
+{% block title %}Flussi - {{ media.title }}{% if season is not none %} S{{ season }}E{{ episode }}{% endif %}{% endblock %}
+{% block page_title %}Flussi Disponibili{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto">
+
+  <!-- Top Navigation & Back Button -->
+  <div class="flex items-center justify-between">
+    <a href="{{ back_url }}" class="inline-flex items-center gap-2 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/80 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-white transition-all shadow-sm group">
+      <i class="fa-solid fa-arrow-left text-[11px] group-hover:-translate-x-0.5 transition-transform"></i>
+      <span>{{ "Torna a " ~ media.title ~ " (Stagione " ~ season ~ ")" if season is not none else "Torna ai dettagli di " ~ media.title }}</span>
+    </a>
+
+    {% if imdb_id %}
+    <span class="text-xs font-mono text-slate-500 bg-slate-900/60 px-2.5 py-1 rounded-lg border border-slate-800">
+      IMDb: {{ imdb_id }}{% if season is not none %}:{{ season }}:{{ episode }}{% endif %}
+    </span>
+    {% endif %}
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="action-toast" class="hidden p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-300 flex items-center justify-between transition-all shadow-lg">
+    <div class="flex items-center gap-2.5">
+      <i class="fa-solid fa-circle-check text-indigo-400 text-sm"></i>
+      <span id="action-toast-message">Operazione completata con successo.</span>
+    </div>
+    <button type="button" onclick="document.getElementById('action-toast').classList.add('hidden')" class="text-slate-400 hover:text-white">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+
+  <!-- ITEM HERO CARD -->
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 p-5 sm:p-6 shadow-xl">
+    <div class="flex flex-col sm:flex-row gap-5 items-start">
+      
+      <!-- Poster / Thumbnail -->
+      <div class="relative {% if season is not none %}w-full sm:w-60 aspect-video{% else %}w-32 sm:w-40 aspect-[2/3]{% endif %} rounded-xl overflow-hidden bg-slate-950 shrink-0 shadow-lg border border-slate-800 flex items-center justify-center">
+        {% if season is not none and item and item.thumbnail %}
+        <img
+          src="{{ item.thumbnail }}"
+          alt="{{ item.title or media.title }}"
+          class="w-full h-full object-cover relative z-10"
+          onerror="this.src='{{ media.poster or '' }}'"
+        >
+        {% elif media.poster %}
+        <img
+          src="{{ media.poster }}"
+          alt="{{ media.title }}"
+          class="w-full h-full object-cover relative z-10"
+        >
+        {% else %}
+        <div class="text-slate-600 text-center p-4">
+          <i class="fa-solid fa-film text-2xl mb-1"></i>
+          <p class="text-[10px]">Nessuna Immagine</p>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Info & Episode Details -->
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+            {% if season is not none %}
+            Stagione {{ season }} • Episodio {{ episode }}
+            {% else %}
+            Film • {{ media.year or '' }}
+            {% endif %}
+          </span>
+          {% if item and item.release_date %}
+          <span class="text-xs text-slate-400 font-mono">{{ item.release_date }}</span>
+          {% elif media.year and season is none %}
+          <span class="text-xs text-slate-400 font-mono">{{ media.year }}</span>
+          {% endif %}
+        </div>
+
+        <h1 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+          {{ media.title }}
+        </h1>
+
+        {% if season is not none and item %}
+        <h2 class="text-sm sm:text-base font-bold text-indigo-400 mt-1">
+          Episodio {{ episode }}: {{ item.title or "Senza Titolo" }}
+        </h2>
+        {% endif %}
+
+        <p class="text-xs text-slate-400 mt-2.5 leading-relaxed line-clamp-3">
+          {% if season is not none and item and item.overview %}
+          {{ item.overview }}
+          {% else %}
+          {{ media.overview or "Nessuna descrizione disponibile." }}
+          {% endif %}
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- STREAMS SECTION -->
+  <div class="rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden">
+    
+    <!-- Streams Header -->
+    <div class="px-5 py-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <i class="fa-solid fa-network-wired text-sm"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-sm font-bold text-white tracking-wide">
+              Flussi e Sorgenti Disponibili
+            </h2>
+            <span id="streams-count-badge" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+              Ricerca...
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-0.5">
+            I flussi contrassegnati con <span class="text-amber-400 font-semibold">🔥</span> sono pronti in cache locale per lo streaming immediato
+          </p>
+        </div>
+      </div>
+
+      <button
+        id="reload-streams-btn"
+        type="button"
+        onclick="loadStreams()"
+        class="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white border border-slate-700 transition-colors self-start sm:self-auto"
+      >
+        <i id="reload-icon" class="fa-solid fa-arrows-rotate text-[11px]"></i>
+        <span>Ricarica Flussi</span>
+      </button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="streams-loading" class="py-16 flex flex-col items-center justify-center space-y-3">
+      <div class="relative w-10 h-10 flex items-center justify-center">
+        <i class="fa-solid fa-circle-notch fa-spin text-2xl text-indigo-500"></i>
+      </div>
+      <p class="text-xs text-slate-400 font-medium">Interrogazione addon upstream e TorrServer in corso...</p>
+      <p class="text-[11px] text-slate-500">Stiamo recuperando i torrent e verificando la cache locale</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="streams-error" class="hidden py-14 px-6 text-center space-y-3">
+      <div class="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto text-lg">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3 class="text-sm font-bold text-white">Impossibile recuperare i flussi</h3>
+      <p id="streams-error-msg" class="text-xs text-slate-400 max-w-md mx-auto">Si è verificato un errore durante la richiesta all'addon.</p>
+      <button
+        type="button"
+        onclick="loadStreams()"
+        class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white shadow-md transition-colors"
+      >
+        <i class="fa-solid fa-rotate-right"></i>
+        <span>Riprova</span>
+      </button>
+    </div>
+
+    <!-- Empty State -->
+    <div id="streams-empty" class="hidden py-14 px-6 text-center space-y-2">
+      <div class="w-12 h-12 rounded-full bg-slate-800 text-slate-500 flex items-center justify-center mx-auto text-lg">
+        <i class="fa-solid fa-inbox"></i>
+      </div>
+      <h3 class="text-sm font-bold text-slate-300">Nessun flusso disponibile</h3>
+      <p class="text-xs text-slate-500 max-w-md mx-auto">Gli addon configurati non hanno restituito alcun risultato valido per questo episodio.</p>
+    </div>
+
+    <!-- Streams Table (Desktop) & Cards (Mobile) -->
+    <div id="streams-content" class="hidden">
+      
+      <!-- Desktop Table -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="px-5 py-3.5">Nome / Sorgente</th>
+              <th class="px-5 py-3.5">Release & Dettagli</th>
+              <th class="px-5 py-3.5">Seeders</th>
+              <th class="px-5 py-3.5">Stato Cache</th>
+              <th class="px-5 py-3.5">Infohash</th>
+              <th class="px-5 py-3.5 text-right">Azioni</th>
+            </tr>
+          </thead>
+          <tbody id="streams-tbody" class="divide-y divide-slate-800/60 bg-slate-900/40">
+            <!-- Populated via JS -->
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const mediaId = {{ media_id }};
+const mediaType = '{{ media_type }}';
+const imdbId = '{{ imdb_id }}';
+const season = {% if season is not none %}{{ season }}{% else %}null{% endif %};
+const episode = {% if episode is not none %}{{ episode }}{% else %}null{% endif %};
+
+const streamsLoading = document.getElementById('streams-loading');
+const streamsError = document.getElementById('streams-error');
+const streamsErrorMsg = document.getElementById('streams-error-msg');
+const streamsEmpty = document.getElementById('streams-empty');
+const streamsContent = document.getElementById('streams-content');
+const streamsTbody = document.getElementById('streams-tbody');
+const streamsCountBadge = document.getElementById('streams-count-badge');
+const reloadIcon = document.getElementById('reload-icon');
+const reloadBtn = document.getElementById('reload-streams-btn');
+
+function showToast(message) {
+  const toast = document.getElementById('action-toast');
+  const msg = document.getElementById('action-toast-message');
+  if (toast && msg) {
+    msg.textContent = message;
+    toast.classList.remove('hidden');
+    setTimeout(() => {
+      toast.classList.add('hidden');
+    }, 6000);
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+async function loadStreams() {
+  streamsLoading.classList.remove('hidden');
+  streamsError.classList.add('hidden');
+  streamsEmpty.classList.add('hidden');
+  streamsContent.classList.add('hidden');
+  streamsCountBadge.textContent = 'Ricerca...';
+  if (reloadIcon) reloadIcon.classList.add('fa-spin');
+  if (reloadBtn) reloadBtn.disabled = true;
+
+  let url = `/api/browser/streams/${mediaId}`;
+  if (season !== null && episode !== null) {
+    url += `?season=${season}&episode=${episode}`;
+  }
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      throw new Error(`Errore HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    const streams = data.streams || [];
+
+    streamsCountBadge.textContent = `${streams.length} fluss${streams.length === 1 ? 'o' : 'i'}`;
+
+    if (streams.length === 0) {
+      streamsEmpty.classList.remove('hidden');
+    } else {
+      renderStreams(streams);
+      streamsContent.classList.remove('hidden');
+    }
+  } catch (err) {
+    console.error('Error loading streams:', err);
+    streamsErrorMsg.textContent = err.message || 'Errore di connessione.';
+    streamsError.classList.remove('hidden');
+  } finally {
+    streamsLoading.classList.add('hidden');
+    if (reloadIcon) reloadIcon.classList.remove('fa-spin');
+    if (reloadBtn) reloadBtn.disabled = false;
+  }
+}
+
+function renderStreams(streams) {
+  streamsTbody.innerHTML = '';
+
+  streams.forEach((s, idx) => {
+    const isCached = Boolean(s.meta && s.meta.cached);
+    const infohash = s.infohash || '';
+    const shortHash = infohash.length > 12 ? infohash.slice(0, 12) + '…' : (infohash || '-');
+    const seeders = s.meta?.seeders !== undefined && s.meta?.seeders !== null ? s.meta.seeders : '-';
+    const playUrl = s.url || '#';
+
+    // Format release title / description
+    let cleanDesc = (s.description || s.title || '-').trim();
+    // If multiline, show first line prominent, other lines as subtle details
+    const descLines = cleanDesc.split('\n').map(l => l.trim()).filter(Boolean);
+    const mainTitle = descLines[0] || (s.name || 'Stream');
+    const subDetails = descLines.slice(1).join(' • ');
+
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-slate-800/40 transition-colors group';
+
+    tr.innerHTML = `
+      <!-- Nome / Provider -->
+      <td class="px-5 py-3.5">
+        <div class="flex items-center gap-2">
+          ${isCached ? '<span class="text-amber-400 font-bold text-sm" title="Pronto in Cache Locale">🔥</span>' : ''}
+          <div>
+            <div class="font-bold text-slate-200">
+              ${escapeHtml(s.name || 'Sorgente')}
+            </div>
+            ${s.file_idx !== undefined && s.file_idx !== null ? `
+              <span class="text-[10px] text-slate-500 font-mono">File Index: #${s.file_idx}</span>
+            ` : ''}
+          </div>
+        </div>
+      </td>
+
+      <!-- Release & Descrizione -->
+      <td class="px-5 py-3.5 max-w-md">
+        <div class="font-mono text-[11px] text-slate-300 font-medium truncate" title="${escapeHtml(mainTitle)}">
+          ${escapeHtml(mainTitle)}
+        </div>
+        ${subDetails ? `
+          <div class="text-[11px] text-slate-400 mt-0.5 truncate" title="${escapeHtml(subDetails)}">
+            ${escapeHtml(subDetails)}
+          </div>
+        ` : ''}
+      </td>
+
+      <!-- Seeders -->
+      <td class="px-5 py-3.5 whitespace-nowrap">
+        <span class="inline-flex items-center gap-1 font-mono text-xs font-semibold ${seeders !== '-' && Number(seeders) > 0 ? 'text-emerald-400' : 'text-slate-500'}">
+          <i class="fa-solid fa-users text-[10px] opacity-70"></i>
+          ${seeders}
+        </span>
+      </td>
+
+      <!-- Stato Cache -->
+      <td class="px-5 py-3.5 whitespace-nowrap">
+        ${isCached ? `
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-sm shadow-amber-500/10">
+            🔥 In Cache
+          </span>
+        ` : `
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+            Remoto
+          </span>
+        `}
+      </td>
+
+      <!-- Infohash -->
+      <td class="px-5 py-3.5 whitespace-nowrap">
+        ${infohash ? `
+          <button
+            type="button"
+            onclick="navigator.clipboard.writeText('${infohash}'); showToast('Infohash copiato negli appunti!');"
+            class="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400 hover:text-indigo-400 transition-colors"
+            title="Clicca per copiare: ${infohash}"
+          >
+            <span>${shortHash}</span>
+            <i class="fa-regular fa-copy text-[10px] opacity-60"></i>
+          </button>
+        ` : '<span class="text-slate-600">-</span>'}
+      </td>
+
+      <!-- Azioni -->
+      <td class="px-5 py-3.5 text-right whitespace-nowrap">
+        <div class="flex items-center justify-end gap-2">
+          
+          <!-- Tasto Play -->
+          <a
+            href="${playUrl}"
+            target="_blank"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            title="Avvia Riproduzione"
+          >
+            <i class="fa-solid fa-play text-[10px]"></i>
+            <span>Play</span>
+          </a>
+
+          <!-- Tasto Cache (se non ancora in cache) -->
+          ${!isCached ? `
+            <button
+              type="button"
+              onclick="triggerCacheThisEpisode()"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors"
+              title="Avvia caching in background per questo episodio"
+            >
+              <i class="fa-solid fa-cloud-arrow-down text-indigo-400 text-[10px]"></i>
+              <span>Cache</span>
+            </button>
+          ` : ''}
+
+        </div>
+      </td>
+    `;
+
+    streamsTbody.appendChild(tr);
+  });
+}
+
+async function triggerCacheThisEpisode() {
+  try {
+    const payload = {
+      content_id: imdbId,
+      season: season,
+      episode: episode,
+      content_type: mediaType,
+      category: mediaType === 'movie' ? 'movie' : 'tv',
+    };
+
+    const resp = await fetch('/api/browser/cache-episode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const res = await resp.json();
+    if (res.success) {
+      showToast('✅ Episodio accodato per il caching in background!');
+    } else {
+      alert('Errore: ' + (res.error || 'Impossibile accodare l\'episodio'));
+    }
+  } catch (e) {
+    alert('Errore di connessione: ' + e);
+  }
+}
+
+// Carica i flussi all'avvio della pagina
+document.addEventListener('DOMContentLoaded', () => {
+  loadStreams();
+});
+</script>
+{% endblock %}

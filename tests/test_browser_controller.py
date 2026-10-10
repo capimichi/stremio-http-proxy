@@ -136,3 +136,95 @@ async def test_refresh_media_endpoint(browser_controller, content_browser_servic
     res = await browser_controller.refresh_media(1)
     assert res == {"success": True, "media_id": 1, "status": "updated"}
     content_browser_service.refresh_media.assert_awaited_once_with(1)
+
+
+@pytest.mark.asyncio
+async def test_browser_streams_page_series(browser_controller, media_repo, media_item_repo, jinja_manager):
+    media = media_repo.upsert_media(
+        media_type="series",
+        title="Breaking Bad",
+        imdb_id="tt0903747",
+    )
+    media_item_repo.upsert_media_item(
+        media_id=media.id,
+        season=2,
+        episode=5,
+        title="Breakage",
+        overview="Walt and Jesse face new problems.",
+    )
+
+    response = await browser_controller.browser_streams_page(media.id, season=2, episode=5)
+    assert response.status_code == 200
+    assert jinja_manager.render.called
+    call_args = jinja_manager.render.call_args[1]
+    assert call_args["media"].id == media.id
+    assert call_args["season"] == 2
+    assert call_args["episode"] == 5
+    assert call_args["item"].title == "Breakage"
+    assert call_args["back_url"] == f"/dashboard/browser/media/{media.id}?season=2"
+
+
+@pytest.mark.asyncio
+async def test_browser_streams_page_movie(browser_controller, media_repo, jinja_manager):
+    media = media_repo.upsert_media(
+        media_type="movie",
+        title="Inception",
+        imdb_id="tt1375666",
+    )
+
+    response = await browser_controller.browser_streams_page(media.id)
+    assert response.status_code == 200
+    assert jinja_manager.render.called
+    call_args = jinja_manager.render.call_args[1]
+    assert call_args["media"].id == media.id
+    assert call_args["season"] is None
+    assert call_args["episode"] is None
+    assert call_args["back_url"] == f"/dashboard/browser/media/{media.id}"
+
+
+@pytest.mark.asyncio
+async def test_browser_streams_page_not_found(browser_controller):
+    with pytest.raises(HTTPException) as exc_info:
+        await browser_controller.browser_streams_page(99999)
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_browse_content_deduplication():
+    mock_upstream = MagicMock()
+    mock_upstream.get_json = AsyncMock(return_value={
+        "streams": [
+            {"name": "Stream 1", "infoHash": "abc1234567890123456789012345678901234567", "fileIdx": 1},
+            {"name": "Stream 1 Dup", "infoHash": "abc1234567890123456789012345678901234567", "fileIdx": 1},
+            {"name": "Stream HLS", "url": "https://example.com/playlist.m3u8"},
+            {"name": "Stream HLS Dup", "url": "https://example.com/playlist.m3u8"},
+            {"name": "Stream 2", "infoHash": "def1234567890123456789012345678901234567", "fileIdx": 2},
+        ]
+    })
+    mock_tmdb = MagicMock()
+    mock_tmdb.get_meta_by_imdb_id = AsyncMock(return_value={"meta": {}})
+    mock_rewrite = MagicMock()
+    mock_rewrite.rewrite = AsyncMock(side_effect=lambda payload, category, content_type, content_id: payload)
+    mock_rewrite._extract_infohash_from_stream = MagicMock(side_effect=lambda s: s.get("infoHash"))
+
+    service = ContentBrowserService(
+        upstream_client=mock_upstream,
+        tmdb_client=mock_tmdb,
+        stream_rewrite_service=mock_rewrite,
+    )
+
+    res = await service.browse_content("series", "tt3749900", 2, 18)
+    # Rewrite must be called with stream_id "tt3749900:2:18"
+    mock_rewrite.rewrite.assert_awaited_once_with(
+        mock_upstream.get_json.return_value,
+        category="tv",
+        content_type="series",
+        content_id="tt3749900:2:18",
+    )
+    # Duplicate torrent and duplicate HLS should be dropped: 5 input -> 3 unique
+    assert len(res["streams"]) == 3
+    assert res["streams"][0]["name"] == "Stream 1"
+    assert res["streams"][1]["name"] == "Stream HLS"
+    assert res["streams"][2]["name"] == "Stream 2"
+
+

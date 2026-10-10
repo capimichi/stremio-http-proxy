@@ -153,20 +153,38 @@ class ContentBrowserService:
             await self.upstream_client.get_json(stream_path),
             category="movie" if content_type == "movie" else "tv",
             content_type=content_type,
-            content_id=content_id,
+            content_id=stream_id,
         )
 
         streams = []
+        seen_keys = set()
         for s in stream_payload.get("streams", []):
             if not isinstance(s, dict):
                 continue
             infohash = self.stream_rewrite_service._extract_infohash_from_stream(s)
+            file_idx = s.get("fileIdx") if s.get("fileIdx") is not None else s.get("fileIndex")
+            url = s.get("url")
+
+            if infohash:
+                dedup_key = (infohash.lower(), file_idx)
+            elif url:
+                dedup_key = ("url", url)
+            else:
+                dedup_key = None
+
+            if dedup_key and dedup_key in seen_keys:
+                continue
+            if dedup_key:
+                seen_keys.add(dedup_key)
+
             streams.append({
                 "name": s.get("name"),
                 "title": s.get("title"),
                 "description": s.get("description"),
                 "infohash": infohash,
-                "url": s.get("url"),
+                "file_idx": file_idx,
+                "url": url,
+                "behaviorHints": s.get("behaviorHints"),
                 "meta": s.get("_meta"),
             })
 

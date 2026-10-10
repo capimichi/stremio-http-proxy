@@ -44,6 +44,7 @@ class BrowserController:
 
         self.router.add_api_route("/dashboard/browser", self.browser_page, methods=["GET"], include_in_schema=False, dependencies=auth)
         self.router.add_api_route("/dashboard/browser/media/{media_id:int}", self.browser_detail_page, methods=["GET"], include_in_schema=False, dependencies=auth)
+        self.router.add_api_route("/dashboard/browser/media/{media_id:int}/streams", self.browser_streams_page, methods=["GET"], include_in_schema=False, dependencies=auth)
         self.router.add_api_route("/api/browser/search", self.search_content, methods=["GET"], dependencies=auth)
         self.router.add_api_route("/api/browser/import", self.import_media, methods=["POST"], dependencies=auth)
         self.router.add_api_route("/api/browser/media/{media_id:int}/refresh", self.refresh_media, methods=["POST"], dependencies=auth)
@@ -89,6 +90,41 @@ class BrowserController:
                 seasons=sorted(seasons_map.keys()),
                 episodes_by_season=seasons_map,
                 items=items,
+            )
+        )
+
+    async def browser_streams_page(
+        self,
+        media_id: int,
+        season: int | None = None,
+        episode: int | None = None,
+    ) -> HTMLResponse:
+        if not self.media_repository:
+            raise HTTPException(status_code=500, detail="Media repository not configured")
+
+        media = self.media_repository.get_media(media_id)
+        if not media:
+            raise HTTPException(status_code=404, detail="Media non trovato")
+
+        item = None
+        if media.type == "series" and season is not None and episode is not None and self.media_item_repository:
+            item = self.media_item_repository.get_media_item_by_season_episode(media_id, season, episode)
+
+        back_url = f"/dashboard/browser/media/{media_id}"
+        if season is not None:
+            back_url += f"?season={season}"
+
+        return HTMLResponse(
+            self.jinja_manager.render(
+                "dashboard/pages/browser_streams.html",
+                media=media,
+                media_id=media.id,
+                media_type=media.type,
+                imdb_id=media.imdb_id or "",
+                season=season,
+                episode=episode,
+                item=item,
+                back_url=back_url,
             )
         )
 

@@ -183,47 +183,16 @@
         <span>Metti in cache Film</span>
       </button>
 
-      <button
-        id="load-streams-movie-btn"
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-all shadow-sm"
+      <a
+        href="/dashboard/browser/media/{{ media_id }}/streams"
+        class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-xs font-semibold text-white transition-all shadow-sm hover:scale-[1.02]"
       >
         <i class="fa-solid fa-list-ul"></i>
-        <span>Carica Flussi Upstream</span>
-      </button>
+        <span>Vedi Flussi Film</span>
+      </a>
     </div>
   </div>
   {% endif %}
-
-  <!-- STREAMS LIST SECTION -->
-  <div id="streams-section" class="hidden rounded-2xl bg-slate-900 border border-slate-800/80 shadow-xl overflow-hidden scroll-mt-6">
-    <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <i class="fa-solid fa-network-wired text-indigo-400 text-sm"></i>
-        <h3 id="streams-title" class="text-sm font-bold text-white tracking-wide">
-          Flussi & Torrent Disponibili dall'Addon
-        </h3>
-        <span id="streams-count-badge" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">0</span>
-      </div>
-      <span class="text-xs text-slate-500">I flussi contrassegnati con 🔥 sono pronti in cache locale</span>
-    </div>
-
-    <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs">
-        <thead class="bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400 border-b border-slate-800">
-          <tr>
-            <th class="px-5 py-3">Nome / Release</th>
-            <th class="px-5 py-3">Descrizione</th>
-            <th class="px-5 py-3">Infohash</th>
-            <th class="px-5 py-3">Seeders</th>
-            <th class="px-5 py-3 text-right">Azione</th>
-          </tr>
-        </thead>
-        <tbody id="streams-tbody" class="divide-y divide-slate-800/60 bg-slate-900/40">
-        </tbody>
-      </table>
-    </div>
-  </div>
 
 </div>
 {% endblock %}
@@ -244,13 +213,7 @@ const seasonEpisodesCount = document.getElementById('season-episodes-count');
 const cacheSeasonBtn = document.getElementById('cache-season-btn');
 const cacheSeasonLabel = document.getElementById('cache-season-label');
 const episodesLoadingIndicator = document.getElementById('episodes-loading-indicator');
-const episodesContainer = document.getElementById('episodes-container');
-const loadStreamsMovieBtn = document.getElementById('load-streams-movie-btn');
 const cacheMovieBtn = document.getElementById('cache-movie-btn');
-const streamsSection = document.getElementById('streams-section');
-const streamsTitle = document.getElementById('streams-title');
-const streamsTbody = document.getElementById('streams-tbody');
-const streamsCountBadge = document.getElementById('streams-count-badge');
 
 let currentSeason = null;
 let currentEpisode = null;
@@ -371,14 +334,13 @@ function renderEpisodes(episodes, seasonCacheMap, seasonNum) {
 
         <!-- Right: Actions -->
         <div class="flex sm:flex-col items-center sm:items-stretch gap-2 shrink-0 self-stretch sm:self-center border-t sm:border-t-0 sm:border-l border-slate-800/80 pt-3 sm:pt-0 sm:pl-4 w-full sm:w-auto">
-          <button
-            type="button"
-            onclick="loadStreams(${seasonNum}, ${epNum})"
+          <a
+            href="/dashboard/browser/media/${mediaId}/streams?season=${seasonNum}&episode=${epNum}"
             class="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <i class="fa-solid fa-list-ul text-[10px]"></i>
             <span>Vedi Flussi</span>
-          </button>
+          </a>
 
           <button
             type="button"
@@ -507,74 +469,7 @@ async function triggerCacheMovie() {
   }
 }
 
-window.loadStreams = loadStreams;
 window.triggerCacheSingleEpisode = triggerCacheSingleEpisode;
-
-async function loadStreams(season, episode) {
-  let url = `/api/browser/streams/${mediaId}`;
-  if (season != null && episode != null) {
-    url += `?season=${season}&episode=${episode}`;
-  }
-
-  const btn = mediaType === 'series' ? null : loadStreamsMovieBtn;
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Caricamento flussi...</span>';
-  }
-
-  try {
-    const resp = await fetch(url);
-    const data = await resp.json();
-
-    const tbody = streamsTbody;
-    tbody.innerHTML = '';
-    const streams = data.streams || [];
-    streamsCountBadge.textContent = streams.length;
-
-    if (streams.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="px-5 py-8 text-center text-slate-500">Nessuno stream restituito dall\'addon upstream</td></tr>';
-    } else {
-      for (const s of streams) {
-        const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-800/40 transition-colors';
-
-        const infohash = s.infohash || '-';
-        const shortHash = infohash.length > 14 ? infohash.slice(0, 14) + '…' : infohash;
-        const seeders = s.meta?.seeders ?? '-';
-        const cached = s.meta?.cached ? '🔥' : '';
-        const playUrl = s.url || '#';
-
-        tr.innerHTML = `
-          <td class="px-5 py-3 text-slate-200 font-semibold max-w-xs truncate" title="${(s.title || s.name || '').replace(/"/g, '&quot;')}">
-            <span class="mr-1">${cached}</span> ${s.name || s.title || 'Stream'}
-          </td>
-          <td class="px-5 py-3 text-slate-400 max-w-sm truncate" title="${(s.description || '').replace(/"/g, '&quot;')}">
-            ${s.description || '-'}
-          </td>
-          <td class="px-5 py-3 font-mono text-[11px] text-slate-500">${shortHash}</td>
-          <td class="px-5 py-3 font-mono text-slate-300">${seeders}</td>
-          <td class="px-5 py-3 text-right">
-            <div class="flex items-center justify-end gap-2.5">
-              <a href="${playUrl}" target="_blank" class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-2.5 py-1 text-xs font-semibold text-white shadow-sm transition-colors" title="Play">
-                <i class="fa-solid fa-play text-[10px]"></i>
-                <span>Play</span>
-              </a>
-            </div>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      }
-    }
-
-    streamsSection.classList.remove('hidden');
-    streamsSection.scrollIntoView({ behavior: 'smooth' });
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-list-ul"></i> <span>Carica Flussi Upstream</span>';
-    }
-  }
-}
 
 async function refreshMedia() {
   const btn = document.getElementById('detail-refresh-btn');
@@ -606,7 +501,6 @@ window.refreshMedia = refreshMedia;
 
 async function init() {
   if (mediaType === 'movie') {
-    if (loadStreamsMovieBtn) loadStreamsMovieBtn.onclick = () => loadStreams(null, null);
     if (cacheMovieBtn) cacheMovieBtn.onclick = triggerCacheMovie;
   } else {
     if (seasonsList && seasonsList.length > 0) {
@@ -618,8 +512,11 @@ async function init() {
       }
       if (cacheSeasonBtn) cacheSeasonBtn.onclick = triggerCacheSeason;
 
-      const firstSeason = seasonsList[0] || 1;
-      await loadSeasonEpisodes(firstSeason);
+      const urlParams = new URLSearchParams(window.location.search);
+      const paramSeason = parseInt(urlParams.get('season'));
+      const activeSeason = (paramSeason && seasonsList.includes(paramSeason)) ? paramSeason : (seasonsList[0] || 1);
+      if (detailSeason) detailSeason.value = activeSeason;
+      await loadSeasonEpisodes(activeSeason);
     }
   }
 }
