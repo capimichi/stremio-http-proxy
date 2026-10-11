@@ -318,31 +318,8 @@ def test_download_worker_uses_prefetch_min_progress_bytes(tmp_path):
 def test_download_worker_processes_prefetch_jobs(tmp_path):
     from unittest.mock import AsyncMock
 
-    cache_mgr = FakeCacheManager()
-    task_service = AsyncMock()
-    task_service.process_next_task = AsyncMock(return_value=True)
-
-    service = DownloadWorkerService(
-        FakeTorrServerClient(),
-        cache_mgr,
-        LoggerFactory(str(tmp_path)),
-        poll_seconds=1,
-        connect_timeout_seconds=10,
-        no_progress_timeout_seconds=90,
-        min_progress_bytes=1024,
-        min_progress_window_seconds=600,
-        max_total_seconds=60,
-        progress_log_interval_seconds=1,
-        task_service=task_service,
-    )
-
-    processed = asyncio.run(service.process_next_task())
-    assert processed is True
-    task_service.process_next_task.assert_called_with(service.worker_id)
-
-
 def test_download_worker_enqueues_optimize_media_on_completion(tmp_path, respx_mock):
-    from unittest.mock import MagicMock
+    from unittest.mock import patch
     url = "https://example.com/video.mp4"
     payload = b"X" * 1024
     respx_mock.get(url).respond(200, content=payload, headers={"content-length": str(len(payload))})
@@ -358,8 +335,6 @@ def test_download_worker_enqueues_optimize_media_on_completion(tmp_path, respx_m
     cache_manager.claimed_job = job
     torrserver_client = FakeTorrServerClient()
 
-    fake_task_service = MagicMock()
-
     service = DownloadWorkerService(
         torrserver_client,
         cache_manager,
@@ -371,18 +346,13 @@ def test_download_worker_enqueues_optimize_media_on_completion(tmp_path, respx_m
         min_progress_window_seconds=120,
         max_total_seconds=60,
         progress_log_interval_seconds=10,
-        task_service=fake_task_service,
     )
 
-    processed = asyncio.run(service.process_next_job())
+    with patch("stremio_http_proxy.task.optimize_media_task.optimize_media_task.apply_async") as mock_opt:
+        processed = asyncio.run(service.process_next_job())
 
-    assert processed is True
-    assert fake_task_service.enqueue_task.called
-    fake_task_service.enqueue_task.assert_called_with(
-        name="optimize_media",
-        arguments={"cache_key": "hash123:0"},
-        deduplicate=True,
-    )
+        assert processed is True
+        mock_opt.assert_called_once_with(args=["hash123:0"], queue="transcode")
 
 
 def test_download_worker_resolves_index_if_missing_or_zero(tmp_path):
@@ -443,16 +413,9 @@ def test_download_worker_resolves_index_if_missing_or_zero(tmp_path):
     assert client.build_download_calls[0][1] == 6
 
 
-def test_download_worker_marks_optimizing_when_task_service_present(tmp_path):
-    class FakeTaskService:
-        def __init__(self):
-            self.enqueued = []
-
-        def enqueue_task(self, name: str, arguments: dict, deduplicate: bool = True):
-            self.enqueued.append((name, arguments, deduplicate))
-
+def test_download_worker_marks_optimizing_and_dispatches_celery(tmp_path):
+    from unittest.mock import patch
     cache_manager = FakeCacheManager(tmp_path)
-    task_service = FakeTaskService()
     service = DownloadWorkerService(
         FakeTorrServerClient(),
         cache_manager,
@@ -464,20 +427,18 @@ def test_download_worker_marks_optimizing_when_task_service_present(tmp_path):
         120,
         60,
         10,
-        task_service=task_service,
     )
 
-    service._on_download_completed("hash_test:0", 5000)
+    with patch("stremio_http_proxy.task.optimize_media_task.optimize_media_task.apply_async") as mock_opt:
+        service._on_download_completed("hash_test:0", 5000)
 
-    # Should mark optimizing, NOT ready directly
-    assert len(cache_manager.optimizing_keys) == 1
-    assert cache_manager.optimizing_keys[0] == ("hash_test:0", 5000)
-    assert len(cache_manager.ready_keys) == 0
+        # Should mark optimizing, NOT ready directly
+        assert len(cache_manager.optimizing_keys) == 1
+        assert cache_manager.optimizing_keys[0] == ("hash_test:0", 5000)
+        assert len(cache_manager.ready_keys) == 0
 
-    # Should enqueue optimize_media task
-    assert len(task_service.enqueued) == 1
-    assert task_service.enqueued[0][0] == "optimize_media"
-    assert task_service.enqueued[0][1] == {"cache_key": "hash_test:0"}
+        # Should enqueue optimize_media task via Celery
+        mock_opt.assert_called_once_with(args=["hash_test:0"], queue="transcode")
 
 
 

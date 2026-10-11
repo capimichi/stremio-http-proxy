@@ -37,7 +37,6 @@ from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisode
 from stremio_http_proxy.service.content_browser_service import ContentBrowserService
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 from stremio_http_proxy.service.torrent_health_service import TorrentHealthService
-from stremio_http_proxy.service.task_service import TaskService
 from stremio_http_proxy.task.task_registry import TaskRegistry
 from stremio_http_proxy.task.fetch_media_task import FetchMediaTask
 from stremio_http_proxy.task.fetch_next_episode_task import FetchNextEpisodeTask
@@ -252,10 +251,6 @@ class DefaultContainer:
         task_registry.register(enrich_media_metadata_task)
         task_registry.register(download_media_task)
         task_registry.register(cleanup_cache_task)
-        task_service = TaskService(db_manager, task_registry, logger_factory)
-        next_episode_prefetch_service.task_service = task_service
-        media_metadata_service.task_service = task_service
-
         jinja_manager = JinjaManager(self.template_dir)
         dashboard_service = DashboardService(cache_manager, self.public_base_url, media_repository=media_repository, media_item_repository=media_item_repository)
         download_worker_service = DownloadWorkerService(
@@ -272,7 +267,6 @@ class DefaultContainer:
             prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
             next_episode_prefetch_service=next_episode_prefetch_service,
             prefetch_poll_seconds=self.prefetch_poll_seconds,
-            task_service=task_service,
         )
         playback_history_repository = PlaybackHistoryRepository(db_manager)
         playback_controller = PlaybackController(
@@ -289,7 +283,6 @@ class DefaultContainer:
             media_item_repository=media_item_repository,
             cache_manager=cache_manager,
             next_episode_prefetch_service=next_episode_prefetch_service,
-            task_service=task_service,
             media_repository=media_repository,
             media_metadata_service=media_metadata_service,
         )
@@ -309,7 +302,6 @@ class DefaultContainer:
         self.injector.binder.bind(DownloadQueueService, to=download_queue_service)
         self.injector.binder.bind(DashboardService, to=dashboard_service)
         self.injector.binder.bind(TaskRegistry, to=task_registry)
-        self.injector.binder.bind(TaskService, to=task_service)
         self.injector.binder.bind(NextEpisodePrefetchService, to=next_episode_prefetch_service)
         self.injector.binder.bind(PlaybackHistoryRepository, to=playback_history_repository)
         self.injector.binder.bind(MediaRepository, to=media_repository)

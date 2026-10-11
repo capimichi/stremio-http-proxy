@@ -30,13 +30,11 @@ class DownloadWorkerService:
         prefetch_min_progress_bytes: int = 1048576,
         next_episode_prefetch_service: NextEpisodePrefetchService | None = None,
         prefetch_poll_seconds: int = 15,
-        task_service: Any = None,
     ):
         self.torrserver_client = torrserver_client
         self.cache_manager = cache_manager
         self.prefetch_min_progress_bytes = prefetch_min_progress_bytes
         self.next_episode_prefetch_service = next_episode_prefetch_service
-        self.task_service = task_service
         self.logger = logger_factory.get_logger("stremio_http_proxy.download_worker", "download_worker.log")
         self.progress_logger = logger_factory.get_logger("stremio_http_proxy.download_progress", "download_progress.log")
         self.worker_id = socket.gethostname()
@@ -55,10 +53,7 @@ class DownloadWorkerService:
         return self.min_progress_bytes
 
     async def run_forever(self) -> None:
-        await asyncio.gather(
-            self.run_download_loop(),
-            self.run_task_loop(),
-        )
+        await self.run_download_loop()
 
     async def run_download_loop(self) -> None:
         while True:
@@ -71,26 +66,6 @@ class DownloadWorkerService:
             except Exception:
                 self.logger.exception("Unhandled exception in download worker loop")
                 await asyncio.sleep(self.poll_seconds)
-
-    async def run_task_loop(self) -> None:
-        while True:
-            try:
-                processed = await self.process_next_task()
-                if not processed:
-                    await asyncio.sleep(self.prefetch_poll_seconds)
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                self.logger.exception("Unhandled exception in task worker loop")
-                await asyncio.sleep(self.prefetch_poll_seconds)
-
-    async def run_prefetch_loop(self) -> None:
-        await self.run_task_loop()
-
-    async def process_next_task(self) -> bool:
-        if self.task_service:
-            return await self.task_service.process_next_task(self.worker_id)
-        return False
 
     async def process_next_job(self) -> bool:
         job = await self.cache_manager.claim_next_download(self.worker_id)
@@ -387,18 +362,13 @@ class DownloadWorkerService:
         self.logger.info("Worker %s completed job %s for %s (%s bytes)", self.worker_id, job.job_id, job.cache_key, size_bytes)
 
     def _on_download_completed(self, cache_key: str, size_bytes: int) -> None:
-        if self.task_service is not None:
-            self.cache_manager.mark_optimizing(cache_key, size_bytes)
-            try:
-                self.task_service.enqueue_task(
-                    name="optimize_media",
-                    arguments={"cache_key": cache_key},
-                    deduplicate=True,
-                )
-            except Exception as e:
-                self.logger.warning("Failed to enqueue optimize_media task for %s: %s; falling back to ready", cache_key, e)
-                self.cache_manager.mark_ready(cache_key, size_bytes)
-        else:
+        self.cache_manager.mark_optimizing(cache_key, size_bytes)
+        try:
+            from stremio_http_proxy.task.optimize_media_task import optimize_media_task
+            optimize_media_task.apply_async(args=[cache_key], queue="transcode")
+            self.logger.info("Enqueued optimize_media_task for %s", cache_key)
+        except Exception as e:
+            self.logger.warning("Failed to enqueue optimize_media task for %s: %s; falling back to ready", cache_key, e)
             self.cache_manager.mark_ready(cache_key, size_bytes)
 
     def _retry_delay(self, attempt: int) -> int:

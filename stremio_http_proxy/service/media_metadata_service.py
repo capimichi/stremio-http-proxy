@@ -20,12 +20,10 @@ class MediaMetadataService:
         media_item_repository: MediaItemRepository,
         tmdb_client: TMDBClient,
         logger_factory: LoggerFactory,
-        task_service: Any = None,
     ):
         self.media_repository = media_repository
         self.media_item_repository = media_item_repository
         self.tmdb_client = tmdb_client
-        self.task_service = task_service
         self.logger = logger_factory.get_logger("stremio_http_proxy.media_metadata", "media_metadata.log")
 
     def clean_raw_title(self, raw_title: str | None) -> str:
@@ -96,26 +94,12 @@ class MediaMetadataService:
         except Exception:
             pass
 
-        if self.task_service and hasattr(self.task_service, "enqueue_task"):
-            self.task_service.enqueue_task(
-                name="enrich_media_metadata",
-                arguments={
-                    "media_id": media_id,
-                    "imdb_id": imdb_id,
-                    "media_type": media_type,
-                    "season": season,
-                },
-                delay_seconds=0,
-                deduplicate=True,
-            )
-            return
-        else:
-            # Fallback fire-and-forget in current loop if available
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.enrich_from_tmdb(media_id, media_type, season=season, imdb_id=imdb_id))
-            except RuntimeError:
-                pass
+        # Fallback fire-and-forget in current loop if available
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.enrich_from_tmdb(media_id, media_type, season=season, imdb_id=imdb_id))
+        except RuntimeError:
+            pass
 
     async def enrich_from_tmdb(
         self,

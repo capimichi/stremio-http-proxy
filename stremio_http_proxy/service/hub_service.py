@@ -10,7 +10,6 @@ from stremio_http_proxy.repository.media_item_repository import MediaItemReposit
 from stremio_http_proxy.repository.playback_history_repository import PlaybackHistoryRepository
 from stremio_http_proxy.service.media_metadata_service import MediaMetadataService
 from stremio_http_proxy.service.next_episode_prefetch_service import NextEpisodePrefetchService
-from stremio_http_proxy.service.task_service import TaskService
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,6 @@ class HubService:
         playback_history_repository: PlaybackHistoryRepository,
         cache_manager: CacheManager,
         next_episode_prefetch_service: NextEpisodePrefetchService,
-        task_service: TaskService | None = None,
         media_repository: MediaRepository | None = None,
         media_item_repository: MediaItemRepository | None = None,
         media_metadata_service: MediaMetadataService | None = None,
@@ -30,7 +28,6 @@ class HubService:
         self.playback_history_repository = playback_history_repository
         self.cache_manager = cache_manager
         self.prefetch_service = next_episode_prefetch_service
-        self.task_service = task_service
         self.media_repository = media_repository
         self.media_item_repository = media_item_repository
         self.media_metadata_service = media_metadata_service
@@ -247,18 +244,7 @@ class HubService:
             except Exception:
                 pass
 
-            if not dispatched and self.task_service and hasattr(self.task_service, "enqueue_task"):
-                self.task_service.enqueue_task(
-                    name="fetch_media",
-                    arguments={
-                        "content_type": "series",
-                        "content_id": ep_content_id,
-                        "category": category,
-                    },
-                    delay_seconds=0,
-                )
-                dispatched = True
-            elif not dispatched:
+            if not dispatched:
                 self.prefetch_service.schedule_prefetch(
                     content_type="series",
                     content_id=ep_content_id,
@@ -309,17 +295,7 @@ class HubService:
         except Exception:
             pass
 
-        if not job_id and self.task_service and hasattr(self.task_service, "enqueue_task"):
-            job_id = self.task_service.enqueue_task(
-                name="fetch_media",
-                arguments={
-                    "content_type": content_type,
-                    "content_id": full_content_id,
-                    "category": cat,
-                },
-                delay_seconds=0,
-            )
-        elif not job_id:
+        if not job_id:
             job_id = self.prefetch_service.schedule_prefetch(
                 content_type=content_type,
                 content_id=full_content_id,
@@ -528,13 +504,6 @@ class HubService:
 
     def get_tasks(self, status: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         raw_tasks = self._inspect_celery_tasks()
-
-        if self.task_service:
-            try:
-                db_tasks = self.task_service.list_tasks(status=status, limit=limit)
-                raw_tasks.extend(db_tasks)
-            except Exception:
-                pass
 
         if status:
             raw_tasks = [t for t in raw_tasks if t.get("status") == status]

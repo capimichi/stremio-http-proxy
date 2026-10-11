@@ -72,13 +72,11 @@ def test_hub_service_get_recent_media(playback_history_repo):
     mock_cache_manager.parse_cache_key.return_value = ("hash1", 1)
 
     mock_prefetch_service = MagicMock()
-    mock_task_service = MagicMock()
 
     service = HubService(
         playback_history_repository=playback_history_repo,
         cache_manager=mock_cache_manager,
         next_episode_prefetch_service=mock_prefetch_service,
-        task_service=mock_task_service,
     )
 
     recent = service.get_recent_media(limit=5)
@@ -97,13 +95,11 @@ def test_hub_service_cache_season(playback_history_repo):
     from unittest.mock import patch
     mock_cache_manager = MagicMock()
     mock_prefetch_service = MagicMock()
-    mock_task_service = MagicMock()
 
     service = HubService(
         playback_history_repository=playback_history_repo,
         cache_manager=mock_cache_manager,
         next_episode_prefetch_service=mock_prefetch_service,
-        task_service=mock_task_service,
     )
 
     # 1. With Celery available
@@ -112,27 +108,25 @@ def test_hub_service_cache_season(playback_history_repo):
         assert res["success"] is True
         assert res["enqueued_count"] == 5
         assert mock_celery.call_count == 5
-        assert mock_task_service.enqueue_task.call_count == 0
+        assert mock_prefetch_service.schedule_prefetch.call_count == 0
 
-    # 2. Fallback to task_service when Celery fails
+    # 2. Fallback to prefetch_service when Celery fails
     with patch("stremio_http_proxy.task.fetch_media_task.fetch_media_task.apply_async", side_effect=Exception("celery down")):
         res = service.cache_season(content_id="tt999", season=2, total_episodes=5, category="tv")
         assert res["success"] is True
         assert res["enqueued_count"] == 5
-        assert mock_task_service.enqueue_task.call_count == 5
+        assert mock_prefetch_service.schedule_prefetch.call_count == 5
 
 
 def test_hub_service_cache_episode(playback_history_repo):
     from unittest.mock import patch
     mock_cache_manager = MagicMock()
     mock_prefetch_service = MagicMock()
-    mock_task_service = MagicMock()
 
     service = HubService(
         playback_history_repository=playback_history_repo,
         cache_manager=mock_cache_manager,
         next_episode_prefetch_service=mock_prefetch_service,
-        task_service=mock_task_service,
     )
 
     # 1. With Celery available
@@ -143,16 +137,16 @@ def test_hub_service_cache_episode(playback_history_repo):
         assert res["content_id"] == "tt999:2:4"
         assert res["job_id"] == "celery-job-123"
         mock_celery.assert_called_once()
-        assert mock_task_service.enqueue_task.call_count == 0
+        assert mock_prefetch_service.schedule_prefetch.call_count == 0
 
-    # 2. Fallback to task_service
-    mock_task_service.enqueue_task.return_value = "db-job-456"
+    # 2. Fallback to prefetch_service
+    mock_prefetch_service.schedule_prefetch.return_value = True
     with patch("stremio_http_proxy.task.fetch_media_task.fetch_media_task.apply_async", side_effect=Exception("celery down")):
         res = service.cache_episode(content_id="tt999", season=2, episode=4, content_type="series")
         assert res["success"] is True
         assert res["content_id"] == "tt999:2:4"
-        assert res["job_id"] == "db-job-456"
-        mock_task_service.enqueue_task.assert_called_once()
+        assert res["job_id"] is True
+        mock_prefetch_service.schedule_prefetch.assert_called_once()
 
 
 def test_hub_service_library(db_manager, playback_history_repo):
@@ -235,10 +229,16 @@ def test_hub_service_get_tasks(playback_history_repo):
     from unittest.mock import patch
     mock_cache_manager = MagicMock()
     mock_prefetch_service = MagicMock()
-    mock_task_service = MagicMock()
-    mock_task_service.list_tasks.return_value = [
+
+    service = HubService(
+        playback_history_repository=playback_history_repo,
+        cache_manager=mock_cache_manager,
+        next_episode_prefetch_service=mock_prefetch_service,
+    )
+
+    celery_tasks = [
         {
-            "id": 1,
+            "id": "celery-1",
             "name": "fetch_next_episode",
             "arguments": {"content_type": "series", "content_id": "tt123:1:2"},
             "status": "pending",
@@ -252,14 +252,7 @@ def test_hub_service_get_tasks(playback_history_repo):
         }
     ]
 
-    service = HubService(
-        playback_history_repository=playback_history_repo,
-        cache_manager=mock_cache_manager,
-        next_episode_prefetch_service=mock_prefetch_service,
-        task_service=mock_task_service,
-    )
-
-    with patch.object(service, "_inspect_celery_tasks", return_value=[]):
+    with patch.object(service, "_inspect_celery_tasks", return_value=celery_tasks):
         tasks = service.get_tasks()
     assert len(tasks) == 1
     assert tasks[0]["display_name"] == "Smart Prefetch Episodio"
@@ -279,7 +272,6 @@ async def test_hub_service_retry_stream(playback_history_repo):
         playback_history_repository=playback_history_repo,
         cache_manager=mock_cache_manager,
         next_episode_prefetch_service=MagicMock(),
-        task_service=MagicMock(),
     )
 
     with patch("stremio_http_proxy.task.download_media_task.download_media_task.apply_async") as mock_apply:

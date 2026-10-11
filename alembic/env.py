@@ -10,7 +10,6 @@ from stremio_http_proxy.entity.media import Media  # noqa: F401
 from stremio_http_proxy.entity.media_item import MediaItem  # noqa: F401
 from stremio_http_proxy.entity.cache_entry import CacheEntry  # noqa: F401
 from stremio_http_proxy.entity.playback_history import PlaybackHistory  # noqa: F401
-from stremio_http_proxy.entity.task_entry import TaskEntry  # noqa: F401
 
 config = context.config
 
