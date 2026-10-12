@@ -249,6 +249,57 @@ def test_get_ready_entries_excludes_missing_file_or_non_ready(tmp_path):
     assert len(ready) == 0
 
 
+def test_cache_manager_mark_deleted(tmp_path):
+    manager = build_manager(tmp_path)
+    infohash = "1234567890123456789012345678901234567890"
+    index = 0
+    cache_key = manager.build_cache_key_from_parts(infohash, index)
+
+    media_dir = tmp_path / infohash
+    media_dir.mkdir(parents=True, exist_ok=True)
+    media_file = media_dir / f"{index}.media"
+    media_file.write_bytes(b"dummy media content")
+    tmp_file = media_dir / f"{index}.part"
+    tmp_file.write_bytes(b"dummy tmp content")
+
+    dummy_size = 15 * 1024 * 1024
+    entry = manager.get_entry(cache_key).model_copy(
+        update={
+            "infohash": infohash,
+            "cache_index": index,
+            "status": CacheEntryStatusEnum.READY.value,
+            "title": "Test Title",
+            "file_path": str(media_file),
+            "size_bytes": dummy_size,
+            "downloaded_bytes": dummy_size,
+            "progress_percent": 100.0,
+        }
+    )
+    manager._write_entry(cache_key, entry)
+    assert manager.is_ready(cache_key) is True
+    assert media_file.exists() is True
+
+    # Mark deleted
+    deleted_entry = manager.mark_deleted(cache_key, reason="wrong file uploaded")
+
+    assert deleted_entry.status == CacheEntryStatusEnum.DELETED
+    assert deleted_entry.last_error == "wrong file uploaded"
+    assert deleted_entry.downloaded_bytes == 0
+    assert deleted_entry.size_bytes == 0
+    assert deleted_entry.progress_percent == 0.0
+    assert deleted_entry.file_path == str(media_file)
+
+    # Verify physical file deletion
+    assert not media_file.exists()
+    assert not tmp_file.exists()
+    assert manager.is_ready(cache_key) is False
+
+    # Check persistence
+    persisted = manager.get_entry(cache_key)
+    assert persisted.status == CacheEntryStatusEnum.DELETED
+    assert persisted.last_error == "wrong file uploaded"
+
+
 
 
 

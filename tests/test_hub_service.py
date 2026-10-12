@@ -282,3 +282,16 @@ async def test_hub_service_retry_stream(playback_history_repo):
     mock_cache_manager.reenqueue_entry.assert_awaited_once_with("hash:1")
 
 
+def test_hub_service_delete_stream(playback_history_repo):
+    mock_cache_manager = MagicMock()
+    service = HubService(
+        playback_history_repository=playback_history_repo,
+        cache_manager=mock_cache_manager,
+        next_episode_prefetch_service=MagicMock(),
+    )
+
+    res = service.delete_stream("somehash:0")
+    assert res == {"success": True, "cache_key": "somehash:0"}
+    mock_cache_manager.mark_deleted.assert_called_once_with("somehash:0", reason="manual_user_request")
+
+

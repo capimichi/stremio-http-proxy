@@ -54,6 +54,10 @@ function statusBadgeHtml(status) {
       return `<span class="inline-flex items-center gap-1 rounded-md bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 text-[11px] font-semibold text-rose-400">
         <i class="fa-solid fa-xmark text-[9px]"></i> Errore
       </span>`;
+    case "deleted":
+      return `<span class="inline-flex items-center gap-1 rounded-md bg-zinc-500/10 border border-zinc-500/20 px-2 py-0.5 text-[11px] font-semibold text-zinc-400">
+        <i class="fa-solid fa-ban text-[9px]"></i> Eliminato
+      </span>`;
     default:
       return `<span class="inline-flex items-center gap-1 rounded-md bg-slate-800 border border-slate-700 px-2 py-0.5 text-[11px] font-medium text-slate-400">
         ${status}
@@ -148,9 +152,10 @@ function renderTable(payload) {
             <i class="fa-solid fa-arrows-rotate text-[11px]"></i>
           </button>
           <button
-            class="delete-stream-btn inline-flex items-center justify-center rounded-lg border border-rose-900/40 bg-rose-950/20 hover:bg-rose-900/40 text-rose-400 hover:text-rose-300 p-1.5 transition-colors"
+            class="delete-stream-btn inline-flex items-center justify-center rounded-lg border border-rose-900/40 bg-rose-950/20 hover:bg-rose-900/40 text-rose-400 hover:text-rose-300 p-1.5 transition-colors disabled:opacity-30 disabled:pointer-events-none"
             data-key="${d.cache_key}"
             title="Elimina file dalla cache"
+            ${d.status === "deleted" ? "disabled" : ""}
           >
             <i class="fa-solid fa-trash text-[11px]"></i>
           </button>

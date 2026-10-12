@@ -9,4 +9,5 @@ class CacheEntryStatusEnum(StrEnum):
     OPTIMIZING = "optimizing"
     READY = "ready"
     FAILED = "failed"
+    DELETED = "deleted"
 

@@ -102,6 +102,7 @@ N/A
                 {% elif entry.status == 'processing' %}text-amber-400 bg-amber-500/10 border border-amber-500/20
                 {% elif entry.status == 'queued' %}text-slate-300 bg-slate-800 border border-slate-700
                 {% elif entry.status == 'failed' %}text-rose-400 bg-rose-500/10 border border-rose-500/20
+                {% elif entry.status == 'deleted' %}text-zinc-400 bg-zinc-500/10 border border-zinc-500/20
                 {% else %}text-slate-400 bg-slate-800{% endif %}">
                 {{ entry.status }}
               </span>
@@ -164,6 +165,7 @@ N/A
           </a>
           {% endif %}
 
+          {% if entry.status != 'deleted' %}
           <button
             type="button"
             onclick="deleteCurrentStream('{{ infohash }}:{{ index }}')"
@@ -172,6 +174,11 @@ N/A
             <i class="fa-solid fa-trash text-xs"></i>
             <span>Elimina File dalla Cache</span>
           </button>
+          {% else %}
+          <div class="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3 text-center text-xs text-zinc-400">
+            <i class="fa-solid fa-ban mr-1"></i> File eliminato dalla cache
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>

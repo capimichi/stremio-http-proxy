@@ -584,16 +584,7 @@ class CacheManager:
             if total_size <= self.max_size_bytes:
                 return
 
-    def delete_entry(self, cache_key: str, reason: str = "manual") -> None:
-        self._delete_entry(cache_key, reason)
-
-    def _delete_entry(self, cache_key: str, reason: str) -> None:
-
-        infohash, index = self.parse_cache_key(cache_key)
-        with self.db_manager.session() as session:
-            record = session.get(CacheEntryRecord, cache_key)
-            if record is not None:
-                session.delete(record)
+    def _purge_entry_files(self, infohash: str, index: int) -> None:
         for path in (self._media_path(infohash, index), self._tmp_path(infohash, index)):
             if path.exists():
                 path.unlink()
@@ -603,6 +594,41 @@ class CacheManager:
         parent = self.base_dir / infohash
         if parent.exists() and not any(parent.iterdir()):
             parent.rmdir()
+
+    def mark_deleted(self, cache_key: str, reason: str = "manual_deletion") -> CacheEntryModel:
+        infohash, index = self.parse_cache_key(cache_key)
+        self._purge_entry_files(infohash, index)
+        entry = self.get_entry(cache_key)
+        updated = entry.model_copy(
+            update={
+                "status": CacheEntryStatusEnum.DELETED,
+                "file_path": str(self._media_path(infohash, index)),
+                "tmp_path": str(self._tmp_path(infohash, index)),
+                "downloaded_bytes": 0,
+                "size_bytes": 0,
+                "progress_percent": 0.0,
+                "download_speed_bytes_per_second": None,
+                "completed_at": None,
+                "claimed_at": None,
+                "claimed_by": None,
+                "processing_expires_at": None,
+                "last_error": reason,
+            }
+        )
+        self._write_entry(cache_key, updated)
+        self.logger.info("Marked cache entry %s as deleted (%s)", cache_key, reason)
+        return updated
+
+    def delete_entry(self, cache_key: str, reason: str = "manual") -> None:
+        self._delete_entry(cache_key, reason)
+
+    def _delete_entry(self, cache_key: str, reason: str) -> None:
+        infohash, index = self.parse_cache_key(cache_key)
+        with self.db_manager.session() as session:
+            record = session.get(CacheEntryRecord, cache_key)
+            if record is not None:
+                session.delete(record)
+        self._purge_entry_files(infohash, index)
         self.logger.info("Deleted cache entry %s (%s)", cache_key, reason)
 
     def _resolve_content_id(self, media_item_id: int | None) -> str | None:

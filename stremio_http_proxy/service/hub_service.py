@@ -310,7 +310,7 @@ class HubService:
         }
 
     def delete_stream(self, cache_key: str) -> dict[str, Any]:
-        self.cache_manager.delete_entry(cache_key, reason="manual_user_request")
+        self.cache_manager.mark_deleted(cache_key, reason="manual_user_request")
         return {"success": True, "cache_key": cache_key}
 
     async def retry_stream(self, cache_key: str) -> dict[str, Any]:
