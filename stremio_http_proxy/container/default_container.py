@@ -28,7 +28,6 @@ from stremio_http_proxy.service.media_metadata_service import MediaMetadataServi
 from stremio_http_proxy.service.download_queue_service import DownloadQueueService
 from stremio_http_proxy.task.enrich_media_metadata_task import EnrichMediaMetadataTask
 
-from stremio_http_proxy.service.download_worker_service import DownloadWorkerService
 from stremio_http_proxy.service.basic_auth_service import BasicAuthService
 from stremio_http_proxy.service.cache_service import CacheService
 from stremio_http_proxy.service.cache_token_service import CacheTokenService
@@ -253,21 +252,6 @@ class DefaultContainer:
         task_registry.register(cleanup_cache_task)
         jinja_manager = JinjaManager(self.template_dir)
         dashboard_service = DashboardService(cache_manager, self.public_base_url, media_repository=media_repository, media_item_repository=media_item_repository)
-        download_worker_service = DownloadWorkerService(
-            torrserver_client,
-            cache_manager,
-            logger_factory,
-            self.download_queue_poll_seconds,
-            self.download_connect_timeout_seconds,
-            self.download_no_progress_timeout_seconds,
-            self.download_min_progress_bytes,
-            self.download_min_progress_window_seconds,
-            self.download_max_total_seconds,
-            self.download_progress_log_interval_seconds,
-            prefetch_min_progress_bytes=self.download_prefetch_min_progress_bytes,
-            next_episode_prefetch_service=next_episode_prefetch_service,
-            prefetch_poll_seconds=self.prefetch_poll_seconds,
-        )
         playback_history_repository = PlaybackHistoryRepository(db_manager)
         playback_controller = PlaybackController(
             torrserver_client,
@@ -313,7 +297,6 @@ class DefaultContainer:
         self.injector.binder.bind(MediaAssetManager, to=media_asset_manager)
         self.injector.binder.bind(TMDBClient, to=tmdb_client)
         self.injector.binder.bind(ContentBrowserService, to=content_browser_service)
-        self.injector.binder.bind(DownloadWorkerService, to=download_worker_service)
         self.injector.binder.bind(DownloadMediaTask, to=download_media_task)
         self.injector.binder.bind(CleanupCacheTask, to=cleanup_cache_task)
         self.injector.binder.bind(OptimizeMediaTask, to=optimize_media_task)

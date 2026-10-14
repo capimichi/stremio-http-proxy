@@ -88,13 +88,13 @@ class DownloadMediaTask(AbstractTask):
             self.logger.exception("Download failed for %s: %s", cache_key, exc)
             self.cache_manager.cleanup_partial(cache_key)
             self.cache_manager.mark_failed(cache_key, str(exc), attempt)
-            if self.next_episode_prefetch_service and getattr(entry, "trigger", None) == "next_episode_prefetch":
+            if self.next_episode_prefetch_service and getattr(entry, "content_id", None):
                 try:
                     await self.next_episode_prefetch_service.on_download_failed(
                         entry.content_type, entry.content_id, entry.category
                     )
                 except Exception:
-                    self.logger.exception("Error triggering fallback for prefetch cache_key %s", cache_key)
+                    self.logger.exception("Error triggering fallback for cache_key %s", cache_key)
             raise
 
     async def _download_hls(self, cache_key: str, url: str) -> None:
@@ -103,20 +103,18 @@ class DownloadMediaTask(AbstractTask):
             tmp_path.unlink()
 
         cmd = [
-            "ffmpeg",
-            "-y",
-            "-nostdin",
-            "-loglevel",
-            "error",
-            "-i",
-            url,
-            "-map",
-            "0",
-            "-c",
-            "copy",
+            "yt-dlp",
+            "--no-part",
+            "--concurrent-fragments",
+            "1",
+            "--all-formats",
             "-f",
-            "matroska",
+            "bestvideo+all[vcodec=none]/best",
+            "--merge-output-format",
+            "mkv",
+            "-o",
             str(tmp_path),
+            url,
         ]
 
         try:
@@ -126,7 +124,7 @@ class DownloadMediaTask(AbstractTask):
                 stderr=asyncio.subprocess.PIPE,
             )
         except FileNotFoundError:
-            raise RuntimeError("ffmpeg binary not found in PATH")
+            raise RuntimeError("yt-dlp binary not found in PATH")
 
         downloaded_bytes = 0
         started_at = time.time()
@@ -179,7 +177,7 @@ class DownloadMediaTask(AbstractTask):
         _, stderr = await proc.communicate()
         if proc.returncode != 0:
             error_msg = stderr.decode(errors="replace").strip() if stderr else ""
-            raise RuntimeError(f"ffmpeg exited with code {proc.returncode}: {error_msg}")
+            raise RuntimeError(f"yt-dlp exited with code {proc.returncode}: {error_msg}")
 
         downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
         min_size_bytes = self.cache_manager.get_min_cache_size()

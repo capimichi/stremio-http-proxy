@@ -139,3 +139,39 @@ async def test_download_media_task_cascades_on_prefetch_failure(fake_logger_fact
 
     cache_manager.mark_failed.assert_called_once()
     mock_prefetch_service.on_download_failed.assert_awaited_once_with("series", "tt123:1:2", "tv")
+
+
+@pytest.mark.asyncio
+async def test_download_media_task_cascades_on_playback_failure(fake_logger_factory):
+    torrserver_client = MagicMock()
+    cache_manager = MagicMock()
+    cache_manager.is_ready.return_value = False
+    entry = CacheEntry(
+        cache_key="hash456:1",
+        infohash="hash456",
+        cache_index=1,
+        source_link="magnet:?xt=urn:btih:hash456",
+        title="Sample Playback",
+        content_id="tt456:2:1",
+        content_type="series",
+        category="tv",
+        trigger="playback",
+        file_path="/tmp/test",
+        tmp_path="/tmp/test.tmp",
+    )
+    cache_manager.get_entry.return_value = entry
+    mock_prefetch_service = AsyncMock()
+
+    task = DownloadMediaTask(
+        torrserver_client,
+        cache_manager,
+        fake_logger_factory,
+        next_episode_prefetch_service=mock_prefetch_service,
+    )
+    task._download_torrent = AsyncMock(side_effect=RuntimeError("timeout reading torrent"))
+
+    with pytest.raises(RuntimeError):
+        await task.execute("hash456:1")
+
+    cache_manager.mark_failed.assert_called_once()
+    mock_prefetch_service.on_download_failed.assert_awaited_once_with("series", "tt456:2:1", "tv")
