@@ -56,7 +56,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: ["python", "-m", "stremio_http_proxy.cli", "worker", "-Q", "downloads,transcode,default", "-c", "4"]
+    command: ["python", "-m", "stremio_http_proxy.cli", "worker", "-Q", "downloads,transcode,default", "-c", "2"]
     env_file:
       - .env
     volumes:
