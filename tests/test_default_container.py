@@ -138,12 +138,29 @@ def test_default_container_injects_plain_upstream_client_when_disabled(monkeypat
     assert type(upstream_client) is UpstreamClient
 
 
+from stremio_http_proxy.enum.optimize_media_target_enum import OptimizeMediaTargetEnum
+
+
 def test_default_container_defaults_optimize_media_target_to_compatible(monkeypatch):
     DefaultContainer.instance = None
     monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setenv("APP_SECRET", "test-secret")
     monkeypatch.delenv("OPTIMIZE_MEDIA_TARGET", raising=False)
     container = DefaultContainer()
-    assert container.optimize_media_target == "compatible"
+    assert container.optimize_media_target == OptimizeMediaTargetEnum.COMPATIBLE
+
+
+def test_default_container_parses_optimize_media_target_variations(monkeypatch):
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    monkeypatch.setenv("OPTIMIZE_MEDIA_TARGET", "web_ready")
+    container = DefaultContainer()
+    assert container.optimize_media_target == OptimizeMediaTargetEnum.WEB_READY_MP4
+
+    DefaultContainer.instance = None
+    monkeypatch.setenv("OPTIMIZE_MEDIA_TARGET", "disabled")
+    container2 = DefaultContainer()
+    assert container2.optimize_media_target == OptimizeMediaTargetEnum.NONE
 
 

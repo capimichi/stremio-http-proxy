@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from pathlib import Path
 
+from stremio_http_proxy.enum.optimize_media_target_enum import OptimizeMediaTargetEnum
 from stremio_http_proxy.task.optimize_media_task import OptimizeMediaTask
 
 
@@ -37,7 +38,7 @@ async def test_marks_ready_if_already_web_ready_mp4(tmp_path):
     media_file.write_bytes(b"dummy mp4 content")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="web_ready_mp4")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target=OptimizeMediaTargetEnum.WEB_READY_MP4)
 
     probe_data = {
         "streams": [
@@ -62,7 +63,7 @@ async def test_remuxes_h264_mkv_to_mp4_with_video_copy(tmp_path):
     media_file.write_bytes(b"H264_MKV_CONTENT")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="web_ready_mp4")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target=OptimizeMediaTargetEnum.WEB_READY_MP4)
 
     probe_data = {
         "streams": [
@@ -99,7 +100,7 @@ async def test_transcodes_hevc_via_gpu_when_vaapi_available(tmp_path):
     media_file.write_bytes(b"HEVC_CONTENT")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="web_ready_mp4")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target=OptimizeMediaTargetEnum.WEB_READY_MP4)
 
     probe_data = {
         "streams": [
@@ -137,7 +138,7 @@ async def test_transcodes_hevc_falls_back_to_cpu_when_gpu_fails(tmp_path):
     media_file.write_bytes(b"HEVC_CONTENT")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="web_ready_mp4")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target=OptimizeMediaTargetEnum.WEB_READY_MP4)
 
     probe_data = {
         "streams": [
@@ -191,7 +192,7 @@ async def test_compatible_optimization_runs_fast_remux_with_cues_to_front(tmp_pa
     media_file.write_bytes(b"RAW_TORRENT_MKV_OR_AVI")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="compatible")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target=OptimizeMediaTargetEnum.COMPATIBLE)
 
     executed_cmd = []
 
@@ -223,7 +224,7 @@ async def test_compatible_optimization_audio_fallback(tmp_path):
     media_file.write_bytes(b"SOURCE_CONTENT")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="compatible")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target=OptimizeMediaTargetEnum.COMPATIBLE)
 
     calls = []
 
@@ -254,7 +255,7 @@ async def test_compatible_optimization_full_fallback(tmp_path):
     media_file.write_bytes(b"SOURCE_CONTENT")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="compatible")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target=OptimizeMediaTargetEnum.COMPATIBLE)
 
     calls = []
 

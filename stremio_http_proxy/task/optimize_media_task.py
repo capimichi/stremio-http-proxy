@@ -6,6 +6,7 @@ from typing import Any
 from celery import shared_task
 from injector import inject
 
+from stremio_http_proxy.enum.optimize_media_target_enum import OptimizeMediaTargetEnum
 from stremio_http_proxy.helper.media_type_helper import detect_media_type
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
@@ -25,7 +26,7 @@ class OptimizeMediaTask(AbstractTask):
         cache_manager: CacheManager,
         logger_factory: LoggerFactory,
         optimize_media_enabled: bool = True,
-        optimize_media_target: str = "web_ready_mp4",
+        optimize_media_target: OptimizeMediaTargetEnum = OptimizeMediaTargetEnum.COMPATIBLE,
         gpu_enabled: bool = True,
         vaapi_device: str = "/dev/dri/renderD128",
         preset: str = "ultrafast",
@@ -71,12 +72,12 @@ class OptimizeMediaTask(AbstractTask):
 
         orig_size = media_path.stat().st_size
 
-        if not self.optimize_media_enabled or self.optimize_media_target in ("none", "disabled", "false"):
+        if not self.optimize_media_enabled or self.optimize_media_target == OptimizeMediaTargetEnum.NONE:
             self.logger.info("Optimization is disabled via config, marking %s ready (%s bytes)", cache_key, orig_size)
             self.cache_manager.mark_ready(cache_key, orig_size)
             return True
 
-        if self.optimize_media_target == "compatible":
+        if self.optimize_media_target == OptimizeMediaTargetEnum.COMPATIBLE:
             return await self._run_compatible_optimization(cache_key, media_path, orig_size)
 
         return await self._run_web_ready_optimization(cache_key, media_path, orig_size)

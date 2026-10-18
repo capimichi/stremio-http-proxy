@@ -2,6 +2,7 @@ import urllib.parse
 from unittest.mock import MagicMock
 import pytest
 
+from stremio_http_proxy.enum.optimize_media_target_enum import OptimizeMediaTargetEnum
 from stremio_http_proxy.service.stream_rewrite_service import StreamRewriteService
 
 
@@ -623,7 +624,7 @@ async def test_upstream_stream_marked_cached_sets_not_web_ready_false_when_targe
         public_base_url="http://localhost:8691",
         cache_manager=cache_manager,
         cache_enabled=True,
-        optimize_media_target="compatible",
+        optimize_media_target=OptimizeMediaTargetEnum.COMPATIBLE,
     )
 
     payload = {
@@ -668,7 +669,7 @@ async def test_synthetic_cached_stream_sets_not_web_ready_false_for_compatible_t
         public_base_url="http://localhost:8691",
         cache_manager=cache_manager,
         cache_enabled=True,
-        optimize_media_target="compatible",
+        optimize_media_target=OptimizeMediaTargetEnum.COMPATIBLE,
     )
 
     payload = {"streams": []}

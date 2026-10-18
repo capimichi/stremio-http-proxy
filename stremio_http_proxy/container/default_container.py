@@ -19,6 +19,7 @@ from stremio_http_proxy.manager.redis_cache_manager import RedisCacheManager
 import stremio_http_proxy.entity.playback_history  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.media  # noqa: F401 — ensure table creation
 import stremio_http_proxy.entity.media_item  # noqa: F401 — ensure table creation
+from stremio_http_proxy.enum.optimize_media_target_enum import OptimizeMediaTargetEnum
 from stremio_http_proxy.controller.hub_controller import HubController
 from stremio_http_proxy.repository.media_repository import MediaRepository
 from stremio_http_proxy.repository.media_item_repository import MediaItemRepository
@@ -114,7 +115,7 @@ class DefaultContainer:
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
         self.tmdb_api_key = os.environ.get("TMDB_API_KEY")
         self.optimize_media_enabled = os.environ.get("OPTIMIZE_MEDIA_ENABLED", "true").lower() == "true"
-        self.optimize_media_target = os.environ.get("OPTIMIZE_MEDIA_TARGET", "compatible").lower()
+        self.optimize_media_target = OptimizeMediaTargetEnum.from_str(os.environ.get("OPTIMIZE_MEDIA_TARGET"))
         self.optimize_media_gpu_enabled = os.environ.get("OPTIMIZE_MEDIA_GPU_ENABLED", "true").lower() == "true"
         self.optimize_media_vaapi_device = os.environ.get("OPTIMIZE_MEDIA_VAAPI_DEVICE", "/dev/dri/renderD128")
         self.optimize_media_preset = os.environ.get("OPTIMIZE_MEDIA_PRESET", "ultrafast")

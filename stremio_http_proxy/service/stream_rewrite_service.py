@@ -4,6 +4,7 @@ import re
 
 from injector import inject
 
+from stremio_http_proxy.enum.optimize_media_target_enum import OptimizeMediaTargetEnum
 from stremio_http_proxy.helper.format_helper import format_bytes
 from stremio_http_proxy.helper.hash_helper import extract_infohash, normalize_infohash
 from stremio_http_proxy.manager.cache_manager import CacheManager
@@ -23,7 +24,7 @@ class StreamRewriteService:
         torrent_health_service: TorrentHealthService | None = None,
         torrserver_health_check_enabled: bool = False,
         torrserver_health_check_timeout: int = 15,
-        optimize_media_target: str = "web_ready_mp4",
+        optimize_media_target: OptimizeMediaTargetEnum = OptimizeMediaTargetEnum.COMPATIBLE,
     ):
         self.public_base_url = public_base_url.rstrip("/")
         self.cache_manager = cache_manager
@@ -197,11 +198,11 @@ class StreamRewriteService:
         return updated_payload
 
     def _is_web_ready(self, infohash: str | None, index: int | None) -> bool:
-        if self.optimize_media_target == "web_ready_mp4":
+        if self.optimize_media_target == OptimizeMediaTargetEnum.WEB_READY_MP4:
             return True
         if not infohash:
             return False
-        if self.optimize_media_target == "compatible":
+        if self.optimize_media_target == OptimizeMediaTargetEnum.COMPATIBLE:
             if self.cache_manager and hasattr(self.cache_manager, "is_ready"):
                 cache_key = f"{infohash}:{index if index is not None else 0}"
                 if self.cache_manager.is_ready(cache_key):
