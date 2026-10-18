@@ -114,7 +114,7 @@ class DefaultContainer:
         self.template_dir = os.environ.get("TEMPLATE_DIR", "templates")
         self.tmdb_api_key = os.environ.get("TMDB_API_KEY")
         self.optimize_media_enabled = os.environ.get("OPTIMIZE_MEDIA_ENABLED", "true").lower() == "true"
-        self.optimize_media_target = os.environ.get("OPTIMIZE_MEDIA_TARGET", "web_ready_mp4").lower()
+        self.optimize_media_target = os.environ.get("OPTIMIZE_MEDIA_TARGET", "compatible").lower()
         self.optimize_media_gpu_enabled = os.environ.get("OPTIMIZE_MEDIA_GPU_ENABLED", "true").lower() == "true"
         self.optimize_media_vaapi_device = os.environ.get("OPTIMIZE_MEDIA_VAAPI_DEVICE", "/dev/dri/renderD128")
         self.optimize_media_preset = os.environ.get("OPTIMIZE_MEDIA_PRESET", "ultrafast")

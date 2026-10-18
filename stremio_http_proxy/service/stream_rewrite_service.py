@@ -201,6 +201,19 @@ class StreamRewriteService:
             return True
         if not infohash:
             return False
+        if self.optimize_media_target == "compatible":
+            if self.cache_manager and hasattr(self.cache_manager, "is_ready"):
+                cache_key = f"{infohash}:{index if index is not None else 0}"
+                if self.cache_manager.is_ready(cache_key):
+                    return True
+            if hasattr(self.cache_manager, "_media_path"):
+                try:
+                    media_path = self.cache_manager._media_path(infohash, index or 0)
+                    if media_path and media_path.exists():
+                        return True
+                except Exception:
+                    pass
+            return False
         try:
             if hasattr(self.cache_manager, "_media_path"):
                 media_path = self.cache_manager._media_path(infohash, index or 0)

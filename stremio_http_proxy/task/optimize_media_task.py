@@ -76,8 +76,8 @@ class OptimizeMediaTask(AbstractTask):
             self.cache_manager.mark_ready(cache_key, orig_size)
             return True
 
-        if self.optimize_media_target == "mkv":
-            return await self._run_legacy_mkv_optimization(cache_key, media_path, orig_size)
+        if self.optimize_media_target == "compatible":
+            return await self._run_compatible_optimization(cache_key, media_path, orig_size)
 
         return await self._run_web_ready_optimization(cache_key, media_path, orig_size)
 
@@ -250,20 +250,19 @@ class OptimizeMediaTask(AbstractTask):
         cmd.extend(["-movflags", "+faststart", str(dest)])
         return cmd
 
-    async def _run_legacy_mkv_optimization(self, cache_key: str, media_path: Path, orig_size: int) -> bool:
-        _, ext = detect_media_type(media_path)
-        if ext.lower() in COMPATIBLE_EXTENSIONS:
-            self.cache_manager.mark_ready(cache_key, orig_size)
-            self.logger.info("Media %s is already in compatible container (%s), marked ready (size: %s bytes)", cache_key, ext, orig_size)
-            return True
-
-        self.logger.info("Media %s container (%s) needs optimization. Starting ffmpeg remux to MKV...", cache_key, ext)
+    async def _run_compatible_optimization(self, cache_key: str, media_path: Path, orig_size: int) -> bool:
+        self.logger.info("Starting compatible MKV optimization for %s...", cache_key)
         temp_mkv_path = media_path.with_suffix(".opt.mkv")
 
-        success = await self._remux_to_mkv(media_path, temp_mkv_path)
+        # Phase 1: Fast remux (stream copy) with cues to front
+        success = await self._remux_compatible(media_path, temp_mkv_path)
         if not success:
-            self.logger.warning("Fast remux failed for %s, attempting transcode fallback...", cache_key)
-            success = await self._transcode_fallback(media_path, temp_mkv_path)
+            self.logger.warning("Fast remux failed for %s, attempting audio transcode fallback...", cache_key)
+            success = await self._transcode_audio_fallback(media_path, temp_mkv_path)
+
+        if not success:
+            self.logger.warning("Audio fallback failed for %s, attempting full video transcode fallback...", cache_key)
+            success = await self._transcode_full_fallback(media_path, temp_mkv_path)
 
         if success and temp_mkv_path.exists() and temp_mkv_path.stat().st_size > 0:
             temp_mkv_path.replace(media_path)
@@ -273,49 +272,56 @@ class OptimizeMediaTask(AbstractTask):
                 pass
             new_size = media_path.stat().st_size
             self.cache_manager.mark_ready(cache_key, new_size)
-            self.logger.info("Media %s successfully optimized to MKV (size: %s bytes)", cache_key, new_size)
+            self.logger.info("Media %s successfully optimized to compatible MKV (size: %s bytes)", cache_key, new_size)
             return True
         else:
             if temp_mkv_path.exists():
                 temp_mkv_path.unlink(missing_ok=True)
             self.cache_manager.mark_ready(cache_key, orig_size)
-            self.logger.error("Failed to optimize media %s to MKV; original file preserved and marked ready", cache_key)
+            self.logger.error("Failed to optimize media %s; original file preserved and marked ready", cache_key)
             return False
 
-    async def _remux_to_mkv(self, src: Path, dest: Path) -> bool:
+    async def _remux_compatible(self, src: Path, dest: Path) -> bool:
         cmd = [
             "ffmpeg", "-y",
             "-i", str(src),
             "-map", "0",
             "-c", "copy",
+            "-cues_to_front", "true",
+            "-f", "matroska",
             str(dest),
         ]
         return await self._run_ffmpeg(cmd)
 
-    async def _transcode_fallback(self, src: Path, dest: Path) -> bool:
-        cmd_audio = [
+    async def _transcode_audio_fallback(self, src: Path, dest: Path) -> bool:
+        cmd = [
             "ffmpeg", "-y",
             "-i", str(src),
             "-map", "0",
             "-c:v", "copy",
             "-c:a", "aac",
             "-c:s", "copy",
+            "-cues_to_front", "true",
+            "-f", "matroska",
             str(dest),
         ]
-        if await self._run_ffmpeg(cmd_audio):
-            return True
+        return await self._run_ffmpeg(cmd)
 
-        cmd_full = [
+    async def _transcode_full_fallback(self, src: Path, dest: Path) -> bool:
+        cmd = [
             "ffmpeg", "-y",
             "-i", str(src),
             "-map", "0",
             "-c:v", "libx264",
-            "-preset", "ultrafast",
+            "-preset", self.preset,
             "-crf", "22",
             "-c:a", "aac",
+            "-c:s", "copy",
+            "-cues_to_front", "true",
+            "-f", "matroska",
             str(dest),
         ]
-        return await self._run_ffmpeg(cmd_full)
+        return await self._run_ffmpeg(cmd)
 
     async def _run_ffmpeg(self, cmd: list[str]) -> bool:
         try:

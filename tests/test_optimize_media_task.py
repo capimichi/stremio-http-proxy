@@ -186,25 +186,94 @@ async def test_skips_when_optimization_disabled(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_legacy_mkv_remux_when_target_is_mkv(tmp_path):
+async def test_compatible_optimization_runs_fast_remux_with_cues_to_front(tmp_path):
     media_file = tmp_path / "1.media"
-    media_file.write_bytes(b"RIFF....AVI ")
+    media_file.write_bytes(b"RAW_TORRENT_MKV_OR_AVI")
     mgr = FakeCacheManager(media_file, status="optimizing")
     logger_factory = FakeLoggerFactory()
-    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="mkv")
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="compatible")
+
+    executed_cmd = []
 
     async def fake_ffmpeg(cmd):
+        executed_cmd.extend(cmd)
         out_file = Path(cmd[-1])
-        out_file.write_bytes(b"MATROSKA_MKV_CONTENT")
+        out_file.write_bytes(b"OPTIMIZED_COMPATIBLE_MKV")
         return True
 
-    with patch("stremio_http_proxy.task.optimize_media_task.detect_media_type", return_value=("video/x-msvideo", "avi")), \
-         patch.object(task, "_run_ffmpeg", side_effect=fake_ffmpeg):
+    with patch.object(task, "_run_ffmpeg", side_effect=fake_ffmpeg):
         result = await task.run({"cache_key": "abc123hash:1"})
 
     assert result is True
-    assert media_file.read_bytes() == b"MATROSKA_MKV_CONTENT"
-    assert mgr.ready_sizes["abc123hash:1"] == len(b"MATROSKA_MKV_CONTENT")
+    assert media_file.read_bytes() == b"OPTIMIZED_COMPATIBLE_MKV"
+    assert mgr.ready_sizes["abc123hash:1"] == len(b"OPTIMIZED_COMPATIBLE_MKV")
+    assert "-map" in executed_cmd
+    assert executed_cmd[executed_cmd.index("-map") + 1] == "0"
+    assert "-c" in executed_cmd
+    assert executed_cmd[executed_cmd.index("-c") + 1] == "copy"
+    assert "-cues_to_front" in executed_cmd
+    assert executed_cmd[executed_cmd.index("-cues_to_front") + 1] == "true"
+    assert "-f" in executed_cmd
+    assert executed_cmd[executed_cmd.index("-f") + 1] == "matroska"
+
+
+@pytest.mark.asyncio
+async def test_compatible_optimization_audio_fallback(tmp_path):
+    media_file = tmp_path / "1.media"
+    media_file.write_bytes(b"SOURCE_CONTENT")
+    mgr = FakeCacheManager(media_file, status="optimizing")
+    logger_factory = FakeLoggerFactory()
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="compatible")
+
+    calls = []
+
+    async def fake_ffmpeg(cmd):
+        calls.append(list(cmd))
+        if len(calls) == 1:
+            return False  # Fast copy fails
+        out_file = Path(cmd[-1])
+        out_file.write_bytes(b"AUDIO_TRANSCODED_MKV")
+        return True
+
+    with patch.object(task, "_run_ffmpeg", side_effect=fake_ffmpeg):
+        result = await task.run({"cache_key": "abc123hash:1"})
+
+    assert result is True
+    assert len(calls) == 2
+    assert "-c:a" in calls[1]
+    assert calls[1][calls[1].index("-c:a") + 1] == "aac"
+    assert "-c:v" in calls[1]
+    assert calls[1][calls[1].index("-c:v") + 1] == "copy"
+    assert "-cues_to_front" in calls[1]
+    assert media_file.read_bytes() == b"AUDIO_TRANSCODED_MKV"
+
+
+@pytest.mark.asyncio
+async def test_compatible_optimization_full_fallback(tmp_path):
+    media_file = tmp_path / "1.media"
+    media_file.write_bytes(b"SOURCE_CONTENT")
+    mgr = FakeCacheManager(media_file, status="optimizing")
+    logger_factory = FakeLoggerFactory()
+    task = OptimizeMediaTask(mgr, logger_factory, optimize_media_target="compatible")
+
+    calls = []
+
+    async def fake_ffmpeg(cmd):
+        calls.append(list(cmd))
+        if len(calls) < 3:
+            return False  # Fast copy and audio fallback fail
+        out_file = Path(cmd[-1])
+        out_file.write_bytes(b"FULL_TRANSCODED_MKV")
+        return True
+
+    with patch.object(task, "_run_ffmpeg", side_effect=fake_ffmpeg):
+        result = await task.run({"cache_key": "abc123hash:1"})
+
+    assert result is True
+    assert len(calls) == 3
+    assert "-c:v" in calls[2]
+    assert calls[2][calls[2].index("-c:v") + 1] == "libx264"
+    assert media_file.read_bytes() == b"FULL_TRANSCODED_MKV"
 
 
 @pytest.mark.asyncio

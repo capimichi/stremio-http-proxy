@@ -607,7 +607,7 @@ async def test_upstream_stream_marked_cached_updates_not_web_ready_to_false():
 
 
 @pytest.mark.asyncio
-async def test_upstream_stream_marked_cached_preserves_not_web_ready_when_target_is_mkv(tmp_path):
+async def test_upstream_stream_marked_cached_sets_not_web_ready_false_when_target_is_compatible(tmp_path):
     cache_manager = MagicMock()
     torrent_hash = "d" * 40
     cache_manager.build_cache_key.return_value = f"{torrent_hash}:0"
@@ -616,7 +616,6 @@ async def test_upstream_stream_marked_cached_preserves_not_web_ready_when_target
 
     # Simulate MKV file on disk
     mkv_file = tmp_path / "video.media"
-    # Write MKV signature (EBML with matroska doctype)
     mkv_file.write_bytes(b"\x1a\x45\xdf\xa3\x93\x42\x82\x88matroska")
     cache_manager._media_path.return_value = mkv_file
 
@@ -624,7 +623,7 @@ async def test_upstream_stream_marked_cached_preserves_not_web_ready_when_target
         public_base_url="http://localhost:8691",
         cache_manager=cache_manager,
         cache_enabled=True,
-        optimize_media_target="mkv",
+        optimize_media_target="compatible",
     )
 
     payload = {
@@ -643,12 +642,11 @@ async def test_upstream_stream_marked_cached_preserves_not_web_ready_when_target
     assert len(streams) == 1
     assert streams[0]["name"] == "🔥 Corsaro 1080p"
     assert streams[0]["_meta"]["cached"] is True
-    # For MKV under mkv target, notWebReady must stay True!
-    assert streams[0]["behaviorHints"]["notWebReady"] is True
+    assert streams[0]["behaviorHints"]["notWebReady"] is False
 
 
 @pytest.mark.asyncio
-async def test_synthetic_cached_stream_sets_not_web_ready_true_for_mkv_target(tmp_path):
+async def test_synthetic_cached_stream_sets_not_web_ready_false_for_compatible_target(tmp_path):
     cache_manager = MagicMock()
     torrent_hash = "e" * 40
 
@@ -664,12 +662,13 @@ async def test_synthetic_cached_stream_sets_not_web_ready_true_for_mkv_target(tm
     ready_entry.source_link = f"magnet:?xt=urn:btih:{torrent_hash}"
     ready_entry.size_bytes = 104857600
     cache_manager.get_ready_entries_by_content.return_value = [ready_entry]
+    cache_manager.is_ready.return_value = True
 
     service = StreamRewriteService(
         public_base_url="http://localhost:8691",
         cache_manager=cache_manager,
         cache_enabled=True,
-        optimize_media_target="mkv",
+        optimize_media_target="compatible",
     )
 
     payload = {"streams": []}
@@ -684,7 +683,7 @@ async def test_synthetic_cached_stream_sets_not_web_ready_true_for_mkv_target(tm
     assert len(streams) == 1
     assert streams[0]["name"] == "🔥 [Cache Locale]"
     assert streams[0]["_meta"]["cached"] is True
-    assert streams[0]["behaviorHints"]["notWebReady"] is True
+    assert streams[0]["behaviorHints"]["notWebReady"] is False
 
 
 

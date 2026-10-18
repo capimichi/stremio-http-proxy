@@ -137,3 +137,13 @@ def test_default_container_injects_plain_upstream_client_when_disabled(monkeypat
     upstream_client = container.get(UpstreamClient)
     assert type(upstream_client) is UpstreamClient
 
+
+def test_default_container_defaults_optimize_media_target_to_compatible(monkeypatch):
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    monkeypatch.delenv("OPTIMIZE_MEDIA_TARGET", raising=False)
+    container = DefaultContainer()
+    assert container.optimize_media_target == "compatible"
+
+
