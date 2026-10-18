@@ -25,6 +25,8 @@ dependencies = [
     "celery>=5.4.0",
     "redis>=5.0.0",
     "yt-dlp>=2024.10.7",
+    "pycryptodome>=3.20.0",
+    "pycryptodomex>=3.20.0",
 ]
 
 [project.optional-dependencies]

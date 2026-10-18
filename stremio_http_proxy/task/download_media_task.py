@@ -104,6 +104,8 @@ class DownloadMediaTask(AbstractTask):
 
         cmd = [
             "yt-dlp",
+            "--downloader-args",
+            "ffmpeg_i:-allowed_extensions ALL -allowed_segment_extensions ALL -extension_picky 0",
             "--no-part",
             "--concurrent-fragments",
             "1",

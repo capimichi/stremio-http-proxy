@@ -76,6 +76,40 @@ async def test_download_media_task_dispatches_hls_ffmpeg(fake_logger_factory, tm
 
 
 @pytest.mark.asyncio
+async def test_download_media_task_download_hls_command(fake_logger_factory, tmp_path):
+    torrserver_client = MagicMock()
+    cache_manager = MagicMock()
+    fake_target = tmp_path / "target.tmp"
+    fake_target.write_bytes(b"x" * 200)
+    cache_manager.prepare_download_path.return_value = fake_target
+    cache_manager.get_min_cache_size.return_value = 100
+
+    task = DownloadMediaTask(torrserver_client, cache_manager, fake_logger_factory)
+
+    async def fake_wait():
+        fake_target.write_bytes(b"x" * 200)
+        return 0
+
+    mock_proc = MagicMock()
+    mock_proc.wait = AsyncMock(side_effect=fake_wait)
+    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+    mock_proc.returncode = 0
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
+        await task._download_hls("key1:0", "https://upstream.example/live.m3u8")
+
+        mock_exec.assert_called_once()
+        cmd = mock_exec.call_args[0]
+        assert cmd[0] == "yt-dlp"
+        assert "--downloader-args" in cmd
+        assert "ffmpeg_i:-allowed_extensions ALL -allowed_segment_extensions ALL -extension_picky 0" in cmd
+        assert "--all-formats" in cmd
+        assert "--merge-output-format" in cmd
+        assert "mkv" in cmd
+        assert cmd[-1] == "https://upstream.example/live.m3u8"
+
+
+@pytest.mark.asyncio
 async def test_download_media_task_handles_torrent_and_triggers_optimize(fake_logger_factory):
     torrserver_client = MagicMock()
     torrserver_client.build_download_url.return_value = "http://torrserver:8090/stream?link=magnet..."
