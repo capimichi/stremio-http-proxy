@@ -1,5 +1,7 @@
 import asyncio
+from collections import deque
 import os
+import signal
 import socket
 import time
 from pathlib import Path
@@ -97,6 +99,18 @@ class DownloadMediaTask(AbstractTask):
                     self.logger.exception("Error triggering fallback for cache_key %s", cache_key)
             raise
 
+    def _terminate_process_group(self, proc: asyncio.subprocess.Process) -> None:
+        if proc.returncode is not None:
+            return
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            try:
+                proc.kill()
+            except (ProcessLookupError, PermissionError):
+                pass
+
     async def _download_hls(self, cache_key: str, url: str) -> None:
         tmp_path = self.cache_manager.prepare_download_path(cache_key)
         if tmp_path.exists():
@@ -122,11 +136,30 @@ class DownloadMediaTask(AbstractTask):
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
-                stdout=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
             )
         except FileNotFoundError:
             raise RuntimeError("yt-dlp binary not found in PATH")
+
+        stderr_lines: deque[str] = deque(maxlen=100)
+
+        async def _drain_stderr() -> None:
+            if not proc.stderr:
+                return
+            try:
+                while True:
+                    line = await proc.stderr.readline()
+                    if not line:
+                        break
+                    decoded = line.decode(errors="replace").strip()
+                    if decoded:
+                        stderr_lines.append(decoded)
+            except Exception:
+                pass
+
+        drain_task = asyncio.create_task(_drain_stderr())
 
         downloaded_bytes = 0
         started_at = time.time()
@@ -134,51 +167,66 @@ class DownloadMediaTask(AbstractTask):
         bytes_at_window_start = 0
         last_progress_log_at = started_at
 
-        while True:
+        try:
+            while True:
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=float(min(self.progress_log_interval_seconds, 2)))
+                    break
+                except asyncio.TimeoutError:
+                    pass
+
+                now = time.time()
+                downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
+                elapsed_seconds = max(now - started_at, 0.001)
+                speed_bytes_per_second = downloaded_bytes / elapsed_seconds
+
+                if now - started_at > self.max_total_seconds:
+                    self._terminate_process_group(proc)
+                    try:
+                        await asyncio.wait_for(proc.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        pass
+                    raise TimeoutError("HLS download exceeded maximum duration")
+
+                if now - window_started_at >= self.min_progress_window_seconds:
+                    if downloaded_bytes - bytes_at_window_start < self.min_progress_bytes:
+                        self._terminate_process_group(proc)
+                        try:
+                            await asyncio.wait_for(proc.wait(), timeout=5.0)
+                        except asyncio.TimeoutError:
+                            pass
+                        raise TimeoutError("HLS download progress stayed below threshold")
+                    window_started_at = now
+                    bytes_at_window_start = downloaded_bytes
+
+                if now - last_progress_log_at >= self.progress_log_interval_seconds:
+                    self.cache_manager.mark_progress(
+                        cache_key,
+                        downloaded_bytes,
+                        None,
+                        None,
+                        speed_bytes_per_second,
+                    )
+                    self.progress_logger.info(
+                        "cache_key=%s downloaded_mb=%.2f speed_mbps=%.2f elapsed_s=%.0f",
+                        cache_key,
+                        downloaded_bytes / (1024 * 1024),
+                        speed_bytes_per_second / (1024 * 1024),
+                        elapsed_seconds,
+                    )
+                    last_progress_log_at = now
+
             try:
-                await asyncio.wait_for(proc.wait(), timeout=float(min(self.progress_log_interval_seconds, 2)))
-                break
+                await asyncio.wait_for(drain_task, timeout=5.0)
             except asyncio.TimeoutError:
-                pass
+                drain_task.cancel()
+        except Exception:
+            self._terminate_process_group(proc)
+            drain_task.cancel()
+            raise
 
-            now = time.time()
-            downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
-            elapsed_seconds = max(now - started_at, 0.001)
-            speed_bytes_per_second = downloaded_bytes / elapsed_seconds
-
-            if now - started_at > self.max_total_seconds:
-                proc.kill()
-                await proc.wait()
-                raise TimeoutError("HLS download exceeded maximum duration")
-
-            if now - window_started_at >= self.min_progress_window_seconds:
-                if downloaded_bytes - bytes_at_window_start < self.min_progress_bytes:
-                    proc.kill()
-                    await proc.wait()
-                    raise TimeoutError("HLS download progress stayed below threshold")
-                window_started_at = now
-                bytes_at_window_start = downloaded_bytes
-
-            if now - last_progress_log_at >= self.progress_log_interval_seconds:
-                self.cache_manager.mark_progress(
-                    cache_key,
-                    downloaded_bytes,
-                    None,
-                    None,
-                    speed_bytes_per_second,
-                )
-                self.progress_logger.info(
-                    "cache_key=%s downloaded_mb=%.2f speed_mbps=%.2f elapsed_s=%.0f",
-                    cache_key,
-                    downloaded_bytes / (1024 * 1024),
-                    speed_bytes_per_second / (1024 * 1024),
-                    elapsed_seconds,
-                )
-                last_progress_log_at = now
-
-        _, stderr = await proc.communicate()
         if proc.returncode != 0:
-            error_msg = stderr.decode(errors="replace").strip() if stderr else ""
+            error_msg = "\n".join(stderr_lines).strip()
             raise RuntimeError(f"yt-dlp exited with code {proc.returncode}: {error_msg}")
 
         downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0

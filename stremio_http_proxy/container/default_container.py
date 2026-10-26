@@ -122,6 +122,9 @@ class DefaultContainer:
         self.redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         self.upstream_cache_enabled = os.environ.get("UPSTREAM_CACHE_ENABLED", "true").lower() == "true"
         self.upstream_cache_ttl_seconds = int(os.environ.get("UPSTREAM_CACHE_TTL_SECONDS", "172800"))
+        self.celery_task_time_limit = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "7200"))
+        self.celery_task_soft_time_limit = int(os.environ.get("CELERY_TASK_SOFT_TIME_LIMIT", "7000"))
+        self.celery_visibility_timeout = int(os.environ.get("CELERY_VISIBILITY_TIMEOUT", "14400"))
         if not self.app_secret or not self.app_secret.strip():
             raise ValueError("APP_SECRET environment variable is required")
 

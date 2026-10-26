@@ -91,8 +91,10 @@ async def test_download_media_task_download_hls_command(fake_logger_factory, tmp
         return 0
 
     mock_proc = MagicMock()
+    mock_proc.pid = 12345
     mock_proc.wait = AsyncMock(side_effect=fake_wait)
-    mock_proc.communicate = AsyncMock(return_value=(b"", b""))
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.readline = AsyncMock(return_value=b"")
     mock_proc.returncode = 0
 
     with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
@@ -107,6 +109,39 @@ async def test_download_media_task_download_hls_command(fake_logger_factory, tmp
         assert "--merge-output-format" in cmd
         assert "mkv" in cmd
         assert cmd[-1] == "https://upstream.example/live.m3u8"
+
+
+@pytest.mark.asyncio
+async def test_download_media_task_download_hls_drains_stderr_and_uses_process_group(fake_logger_factory, tmp_path):
+    torrserver_client = MagicMock()
+    cache_manager = MagicMock()
+    fake_target = tmp_path / "target.tmp"
+    fake_target.write_bytes(b"x" * 200)
+    cache_manager.prepare_download_path.return_value = fake_target
+    cache_manager.get_min_cache_size.return_value = 100
+
+    task = DownloadMediaTask(torrserver_client, cache_manager, fake_logger_factory)
+
+    async def fake_wait():
+        fake_target.write_bytes(b"x" * 200)
+        return 0
+
+    mock_proc = MagicMock()
+    mock_proc.pid = 12345
+    mock_proc.returncode = 0
+    mock_proc.wait = AsyncMock(side_effect=fake_wait)
+    mock_proc.stderr = MagicMock()
+    mock_proc.stderr.readline = AsyncMock(side_effect=[b"line 1\n", b"line 2\n", b""])
+
+    with patch("asyncio.create_subprocess_exec", AsyncMock(return_value=mock_proc)) as mock_exec:
+        await task._download_hls("key1:0", "https://upstream.example/live.m3u8")
+
+        mock_exec.assert_called_once()
+        _, kwargs = mock_exec.call_args
+        assert kwargs.get("start_new_session") is True
+        assert kwargs.get("stdout") == asyncio.subprocess.DEVNULL
+        assert kwargs.get("stderr") == asyncio.subprocess.PIPE
+
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,9 @@ redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 celery_broker_url = os.environ.get("CELERY_BROKER_URL", redis_url)
 celery_result_backend = os.environ.get("CELERY_RESULT_BACKEND", redis_url)
 timezone = os.environ.get("TIMEZONE", "Europe/Rome")
+task_time_limit = int(os.environ.get("CELERY_TASK_TIME_LIMIT", "7200"))
+task_soft_time_limit = int(os.environ.get("CELERY_TASK_SOFT_TIME_LIMIT", "7000"))
+visibility_timeout = int(os.environ.get("CELERY_VISIBILITY_TIMEOUT", "14400"))
 
 celery_app = Celery(
     app_name,
@@ -34,6 +37,11 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    task_time_limit=task_time_limit,
+    task_soft_time_limit=task_soft_time_limit,
+    broker_transport_options={
+        "visibility_timeout": visibility_timeout,
+    },
     task_routes={
         "stremio_http_proxy.task.download_media_task": {"queue": "downloads"},
         "stremio_http_proxy.task.optimize_media_task": {"queue": "transcode"},

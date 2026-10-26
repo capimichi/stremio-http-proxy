@@ -164,3 +164,28 @@ def test_default_container_parses_optimize_media_target_variations(monkeypatch):
     assert container2.optimize_media_target == OptimizeMediaTargetEnum.NONE
 
 
+def test_default_container_loads_celery_timeout_env_vars(monkeypatch):
+    DefaultContainer.instance = None
+    monkeypatch.setattr("stremio_http_proxy.container.default_container.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setenv("APP_SECRET", "test-secret")
+    monkeypatch.setenv("CELERY_TASK_TIME_LIMIT", "3600")
+    monkeypatch.setenv("CELERY_TASK_SOFT_TIME_LIMIT", "3500")
+    monkeypatch.setenv("CELERY_VISIBILITY_TIMEOUT", "7200")
+
+    container = DefaultContainer()
+    assert container.celery_task_time_limit == 3600
+    assert container.celery_task_soft_time_limit == 3500
+    assert container.celery_visibility_timeout == 7200
+
+    DefaultContainer.instance = None
+    monkeypatch.delenv("CELERY_TASK_TIME_LIMIT", raising=False)
+    monkeypatch.delenv("CELERY_TASK_SOFT_TIME_LIMIT", raising=False)
+    monkeypatch.delenv("CELERY_VISIBILITY_TIMEOUT", raising=False)
+
+    default_container = DefaultContainer()
+    assert default_container.celery_task_time_limit == 7200
+    assert default_container.celery_task_soft_time_limit == 7000
+    assert default_container.celery_visibility_timeout == 14400
+
+
+

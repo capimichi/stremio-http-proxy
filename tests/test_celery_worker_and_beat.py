@@ -22,3 +22,10 @@ def test_worker_and_beat_commands():
 
     beat_cmd = BeatCommand()
     assert beat_cmd.command_name == "beat"
+
+
+def test_celery_worker_safety_configuration():
+    assert celery_app.conf.task_time_limit == 7200
+    assert celery_app.conf.task_soft_time_limit == 7000
+    assert celery_app.conf.broker_transport_options.get("visibility_timeout") == 14400
+
