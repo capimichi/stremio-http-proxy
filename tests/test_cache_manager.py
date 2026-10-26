@@ -300,6 +300,56 @@ def test_cache_manager_mark_deleted(tmp_path):
     assert persisted.last_error == "wrong file uploaded"
 
 
+def test_cache_manager_uniform_download_dir_lifecycle(tmp_path):
+    manager = build_manager(tmp_path)
+    cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 0)
+
+    # 1. prepare_download_dir
+    work_dir = manager.prepare_download_dir(cache_key)
+    assert work_dir.exists() and work_dir.is_dir()
+    assert manager.get_download_size(cache_key) == 0
+
+    # 2. Simulate multi-part HLS download with .ytdl file
+    video_part = work_dir / "stream.f2150.mp4"
+    audio_part = work_dir / "stream.faudio-ita.mp4"
+    ytdl_file = work_dir / "stream.f2150.mp4.ytdl"
+
+    video_part.write_bytes(b"v" * 1000)
+    audio_part.write_bytes(b"a" * 500)
+    ytdl_file.write_bytes(b"metadata" * 10)
+
+    # get_download_size sums files excluding .ytdl
+    assert manager.get_download_size(cache_key) == 1500
+
+    # 3. Simulate merge into mkv and finalize_download
+    merged_mkv = work_dir / "stream.mkv"
+    merged_mkv.write_bytes(b"m" * 1500)
+    video_part.unlink()
+    audio_part.unlink()
+
+    final_size = manager.finalize_download(cache_key)
+    assert final_size == 1500
+
+    # Directory was cleaned up and final file is at media_path
+    assert not work_dir.exists()
+    media_path = manager._media_path("abcdef1234567890abcdef1234567890abcdef12", 0)
+    assert media_path.exists()
+    assert media_path.stat().st_size == 1500
+
+
+def test_cache_manager_uniform_download_dir_cleanup_partial(tmp_path):
+    manager = build_manager(tmp_path)
+    cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 0)
+
+    work_dir = manager.prepare_download_dir(cache_key)
+    (work_dir / "temp_file.part").write_bytes(b"data")
+
+    assert work_dir.exists()
+    manager.cleanup_partial(cache_key)
+    assert not work_dir.exists()
+
+
+
 
 
 

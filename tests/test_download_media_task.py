@@ -79,15 +79,13 @@ async def test_download_media_task_dispatches_hls_ffmpeg(fake_logger_factory, tm
 async def test_download_media_task_download_hls_command(fake_logger_factory, tmp_path):
     torrserver_client = MagicMock()
     cache_manager = MagicMock()
-    fake_target = tmp_path / "target.tmp"
-    fake_target.write_bytes(b"x" * 200)
-    cache_manager.prepare_download_path.return_value = fake_target
+    cache_manager.prepare_download_dir.return_value = tmp_path
+    cache_manager.get_download_size.return_value = 200
     cache_manager.get_min_cache_size.return_value = 100
 
     task = DownloadMediaTask(torrserver_client, cache_manager, fake_logger_factory)
 
     async def fake_wait():
-        fake_target.write_bytes(b"x" * 200)
         return 0
 
     mock_proc = MagicMock()
@@ -108,6 +106,9 @@ async def test_download_media_task_download_hls_command(fake_logger_factory, tmp
         assert "--all-formats" in cmd
         assert "--merge-output-format" in cmd
         assert "mkv" in cmd
+        assert "-o" in cmd
+        out_idx = cmd.index("-o") + 1
+        assert cmd[out_idx].endswith("stream.%(ext)s")
         assert cmd[-1] == "https://upstream.example/live.m3u8"
 
 
@@ -115,15 +116,13 @@ async def test_download_media_task_download_hls_command(fake_logger_factory, tmp
 async def test_download_media_task_download_hls_drains_stderr_and_uses_process_group(fake_logger_factory, tmp_path):
     torrserver_client = MagicMock()
     cache_manager = MagicMock()
-    fake_target = tmp_path / "target.tmp"
-    fake_target.write_bytes(b"x" * 200)
-    cache_manager.prepare_download_path.return_value = fake_target
+    cache_manager.prepare_download_dir.return_value = tmp_path
+    cache_manager.get_download_size.return_value = 200
     cache_manager.get_min_cache_size.return_value = 100
 
     task = DownloadMediaTask(torrserver_client, cache_manager, fake_logger_factory)
 
     async def fake_wait():
-        fake_target.write_bytes(b"x" * 200)
         return 0
 
     mock_proc = MagicMock()

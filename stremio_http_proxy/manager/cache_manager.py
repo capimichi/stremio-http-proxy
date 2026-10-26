@@ -494,6 +494,9 @@ class CacheManager:
 
     def cleanup_partial(self, cache_key: str) -> None:
         infohash, index = self.parse_cache_key(cache_key)
+        tmp_dir = self._tmp_dir(infohash, index)
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         tmp_path = self._tmp_path(infohash, index)
         if tmp_path.exists():
             tmp_path.unlink()
@@ -501,18 +504,56 @@ class CacheManager:
         if chunks_dir.exists():
             shutil.rmtree(chunks_dir, ignore_errors=True)
 
-    def prepare_download_path(self, cache_key: str) -> Path:
+    def prepare_download_dir(self, cache_key: str) -> Path:
         infohash, index = self.parse_cache_key(cache_key)
         media_path = self._media_path(infohash, index)
         media_path.parent.mkdir(parents=True, exist_ok=True)
-        return self._tmp_path(infohash, index)
+        tmp_dir = self._tmp_dir(infohash, index)
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        return tmp_dir
+
+    def prepare_download_path(self, cache_key: str) -> Path:
+        tmp_dir = self.prepare_download_dir(cache_key)
+        return tmp_dir / "stream.part"
+
+    def get_download_size(self, cache_key: str) -> int:
+        infohash, index = self.parse_cache_key(cache_key)
+        tmp_dir = self._tmp_dir(infohash, index)
+        if tmp_dir.exists():
+            return sum(
+                f.stat().st_size
+                for f in tmp_dir.iterdir()
+                if f.is_file() and not f.name.endswith(".ytdl")
+            )
+        tmp_path = self._tmp_path(infohash, index)
+        if tmp_path.exists():
+            return tmp_path.stat().st_size
+        return 0
 
     def finalize_download(self, cache_key: str) -> int:
         infohash, index = self.parse_cache_key(cache_key)
-        tmp_path = self._tmp_path(infohash, index)
         media_path = self._media_path(infohash, index)
-        tmp_path.replace(media_path)
-        return media_path.stat().st_size
+        tmp_dir = self._tmp_dir(infohash, index)
+        tmp_path = self._tmp_path(infohash, index)
+
+        if tmp_dir.exists():
+            candidate_files = [
+                f for f in tmp_dir.iterdir()
+                if f.is_file() and not f.name.endswith(".ytdl")
+            ]
+            if candidate_files:
+                best_file = max(candidate_files, key=lambda f: f.stat().st_size)
+                best_file.replace(media_path)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        elif tmp_path.exists():
+            tmp_path.replace(media_path)
+
+        if tmp_path.exists():
+            tmp_path.unlink(missing_ok=True)
+
+        return media_path.stat().st_size if media_path.exists() else 0
 
     def _write_entry(self, cache_key: str, entry: CacheEntryModel) -> None:
         infohash, index = self.parse_cache_key(cache_key)
@@ -546,6 +587,9 @@ class CacheManager:
 
     def _tmp_path(self, infohash: str, index: int) -> Path:
         return self.base_dir / infohash / f"{index}.part"
+
+    def _tmp_dir(self, infohash: str, index: int) -> Path:
+        return self.base_dir / infohash / f"tmp_{index}"
 
     def _prune_by_age(self) -> None:
         if self.max_age_days <= 0:
@@ -588,6 +632,9 @@ class CacheManager:
         for path in (self._media_path(infohash, index), self._tmp_path(infohash, index)):
             if path.exists():
                 path.unlink()
+        tmp_dir = self._tmp_dir(infohash, index)
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
         chunks_dir = self.base_dir / infohash / f"chunks_{index}"
         if chunks_dir.exists():
             shutil.rmtree(chunks_dir, ignore_errors=True)

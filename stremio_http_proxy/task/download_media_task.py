@@ -112,9 +112,8 @@ class DownloadMediaTask(AbstractTask):
                 pass
 
     async def _download_hls(self, cache_key: str, url: str) -> None:
-        tmp_path = self.cache_manager.prepare_download_path(cache_key)
-        if tmp_path.exists():
-            tmp_path.unlink()
+        work_dir = self.cache_manager.prepare_download_dir(cache_key)
+        output_template = str(work_dir / "stream.%(ext)s")
 
         cmd = [
             "yt-dlp",
@@ -129,7 +128,7 @@ class DownloadMediaTask(AbstractTask):
             "--merge-output-format",
             "mkv",
             "-o",
-            str(tmp_path),
+            output_template,
             url,
         ]
 
@@ -176,7 +175,7 @@ class DownloadMediaTask(AbstractTask):
                     pass
 
                 now = time.time()
-                downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
+                downloaded_bytes = self.cache_manager.get_download_size(cache_key)
                 elapsed_seconds = max(now - started_at, 0.001)
                 speed_bytes_per_second = downloaded_bytes / elapsed_seconds
 
@@ -229,7 +228,7 @@ class DownloadMediaTask(AbstractTask):
             error_msg = "\n".join(stderr_lines).strip()
             raise RuntimeError(f"yt-dlp exited with code {proc.returncode}: {error_msg}")
 
-        downloaded_bytes = tmp_path.stat().st_size if tmp_path.exists() else 0
+        downloaded_bytes = self.cache_manager.get_download_size(cache_key)
         min_size_bytes = self.cache_manager.get_min_cache_size()
         if downloaded_bytes < min_size_bytes:
             raise RuntimeError(
