@@ -353,3 +353,48 @@ def test_cache_manager_uniform_download_dir_cleanup_partial(tmp_path):
 
 
 
+
+
+def test_is_candidate_attempted_failed_cooldown(tmp_path):
+    import time
+    manager = build_manager(tmp_path)
+    key = "3333333333333333333333333333333333333333:0"
+
+    assert not manager.is_candidate_attempted(key)
+
+    # Mark as failed just now
+    manager.mark_failed(key, "error occurred", attempt=1)
+    assert manager.is_candidate_attempted(key, failed_cooldown_seconds=3600) is True
+
+    # Artificially age the failure past cooldown (e.g., 4000s ago)
+    old_time = time.time() - 4000
+    entry = manager.get_entry(key).model_copy(update={"last_accessed_at": old_time, "created_at": old_time})
+    manager._write_entry(key, entry)
+
+    # After cooldown has elapsed, candidate is eligible again
+    assert manager.is_candidate_attempted(key, failed_cooldown_seconds=3600) is False
+
+
+def test_prune_removes_old_failed_entries(tmp_path):
+    import time
+    manager = build_manager(tmp_path)
+    recent_failed_key = "4444444444444444444444444444444444444444:0"
+    old_failed_key = "5555555555555555555555555555555555555555:0"
+
+    # Recent failure (< 24h)
+    manager.mark_failed(recent_failed_key, "recent error", attempt=1)
+
+    # Old failure (> 24h, e.g. 30h)
+    old_time = time.time() - (30 * 3600)
+    manager.mark_failed(old_failed_key, "old error", attempt=1)
+    old_entry = manager.get_entry(old_failed_key).model_copy(update={"last_accessed_at": old_time, "created_at": old_time})
+    manager._write_entry(old_failed_key, old_entry)
+
+    # Run prune
+    manager.prune()
+
+    # Recent failed entry should still exist
+    assert manager.get_entry(recent_failed_key).status == CacheEntryStatusEnum.FAILED
+
+    # Old failed entry should be pruned
+    assert manager.get_entry(old_failed_key).status == CacheEntryStatusEnum.MISSING

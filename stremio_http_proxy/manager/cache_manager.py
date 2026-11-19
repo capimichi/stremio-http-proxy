@@ -26,6 +26,7 @@ class CacheManager:
         max_age_days: int,
         max_size_gb: int,
         logger_factory: LoggerFactory,
+        failed_cooldown_seconds: float = 7200.0,
     ):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
@@ -33,6 +34,7 @@ class CacheManager:
         self.max_age_days = max_age_days
         self.max_size_bytes = max_size_gb * 1024 * 1024 * 1024
         self.logger = logger_factory.get_logger("stremio_http_proxy.cache", "cache.log")
+        self.failed_cooldown_seconds = failed_cooldown_seconds
 
     def build_cache_key(self, link: str, index: int | None = None, content_id: str | None = None) -> str | None:
         infohash = extract_infohash(link)
@@ -156,6 +158,7 @@ class CacheManager:
 
     def mark_failed(self, cache_key: str, error: str, attempt: int) -> CacheEntryModel:
         entry = self.get_entry(cache_key)
+        now = time.time()
         updated = entry.model_copy(
             update={
                 "status": CacheEntryStatusEnum.FAILED,
@@ -164,6 +167,7 @@ class CacheManager:
                 "claimed_by": None,
                 "processing_expires_at": None,
                 "last_error": error,
+                "last_accessed_at": now,
             }
         )
         self._write_entry(cache_key, updated)
@@ -263,10 +267,26 @@ class CacheManager:
                 query = query.where(MediaItem.season == season, MediaItem.episode == episode)
             return int(session.scalar(query) or 0)
 
-    def is_candidate_attempted(self, cache_key: str) -> bool:
+    def is_candidate_attempted(self, cache_key: str, failed_cooldown_seconds: float | None = None) -> bool:
+        cooldown = failed_cooldown_seconds if failed_cooldown_seconds is not None else self.failed_cooldown_seconds
         with self.db_manager.session() as session:
             record = session.get(CacheEntryRecord, cache_key)
-            return record is not None
+            if record is None:
+                return False
+            if record.status in {
+                CacheEntryStatusEnum.READY,
+                CacheEntryStatusEnum.QUEUED,
+                CacheEntryStatusEnum.PROCESSING,
+                CacheEntryStatusEnum.DOWNLOADING,
+                CacheEntryStatusEnum.OPTIMIZING,
+            }:
+                return True
+            if record.status == CacheEntryStatusEnum.FAILED:
+                failed_time = record.last_accessed_at or record.last_progress_at or record.created_at or 0.0
+                if (time.time() - failed_time) < cooldown:
+                    return True
+                return False
+            return False
 
     def list_entries(self) -> list[tuple[str, CacheEntryModel]]:
         with self.db_manager.session() as session:
@@ -491,6 +511,20 @@ class CacheManager:
     def prune(self) -> None:
         self._prune_by_age()
         self._prune_by_size()
+        self._prune_failed_entries()
+
+    def _prune_failed_entries(self, max_failed_age_hours: float = 24.0) -> None:
+        cutoff = time.time() - (max_failed_age_hours * 3600)
+        with self.db_manager.session() as session:
+            records = session.scalars(
+                select(CacheEntryRecord).where(CacheEntryRecord.status == CacheEntryStatusEnum.FAILED)
+            ).all()
+        for record in records:
+            entry = self._to_model(record)
+            timestamp = entry.last_accessed_at or entry.last_progress_at or entry.created_at
+            if timestamp and timestamp < cutoff:
+                cache_key = self.build_cache_key_from_parts(record.infohash, record.cache_index)
+                self._delete_entry(cache_key, "failed_expired")
 
     def cleanup_partial(self, cache_key: str) -> None:
         infohash, index = self.parse_cache_key(cache_key)

@@ -688,3 +688,27 @@ async def test_synthetic_cached_stream_sets_not_web_ready_false_for_compatible_t
 
 
 
+
+
+def test_extract_download_candidates_includes_http_streams():
+    service = StreamRewriteService("http://localhost:8691", FakeCacheManager())
+    payload = {
+        "streams": [
+            {
+                "name": "Torrent 1",
+                "title": "Episode 1.mp4",
+                "magnet": "magnet:?xt=urn:btih:ABC",
+            },
+            {
+                "name": "Community HLS",
+                "title": "HLS Stream",
+                "url": "https://stream.example.com/playlist.m3u8",
+            },
+        ]
+    }
+
+    candidates = service.extract_download_candidates(payload)
+    assert len(candidates) == 2
+    assert candidates[0]["link"] == "magnet:?xt=urn:btih:ABC"
+    assert candidates[1]["link"] == "https://stream.example.com/playlist.m3u8"
+    assert candidates[1]["title"] == "HLS Stream - Community HLS" or "HLS Stream" in candidates[1]["title"]

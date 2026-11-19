@@ -343,17 +343,28 @@ class StreamRewriteService:
                     continue
 
             torrent_link = self._extract_torrent_link(stream)
-            if torrent_link is None:
-                continue
-            candidates.append(
-                {
-                    "link": torrent_link,
-                    "title": self._extract_title(stream),
-                    "poster": self._extract_poster(stream),
-                    "index": self._extract_index(stream),
-                    "seeders": self._extract_seeders(stream),
-                }
-            )
+            if torrent_link is not None:
+                candidates.append(
+                    {
+                        "link": torrent_link,
+                        "title": self._extract_title(stream),
+                        "poster": self._extract_poster(stream),
+                        "index": self._extract_index(stream),
+                        "seeders": self._extract_seeders(stream),
+                    }
+                )
+            else:
+                raw_url = stream.get("url")
+                if isinstance(raw_url, str) and raw_url.startswith(("http://", "https://")):
+                    candidates.append(
+                        {
+                            "link": raw_url,
+                            "title": self._extract_title(stream),
+                            "poster": self._extract_poster(stream),
+                            "index": self._extract_index(stream) or 0,
+                            "seeders": None,
+                        }
+                    )
         return candidates
 
     def _extract_seeders(self, stream: dict) -> int | None:
