@@ -1,5 +1,6 @@
 import asyncio
 from collections import deque
+import logging
 import os
 import signal
 import socket
@@ -17,6 +18,8 @@ from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.logger.logger_factory import LoggerFactory
 from stremio_http_proxy.manager.cache_manager import CacheManager
 from stremio_http_proxy.task.abstract_task import AbstractTask
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadMediaTask(AbstractTask):
@@ -319,7 +322,7 @@ class DownloadMediaTask(AbstractTask):
             self.cache_manager.mark_ready(cache_key, size_bytes)
 
 
-@shared_task(name="stremio_http_proxy.task.download_media_task", bind=True, max_retries=3)
+@shared_task(name="stremio_http_proxy.task.download_media_task", bind=True, max_retries=None)
 def download_media_task(self, cache_key: str):
     from stremio_http_proxy.container.default_container import DefaultContainer
 
@@ -328,4 +331,31 @@ def download_media_task(self, cache_key: str):
         task: DownloadMediaTask = container.get(DownloadMediaTask)
         return task.run(cache_key)
     except Exception as exc:
+        entry = None
+        try:
+            entry = container.get(CacheManager).get_entry(cache_key)
+        except Exception:
+            logger.exception("Unable to read cache entry %s while deciding on retry", cache_key)
+        if not _should_retry(entry):
+            logger.warning("Download %s failed (attempt %s/%s), not retrying: %s",
+                           cache_key,
+                           getattr(entry, "attempt", None),
+                           getattr(entry, "max_attempts", None),
+                           exc)
+            return False
         raise self.retry(exc=exc, countdown=60)
+
+
+def _should_retry(entry: Any, default_max_attempts: int | None = None) -> bool:
+    """Decide whether a failed download should be retried.
+
+    The attempt counter is stored on the cache entry by DownloadMediaTask, so the
+    configured DOWNLOAD_MAX_ATTEMPTS is honoured across worker restarts. If the
+    entry cannot be read there is no reliable budget left, so retrying is skipped.
+    """
+    if entry is None:
+        return False
+    max_attempts = int(getattr(entry, "max_attempts", None) or default_max_attempts
+                       or os.environ.get("DOWNLOAD_MAX_ATTEMPTS", "3"))
+    attempt = int(getattr(entry, "attempt", 0) or 0)
+    return attempt < max_attempts

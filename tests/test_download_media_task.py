@@ -1,12 +1,13 @@
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from stremio_http_proxy.enum.cache_entry_status_enum import CacheEntryStatusEnum
 from stremio_http_proxy.model.cache_entry import CacheEntry
-from stremio_http_proxy.task.download_media_task import DownloadMediaTask
+from stremio_http_proxy.task.download_media_task import DownloadMediaTask, _should_retry
 
 
 @pytest.fixture
@@ -243,3 +244,18 @@ async def test_download_media_task_cascades_on_playback_failure(fake_logger_fact
 
     cache_manager.mark_failed.assert_called_once()
     mock_prefetch_service.on_download_failed.assert_awaited_once_with("series", "tt456:2:1", "tv")
+
+
+def test_should_retry_honours_entry_max_attempts():
+    assert _should_retry(SimpleNamespace(attempt=1, max_attempts=3)) is True
+    assert _should_retry(SimpleNamespace(attempt=2, max_attempts=3)) is True
+    assert _should_retry(SimpleNamespace(attempt=3, max_attempts=3)) is False
+
+
+def test_should_retry_falls_back_to_default_when_entry_has_no_max_attempts():
+    assert _should_retry(SimpleNamespace(attempt=1, max_attempts=None), 2) is True
+    assert _should_retry(SimpleNamespace(attempt=2, max_attempts=None), 2) is False
+
+
+def test_should_retry_skips_when_entry_is_missing():
+    assert _should_retry(None) is False
