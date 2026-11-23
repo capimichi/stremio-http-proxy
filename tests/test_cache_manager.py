@@ -16,6 +16,11 @@ def build_manager(tmp_path):
     )
 
 
+def test_failed_cooldown_defaults_to_twelve_hours(tmp_path):
+    manager = build_manager(tmp_path)
+    assert manager.failed_cooldown_seconds == 12 * 60 * 60
+
+
 def test_cache_manager_persists_progress_fields(tmp_path):
     manager = build_manager(tmp_path)
     cache_key = manager.build_cache_key_from_parts("abcdef1234567890abcdef1234567890abcdef12", 1)

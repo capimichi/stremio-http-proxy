@@ -26,7 +26,7 @@ class CacheManager:
         max_age_days: int,
         max_size_gb: int,
         logger_factory: LoggerFactory,
-        failed_cooldown_seconds: float = 7200.0,
+        failed_cooldown_seconds: float = 43200.0,
     ):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)

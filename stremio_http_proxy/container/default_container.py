@@ -93,6 +93,7 @@ class DefaultContainer:
         self.database_url = os.environ.get("DATABASE_URL")
         self.local_cache_max_age_days = int(os.environ.get("LOCAL_CACHE_MAX_AGE_DAYS", "7"))
         self.local_cache_max_size_gb = int(os.environ.get("LOCAL_CACHE_MAX_SIZE_GB", "20"))
+        self.failed_cache_cooldown_seconds = int(os.environ.get("FAILED_CACHE_COOLDOWN_SECONDS", str(12 * 60 * 60)))
         self.download_queue_poll_seconds = int(os.environ.get("DOWNLOAD_QUEUE_POLL_SECONDS", "1"))
         self.download_max_attempts = int(os.environ.get("DOWNLOAD_MAX_ATTEMPTS", "3"))
         self.download_connect_timeout_seconds = int(os.environ.get("DOWNLOAD_CONNECT_TIMEOUT_SECONDS", "10"))
@@ -162,6 +163,7 @@ class DefaultContainer:
             self.local_cache_max_age_days,
             self.local_cache_max_size_gb,
             logger_factory,
+            failed_cooldown_seconds=self.failed_cache_cooldown_seconds,
         )
         basic_auth_service = BasicAuthService(
             self.dashboard_basic_auth_user,
