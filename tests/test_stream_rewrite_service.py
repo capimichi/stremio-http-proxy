@@ -388,7 +388,7 @@ async def test_stream_rewrite_puts_cached_streams_at_the_top():
     assert streams[2]["url"].startswith("http://localhost:8691/play?")
 
 
-def test_extract_download_candidates_extracts_seeders():
+def test_extract_download_candidates_keeps_upstream_order_without_seeders():
     service = StreamRewriteService(
         public_base_url="http://localhost:8691",
         cache_manager=FakeCacheManager(),
@@ -414,9 +414,10 @@ def test_extract_download_candidates_extracts_seeders():
     }
     candidates = service.extract_download_candidates(payload)
     assert len(candidates) == 3
-    assert candidates[0]["seeders"] == 10
-    assert candidates[1]["seeders"] == 0
-    assert candidates[2]["seeders"] is None
+    assert all("seeders" not in candidate for candidate in candidates)
+    assert candidates[0]["title"].startswith("Stream 1")
+    assert candidates[1]["title"].startswith("Stream 2")
+    assert candidates[2]["title"].startswith("Stream 3")
 
 
 @pytest.mark.asyncio

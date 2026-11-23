@@ -1,6 +1,5 @@
 from urllib.parse import urlencode, urlparse
 import os
-import re
 
 from injector import inject
 
@@ -350,7 +349,6 @@ class StreamRewriteService:
                         "title": self._extract_title(stream),
                         "poster": self._extract_poster(stream),
                         "index": self._extract_index(stream),
-                        "seeders": self._extract_seeders(stream),
                     }
                 )
             else:
@@ -362,26 +360,9 @@ class StreamRewriteService:
                             "title": self._extract_title(stream),
                             "poster": self._extract_poster(stream),
                             "index": self._extract_index(stream) or 0,
-                            "seeders": None,
                         }
                     )
         return candidates
-
-    def _extract_seeders(self, stream: dict) -> int | None:
-        meta = stream.get("_meta")
-        if isinstance(meta, dict) and meta.get("seeders") is not None:
-            try:
-                return int(meta["seeders"])
-            except (ValueError, TypeError):
-                pass
-
-        for field in ("description", "title", "name"):
-            val = stream.get(field)
-            if isinstance(val, str):
-                match = re.search(r"👤\s*(\d+)", val)
-                if match:
-                    return int(match.group(1))
-        return None
 
     def _extract_torrent_link(self, stream: dict) -> str | None:
         candidates = [

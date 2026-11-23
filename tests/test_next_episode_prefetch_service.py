@@ -137,7 +137,7 @@ class SeederUpstreamClient:
         }
 
 
-def test_prefetch_skips_zero_seeders_and_picks_single_highest_seeder():
+def test_prefetch_picks_first_upstream_candidate():
     queue = FakeDownloadQueueService()
     cache_mgr = FakeDetailedCacheManager()
     service = NextEpisodePrefetchService(
